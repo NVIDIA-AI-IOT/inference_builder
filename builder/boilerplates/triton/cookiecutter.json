@@ -1,0 +1,8 @@
+{
+	"service_name": "my-service",
+	"endpoints": {
+		"infer": "/inference",
+		"health": "/health"
+	},
+	"configuration": ""
+}

@@ -1,0 +1,81 @@
+name: vila
+input: [
+  {
+    name: "prompt",
+    data_type: TYPE_STRING,
+    dims: [ 1 ]
+  },
+  {
+      name: "max_tokens",
+      data_type: TYPE_UINT32,
+      dims: [ 1 ]
+  },
+  {
+      name: "temperature",
+      data_type: TYPE_FP32,
+      dims: [ 1 ]
+  },
+  {
+      name: "top_p",
+      data_type: TYPE_FP32,
+      dims: [ 1 ]
+  },
+  {
+      name: "seed",
+      data_type: TYPE_UINT64,
+      dims: [ 1 ],
+      optional: true
+  }
+]
+output: [
+  {
+    name: "outputs",
+    data_type: TYPE_STRING,
+    dims: [ -1 ]
+  }
+]
+inference: {
+  models: [
+    {
+      name: "vila1.5-13b",
+      backend: "tensorrtllm",
+      input: [
+        {
+          name: "input_ids",
+          data_type: TYPE_INT32,
+          dims: [ -1 ]
+        },
+        {
+          name: "input_lengths",
+          data_type: TYPE_INT32,
+          dims: [ 1 ],
+        },
+      ],
+      output: [
+        {
+          name: "output_ids",
+          data_type: TYPE_INT32,
+          dims: [ -1, -1 ]
+        },
+        {
+          name: "sequence_length",
+          data_type: TYPE_INT32,
+          dims: [ -1 ]
+        }
+      ]
+    }
+  ],
+  flow: [
+    [["prompt"], "tensorrt_llama2"],
+    ["tensorrt_llama2", ["outputs"]]
+  ]
+}
+server: {
+  endpoint_map: {
+    "infer": "/inference",
+    "health": "/health/live"
+  },
+  input_map: {
+    "prompt": '{% for item in data %}{% if item.role == "user" %}{{ item.content }}{{ "\n" }}{% endif %}{% endfor %}'
+  }
+}
