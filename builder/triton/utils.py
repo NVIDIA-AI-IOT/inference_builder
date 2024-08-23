@@ -1,4 +1,6 @@
-from .model_config_pb2 import DataType
+from .model_config_pb2 import DataType, ModelConfig, ModelParameter, ModelTensorReshape
+from google.protobuf import text_format
+from typing import Dict
 
 datatype_mapping = {
     "TYPE_INVALID": DataType.TYPE_INVALID,
@@ -17,3 +19,29 @@ datatype_mapping = {
     "TYPE_STRING": DataType.TYPE_STRING,
     "TYPE_BF16": DataType.TYPE_BF16
 }
+
+def generate_pbtxt(model_config: Dict):
+    triton_model_config = ModelConfig()
+    for key, value in model_config.items():
+        if hasattr(triton_model_config, key):
+            if key == "input" or key == "output":
+                for i in value:
+                    entry = triton_model_config.input.add() if key == "input" else triton_model_config.output.add()
+                    for k, v in i.items():
+                        if hasattr(entry, k):
+                            if k == "data_type":
+                                setattr(entry, k, datatype_mapping[v])
+                            elif k == "dims":
+                                for dim in v:
+                                    entry.dims.append(dim)
+                            elif k == "reshape":
+                                for s in v['shape']:
+                                    entry.reshape.shape.append(s)
+                            else:
+                                setattr(entry, k, v)
+            elif key == "parameters":
+                for k, p in value.items():
+                    triton_model_config.parameters[k].string_value = p
+            else:
+                setattr(triton_model_config, key, value)
+    return text_format.MessageToString(triton_model_config)

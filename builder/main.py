@@ -10,9 +10,7 @@ import logging
 from pathlib import Path
 import datamodel_code_generator as data_generator
 from utils import get_resource_path, copy_files
-from triton.model_config_pb2 import ModelConfig, ModelInput, ModelOutput
-from triton.utils import datatype_mapping
-from google.protobuf import text_format
+from triton.utils import generate_pbtxt
 
 ALLOWED_SERVER = ["triton"]
 
@@ -56,39 +54,11 @@ def build_inference(server_type, config, model_repo_dir):
     if server_type == "triton":
         for model in config.models:
             if model.backend == "tensorrtllm":
-                model_config = ModelConfig()
-                for key, value in model.items():
-                    if hasattr(model_config, key):
-                        if key == "input":
-                            for i in value:
-                                model_input = model_config.input.add()
-                                for k,v in i.items():
-                                    if hasattr(model_input, k):
-                                        if k == "data_type":
-                                            setattr(model_input, k, datatype_mapping[v])
-                                        elif k == "dims":
-                                            for dim in v:
-                                                model_input.dims.append(dim)
-                                        else:
-                                            setattr(model_input, k, v)
-                        elif key == "output":
-                            for i in value:
-                                model_output = ModelOutput()
-                                for k,v in i.items():
-                                    if hasattr(model_output, k):
-                                        if k == "data_type":
-                                            setattr(model_output, k, datatype_mapping[v])
-                                        elif k == "dims":
-                                            for dim in v:
-                                                model_output.dims.append(dim)
-                                        else:
-                                            setattr(model_output, k, v)
-                                model_config.output.append(model_output)
-                        else:
-                            setattr(model_config, key, value)
-                pbtxt_str = text_format.MessageToString(model_config)
+                # generate the pbtxt for the tensorrtllm backend
+                model_config = OmegaConf.to_container(model)
+                pbtxt_str = generate_pbtxt(model_config)
                 (model_repo_dir/f"{model.name}/1").mkdir(parents=True)
-                pbtxt_path = model_repo_dir/model.name/"1"/"config.pbtxt"
+                pbtxt_path = model_repo_dir/model.name/"config.pbtxt"
                 with open(pbtxt_path, 'w') as f:
                     f.write(pbtxt_str)
     else:
