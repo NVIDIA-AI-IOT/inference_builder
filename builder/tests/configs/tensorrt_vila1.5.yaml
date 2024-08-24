@@ -62,7 +62,12 @@ inference: {
           data_type: TYPE_INT32,
           dims: [ -1 ]
         }
-      ]
+      ],
+      tokenizer: {
+        type: auto,
+        input: "prompt",
+        output: "input_ids"
+      }
     }
   ],
   flow: [

@@ -13,7 +13,7 @@ class InputMapping:
     def __call__(self):
         mapped = dict()
         for item in self._required:
-            name = item[name]
+            name = item['name']
             if name in self._map:
                 # TODO template support
                 tpl_str = self._map[name]
@@ -25,3 +25,4 @@ class InputMapping:
                 mapped[name] = value
             else:
                 logger.warning(f"Missing input: {name}")
+        return mapped

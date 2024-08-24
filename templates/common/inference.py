@@ -1,36 +1,48 @@
 
 from concurrent.futures import ThreadPoolExecutor
-from queue import Queue
+from queue import Queue, Empty
 from typing import List
 from abc import ABC, abstractmethod
 from typing import Callable
 from common.config import config
 from common.utils import get_logger
 from transformers import AutoTokenizer
+from omegaconf import OmegaConf
+from dataclasses import dataclass
 
 logger = get_logger(__name__)
 
+@dataclass
+class Error:
+    message: str
+
 class DataFlow:
     """A single input flow to a model"""
-    def __init__(self, names: List):
+    def __init__(self, names: List, timeout=10):
         self._names = names
         self._queue = Queue()
+        self._timeout = timeout
 
     @property
     def names(self):
         return self._names
 
     def put(self, item):
-        self._queue.put(item)
+        self._queue.put(item, timeout=self._timeout)
 
     def get(self):
-        return self._queue.get()
+        try:
+            item = self._queue.get(timeout=self._timeout)
+        except Empty:
+            item = Error("timeout")
+        return item
+
 
 class ModelBackend(ABC):
     """Interface for standardizing the model backend """
     @abstractmethod
     def __call__(self, **kwargs):
-        pass
+        raise Exception("Not Implemented")
 
 class ModelOperator:
     """An model operator runs a single model"""
@@ -41,13 +53,13 @@ class ModelOperator:
         self._out = [DataFlow([o.name for o in model_config.output])]
         self._running = False
         self._tokenizer = None
-        if not model_config.is_missing(model_config, "tokenizer"):
+        if not OmegaConf.is_missing(model_config, "tokenizer"):
             if model_config.tokenizer.type == "auto":
                 self._tokenizer = AutoTokenizer.from_pretrained(
                     f"{self._check_point_dir}/{self._model_name}", use_fast=True, use_legacy=False
                 )
-                self._tokenizer.input_name = model_config.tokenizer.input_name
-                self._tokenizer.output_name = model_config.tokernizer.output_name
+                self._tokenizer.input = model_config.tokenizer.input
+                self._tokenizer.output = model_config.tokenizer.output
 
     @property
     def model_name(self):
@@ -66,57 +78,48 @@ class ModelOperator:
 
     def run(self, model_backend: ModelBackend):
         logger.debug(f"Model operator for {self._model_name} started")
+        self._backend = model_backend
         while True:
-            # collect input data
-            kwargs = dict()
-            for input in self._in:
-                data = input.get()
-                if not data:
-                    break
-                for d, n in zip(data, input.names):
-                    if self._tokenizer and self._tokenizer.input_name == n:
-                        kwargs[self._tokenizer.output_name] = self._tokenizer(d)
-                    kwargs[n] = d
-                logger.debug(f"Input collected: {kwargs}")
-            results = model_backend(**kwargs)
-            self._out.put(results)
-
+            try:
+                # collect input data
+                kwargs = dict()
+                for input in self._in:
+                    data = input.get()
+                    if not data:
+                        break
+                    for key, value in data.items():
+                        if self._tokenizer and self._tokenizer.input == key:
+                            msg_str = value.as_numpy()[0][0].decode()
+                            kwargs[self._tokenizer.output] = self._tokenizer(msg_str)
+                        else:
+                            kwargs[key] = value
+                    logger.debug(f"Input collected: {kwargs}")
+                    for result in self._backend(**kwargs):
+                        self._out.put(result)
+            except Exception as e:
+                logger.exception(e)
 
 class Inference:
     """The base model that drives the inference flow"""
-    def __init__(self, check_point_dir):
-        self._operators = {}
+    def initialize(self, check_point_dir):
+        self._operators = []
         self._inputs = []
+        self._outputs = []
         input_names = [i.name for i in config.input]
         output_names = [i.name for i in config.output]
         # set up the inference flow
         for model_config in config.inference.models:
-            self._operators[model_config.name] = ModelOperator(model_config, check_point_dir)
-        for flow in config.inference.flow:
-            source = flow[0]
-            sink = flow[1]
-            # input handling
-            if (isinstance(source, list) and all(e in input_names for e in source)):
-                operator = next((o for o in self._operators if o.name == sink), None)
-                if operator is None:
-                    raise Exception(f"Model not recognized: {sink}")
-                self._inputs.append(operator.inject(source))
-            # output handling
-            if (isinstance(sink, list) and all(e in output_names for e in sink)):
-                operator = next((o for o in self._operators if o.name == source), None)
-                if operator is None:
-                    raise Exception(f"Model not recognized: {source}")
-                self._outputs =  operator.outputs
+            self._operators.append(ModelOperator(model_config, check_point_dir))
         # default flow for single model use case
-        if not config.flow and len(self._operators) == 1:
+        if  len(self._operators) == 1:
             operator = self._operators[0]
-            self._inputs = operator.inject(input_names)
+            self._inputs.append(operator.inject(input_names))
             self._outputs = operator.outputs
         self._executor = ThreadPoolExecutor(max_workers=len(self._operators))
         self._future = None
 
-    def submit(self, callable:Callable):
-        self._future = self._executor.submit(callable)
-
     def finalize(self):
         self._executor.shutdown()
+
+    def _submit(self, op: ModelOperator, backend: ModelBackend):
+        self._future = self._executor.submit(lambda: op.run(backend))

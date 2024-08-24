@@ -1,10 +1,9 @@
 from common.config import config
-from common.inference import ModelBackend, Inference
+from common.inference import ModelBackend, Inference, Error
 import triton_python_backend_utils as pb_utils
-import OmegaConf
+from omegaconf import OmegaConf
 import queue
 from typing import List
-from dataclasses import dataclass
 from common.utils import get_logger
 import os
 
@@ -14,29 +13,27 @@ logger = get_logger(__name__)
 CHECKPOINTS_DIR = os.getenv("CHECKPOINTS_DIR", "/workspace/checkpoints")
 PIPELINE_GPU_ID=int(os.getenv("PIPELINE_GPU_ID", "0"))
 
-@dataclass
-class Error:
-    message: str
-    stream_idx: int
-
 
 class TrtLLMBackend(ModelBackend):
     def __init__(self, model_name:str, input_names: List[str], output_names: List[str]):
         self._model_name = model_name
         self._input_names = input_names
         self._output_names = output_names
+        logger.debug(f"TrtLLMBackend created for {model_name} with inputs {input_names} and outputs {output_names}")
 
     def __call__(self, **kwargs):
+        logger.debug(f"TrtLLMBackend {self._model_name} triggerred with {kwargs}")
+
         llm_request = pb_utils.InferenceRequest(
             model_name = self._model_name,
             requested_output_names = self._output_names,
-            inputs = [pb_utils.Tensor(k, v) for k, v in kwargs]
+            inputs = [pb_utils.Tensor(k, v) if not isinstance(v, pb_utils.Tensor) else v for k, v in kwargs.items() if v]
         )
         finish_reason = ""
         buffer_map = {n: [] for n in self._output_names}
         for idx, llm_response in enumerate(llm_request.exec(decoupled=True)):
             if llm_response.has_error():
-                yield Error(message=llm_response.error().message(), stream_idx=idx)
+                yield Error(message=f"{llm_response.error().message()}, stream_id={idx}")
             if not llm_response.output_tensors():
                 continue
             for name in self._output_names:
@@ -62,13 +59,20 @@ class TritonPythonModel(Inference):
             auto_complete_model_config.add_input(OmegaConf.to_object(input))
         for output in config.output:
             auto_complete_model_config.add_output(OmegaConf.to_object(output))
+        return auto_complete_model_config
 
     def initialize(self, args):
-        super().__init__(check_point_dir=CHECKPOINTS_DIR)
+        super().initialize(check_point_dir=CHECKPOINTS_DIR)
         logger.info(f"CHECKPOINTS_DIR: {CHECKPOINTS_DIR}")
-        for name, operator in self._operators.items():
-            if config.models[name].backend == "tensorrtllm":
-                self.submit(lambda o=operator: o.run(TrtLLMBackend()))
+        for operator in self._operators:
+            model_config = next((m for m in config.inference.models if m.name == operator.model_name), None)
+            if model_config.backend == "tensorrtllm":
+                trtllm = TrtLLMBackend(
+                    model_name=model_config.name,
+                    input_names=[i.name for i in model_config.input],
+                    output_names=[i.name for i in model_config.output],
+                )
+                self._submit(operator, trtllm)
 
     async def execute(self, requests):
         """ execute a list of requests"""
@@ -81,16 +85,18 @@ class TritonPythonModel(Inference):
                     flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL)
                 continue
             for input in self._inputs:
-                input.put({n: pb_utils.get_input_tensor_by_name(request, name) for n in input.names})
+                input.put({n: pb_utils.get_input_tensor_by_name(request, n) for n in input.names})
             for output in self._outputs:
                 while True:
                     try:
                         out_data = output.get()
                         if isinstance(out_data, Error):
-                            error = pb_utils.TritonError(f"steam llm_response [{out_data.stream_idx}], error received: {out_data.message}")
+                            error = pb_utils.TritonError(f"steam llm_response, error received: {out_data.message}")
                             response_sender.send(
-                                pb_utils.InferenceResponse(error=error, flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL)
+                                pb_utils.InferenceResponse(error=error),
+                                flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL
                             )
+                            return
                         triton_data = []
                         for name, data in zip(output.names, out_data):
                             triton_data.append(pb_utils.Tesor(name, data))

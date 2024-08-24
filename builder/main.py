@@ -88,7 +88,7 @@ def build_inference(server_type, config, model_repo_dir):
                             setattr(model_config, key, value)
                 pbtxt_str = text_format.MessageToString(model_config)
                 (model_repo_dir/f"{model.name}/1").mkdir(parents=True)
-                pbtxt_path = model_repo_dir/model.name/"1"/"config.pbtxt"
+                pbtxt_path = model_repo_dir/model.name/"config.pbtxt"
                 with open(pbtxt_path, 'w') as f:
                     f.write(pbtxt_str)
     else:
@@ -116,7 +116,7 @@ def main(args):
         copy_files(common_src, tree/"server/optimized/common")
         target = Path(args.output_dir).resolve() / config.name
         try:
-            shutil.copytree(tree, target)
+            shutil.copytree(tree, target, dirs_exist_ok=True)
         except FileExistsError:
             logging.error(f"{target} already exists in the output directory")
 

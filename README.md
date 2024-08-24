@@ -4,6 +4,21 @@
 
 ## Getting started
 
+### Clone the repository
+
+```bash
+git clone https://gitlab-master.nvidia.com/chunlinl/nim-templates.git
+git submodule update --init
+```
+
+### Install prerequisites
+
+```bash
+sudo apt update
+sudo apt install protobuf-compiler
+cd nim-templates
+pip3 install -r requirements.txt
+```
 To make it easy for you to get started with GitLab, here's a list of recommended next steps.
 
 Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
