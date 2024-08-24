@@ -7,6 +7,7 @@ from omegaconf import OmegaConf
 import cookiecutter.main
 import cookiecutter
 import logging
+from typing import Dict
 from pathlib import Path
 import datamodel_code_generator as data_generator
 from utils import get_resource_path, copy_files
@@ -42,7 +43,7 @@ def build_args(parser):
 
 def build_tree(server_type, config, temp_dir):
     configuration = OmegaConf.to_yaml(config)
-    ep = OmegaConf.to_container(config.server.endpoint_map)
+    ep = OmegaConf.to_container(config.endpoints)
     cookiecutter.main.cookiecutter(
         get_resource_path(f"builder/boilerplates/{server_type}"),
         no_input=True,
@@ -50,7 +51,7 @@ def build_tree(server_type, config, temp_dir):
         output_dir=temp_dir)
     return Path(temp_dir) / Path(config.name)
 
-def build_inference(server_type, config, model_repo_dir):
+def build_inference(server_type, config, model_repo_dir: Path):
     if server_type == "triton":
         for model in config.models:
             if model.backend == "tensorrtllm":
@@ -81,7 +82,7 @@ def main(args):
     with tempfile.TemporaryDirectory() as temp_dir:
         tree = build_tree(args.server_type, config, temp_dir)
         build_server(args.server_type, api_schema, config, tree/"server/optimized")
-        build_inference(args.server_type, config.inference, tree/"server/optimized/model_repo")
+        build_inference(args.server_type, config, tree/"server/optimized/model_repo")
         common_src = get_resource_path("templates/common")
         copy_files(common_src, tree/"server/optimized/common")
         target = Path(args.output_dir).resolve() / config.name

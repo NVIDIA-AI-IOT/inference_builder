@@ -55,6 +55,7 @@ class TritonPythonModel(Inference):
         # create a minimum config
         auto_complete_model_config.set_max_batch_size(1)
         auto_complete_model_config.set_dynamic_batching()
+        auto_complete_model_config.set_model_transaction_policy({"decoupled": True})
         for input in config.input:
             auto_complete_model_config.add_input(OmegaConf.to_object(input))
         for output in config.output:
@@ -65,7 +66,7 @@ class TritonPythonModel(Inference):
         super().initialize(check_point_dir=CHECKPOINTS_DIR)
         logger.info(f"CHECKPOINTS_DIR: {CHECKPOINTS_DIR}")
         for operator in self._operators:
-            model_config = next((m for m in config.inference.models if m.name == operator.model_name), None)
+            model_config = next((m for m in config.models if m.name == operator.model_name), None)
             if model_config.backend == "tensorrtllm":
                 trtllm = TrtLLMBackend(
                     model_name=model_config.name,

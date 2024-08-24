@@ -17,10 +17,9 @@ class InputMapping:
             if name in self._map:
                 # TODO template support
                 tpl_str = self._map[name]
-                value = Template(tpl_str).render()
+                value = Template(tpl_str).render(data=self._giving)
                 mapped[name] = value
             elif name in self._giving:
-                # TODO default mapping template
                 value = self._giving[name]
                 mapped[name] = value
             else:

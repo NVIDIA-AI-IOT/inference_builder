@@ -10,7 +10,7 @@ from omegaconf import OmegaConf
 class Interface(FastApiTritonInterface):
     def process_request(self, request: ChatRequest, headers: Dict[str, str]):
         inputs = OmegaConf.to_container(config.input)
-        i_map = OmegaConf.to_container(config.server.input_map)
+        i_map = OmegaConf.to_container(config.input_map)
         return InputMapping(inputs, request.model_dump(), i_map)()
 
     def process_response(

@@ -16,6 +16,9 @@ logger = get_logger(__name__)
 class Error:
     message: str
 
+    def __bool__(self):
+        return False
+
 class DataFlow:
     """A single input flow to a model"""
     def __init__(self, names: List, timeout=10):
@@ -53,7 +56,7 @@ class ModelOperator:
         self._out = [DataFlow([o.name for o in model_config.output])]
         self._running = False
         self._tokenizer = None
-        if not OmegaConf.is_missing(model_config, "tokenizer"):
+        if hasattr(model_config, "tokenizer"):
             if model_config.tokenizer.type == "auto":
                 self._tokenizer = AutoTokenizer.from_pretrained(
                     f"{self._check_point_dir}/{self._model_name}", use_fast=True, use_legacy=False
@@ -95,7 +98,7 @@ class ModelOperator:
                             kwargs[key] = value
                     logger.debug(f"Input collected: {kwargs}")
                     for result in self._backend(**kwargs):
-                        self._out.put(result)
+                        self._out[0].put(result)
             except Exception as e:
                 logger.exception(e)
 
@@ -108,7 +111,7 @@ class Inference:
         input_names = [i.name for i in config.input]
         output_names = [i.name for i in config.output]
         # set up the inference flow
-        for model_config in config.inference.models:
+        for model_config in config.models:
             self._operators.append(ModelOperator(model_config, check_point_dir))
         # default flow for single model use case
         if  len(self._operators) == 1:
