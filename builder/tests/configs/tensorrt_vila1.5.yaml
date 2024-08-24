@@ -48,7 +48,47 @@ inference: {
         {
           name: "input_lengths",
           data_type: TYPE_INT32,
+          dims: [ 1 ]
+        },
+        {
+          name: "request_output_len",
+          data_type: TYPE_INT32,
+          dims: [ 1 ]
+        },
+        {
+          name: "temperature",
+          data_type: TYPE_FP32,
           dims: [ 1 ],
+          reshape: { shape: [ ] },
+          optional: true
+        },
+        {
+          name: "runtime_top_k",
+          data_type: TYPE_INT32,
+          dims: [ 1 ],
+          reshape: { shape: [ ] },
+          optional: true
+        },
+        {
+          name: "runtime_top_p",
+          data_type: TYPE_FP32,
+          dims: [ 1 ],
+          reshape: { shape: [ ] },
+          optional: true
+        },
+        {
+          name: "end_id",
+          data_type: TYPE_INT32,
+          dims: [ 1 ],
+          reshape: { shape: [ ] },
+          optional: true
+        },
+        {
+          name: "pad_id",
+          data_type: TYPE_INT32,
+          dims: [ 1 ],
+          reshape: { shape: [ ] },
+          optional: true
         },
       ],
       output: [
@@ -63,16 +103,11 @@ inference: {
           dims: [ -1 ]
         }
       ],
-      tokenizer: {
-        type: auto,
-        input: "prompt",
-        output: "input_ids"
+      parameters: {
+        "gpt_model_type": "inflight_fused_batching",
+        "gpt_model_path": "${engine_dir}"
       }
     }
-  ],
-  flow: [
-    [["prompt"], "tensorrt_llama2"],
-    ["tensorrt_llama2", ["outputs"]]
   ]
 }
 server: {
