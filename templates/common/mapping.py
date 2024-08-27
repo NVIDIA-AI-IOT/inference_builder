@@ -1,13 +1,14 @@
 from typing import List, Dict
 from jinja2 import Template
 from common.utils import get_logger
+import json
 
 logger = get_logger(__name__)
 
 class InputMapping:
-    def __init__(self, required: List, giving: Dict, i_map: Dict):
+    def __init__(self, required: List[Dict], giving: str, i_map: Dict):
         self._required = required
-        self._giving = giving
+        self._giving = json.loads(giving)
         self._map = i_map
 
     def __call__(self):

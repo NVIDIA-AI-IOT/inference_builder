@@ -1,4 +1,4 @@
-from common.config import config
+from common.config import global_config
 from common.inference import ModelBackend, Inference, Error
 import triton_python_backend_utils as pb_utils
 from omegaconf import OmegaConf
@@ -6,6 +6,8 @@ import queue
 from typing import List
 from common.utils import get_logger
 import os
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 logger = get_logger(__name__)
 
@@ -27,23 +29,24 @@ class TrtLLMBackend(ModelBackend):
         llm_request = pb_utils.InferenceRequest(
             model_name = self._model_name,
             requested_output_names = self._output_names,
-            inputs = [pb_utils.Tensor(k, v) if not isinstance(v, pb_utils.Tensor) else v for k, v in kwargs.items() if v]
+            inputs = [pb_utils.Tensor(k, v) for k, v in kwargs.items()]
         )
         finish_reason = ""
-        buffer_map = {n: [] for n in self._output_names}
         for idx, llm_response in enumerate(llm_request.exec(decoupled=True)):
+            expected = {n: None for n in self._output_names}
             if llm_response.has_error():
                 yield Error(message=f"{llm_response.error().message()}, stream_id={idx}")
             if not llm_response.output_tensors():
                 continue
-            for name in self._output_names:
-                output = pb_utils.get_output_tensor_by_name(llm_response, name).as_numpy().flatten().tolist()
+            for name in expected:
+                output = pb_utils.get_output_tensor_by_name(llm_response, name)
                 if not output:
                     finish_reason = "stop"
-                buffer_map[name] += output
-            yield buffer_map
-        if all(v for k, v in buffer_map.items()):
-            return buffer_map
+                expected[name] = output
+            logger.debug(f"TrtLLMBackend saved inference results to: {expected}")
+            yield expected
+        if all(v for k, v in expected.items()):
+            return expected
 
 
 
@@ -56,9 +59,9 @@ class TritonPythonModel(Inference):
         auto_complete_model_config.set_max_batch_size(1)
         auto_complete_model_config.set_dynamic_batching()
         auto_complete_model_config.set_model_transaction_policy({"decoupled": True})
-        for input in config.input:
+        for input in global_config.input:
             auto_complete_model_config.add_input(OmegaConf.to_object(input))
-        for output in config.output:
+        for output in global_config.output:
             auto_complete_model_config.add_output(OmegaConf.to_object(output))
         return auto_complete_model_config
 
@@ -66,7 +69,7 @@ class TritonPythonModel(Inference):
         super().initialize(check_point_dir=CHECKPOINTS_DIR)
         logger.info(f"CHECKPOINTS_DIR: {CHECKPOINTS_DIR}")
         for operator in self._operators:
-            model_config = next((m for m in config.models if m.name == operator.model_name), None)
+            model_config = next((m for m in global_config.models if m.name == operator.model_name), None)
             if model_config.backend == "tensorrtllm":
                 trtllm = TrtLLMBackend(
                     model_name=model_config.name,
@@ -74,10 +77,23 @@ class TritonPythonModel(Inference):
                     output_names=[i.name for i in model_config.output],
                 )
                 self._submit(operator, trtllm)
+        # thread executor for async bridge
+        self._async_executor = ThreadPoolExecutor(max_workers=len(self._outputs))
+        # async queues
+        self._async_outputs = [asyncio.Queue() for o in self._outputs]
 
     async def execute(self, requests):
         """ execute a list of requests"""
-        logger.debug(f"received {len(requests)} requests")
+        async def async_put(queue, item):
+            await queue.put(item)
+        def thread_to_async_bridge(thread_queue, async_queue, loop):
+            item = thread_queue.get()
+            if not item:
+                logger.error(f"Failed to read from data flow: {item}")
+                return
+            asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
+
+        logger.info(f"received {len(requests)} requests")
         for request in requests:
             response_sender = request.get_response_sender()
             if request.is_cancelled():
@@ -86,24 +102,32 @@ class TritonPythonModel(Inference):
                     flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL)
                 continue
             for input in self._inputs:
-                input.put({n: pb_utils.get_input_tensor_by_name(request, n) for n in input.names})
-            for output in self._outputs:
-                while True:
-                    try:
-                        out_data = output.get()
-                        if isinstance(out_data, Error):
-                            error = pb_utils.TritonError(f"steam llm_response, error received: {out_data.message}")
-                            response_sender.send(
-                                pb_utils.InferenceResponse(error=error),
-                                flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL
-                            )
-                            return
-                        triton_data = []
-                        for name, data in zip(output.names, out_data):
-                            triton_data.append(pb_utils.Tesor(name, data))
-                        response_sender.send(pb_utils.InferenceResponse(triton_data))
-                    except queue.Empty:
-                        break
+                logger.info(f"Submitting request {request}")
+                input.put({n: pb_utils.get_input_tensor_by_name(request, n) for n in input.in_names})
+            # fetch result
+            loop = asyncio.get_event_loop()
+            for a_output, output in zip(self._async_outputs, self._outputs):
+                self._async_executor.submit(thread_to_async_bridge, output, a_output, loop)
+            response_data = dict()
+            for a_output, output in zip(self._async_outputs, self._outputs):
+                try:
+                    out_data = await a_output.get()
+                    logger.info(f"Got output data: {out_data}")
+                    if isinstance(out_data, Error):
+                        error = pb_utils.TritonError(f"steam llm_response, error received: {out_data.message}")
+                        response_sender.send(
+                            pb_utils.InferenceResponse(error=error),
+                            flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL
+                        )
+                        return
+                    response_data.update(out_data)
+                except Exception as e:
+                    logger.exception(e)
+                response_sender.send(pb_utils.InferenceResponse(
+                    output_tensors=[
+                        pb_utils.Tensor(name, tensor) for name, tensor in response_data.items()
+                    ]
+                ))
             response_sender.send(flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL)
 
     def finalize(self):
