@@ -20,6 +20,11 @@ input: [
       data_type: TYPE_FP32,
       dims: [ 1 ]
   },
+  {
+    name: "images",
+    data_type: TYPE_STRING,
+    dims: [ -1 ]
+  }
 ]
 output: [
   {
@@ -97,8 +102,18 @@ endpoints: {
   "health": "/health/live"
 }
 
-input_map: {
-  "prompt": '{% for item in data.messages %}{% if item.role == "user" %}{{ item.content }}{{ "\n" }}{% endif %}{% endfor %}',
-  "runtime_top_p": "{{ data.top_p }}",
-  "request_output_len": "{{ data.max_tokens }}"
-}
+projections:
+  input:
+    templates:
+      request: >
+        {
+          "prompt": {% for item in messages %}[{% if item.role == "user" %}{{ item.content|tojson }}{% if not loop.last %},{% endif %}{% endif %}]{% endfor %},
+          "runtime_top_p": {{ top_p }},
+          "request_output_len": {{ max_tokens }},
+          "temperature": {{ temperature }},
+          "images": []
+        }
+      prompt: "{% for prompt in data %}{{ prompt }}\n{% endfor %}"
+    filters: {
+      "prompt": ['(?P<src_base64_tag><img\ssrc=\"data:image\/(?P<extension>[^;]*);base64,(?P<base64str>[^\"]*)\".*?\/>)', '-', '', 'images']
+    }

@@ -264,8 +264,7 @@ class Inference:
         self._operators: ModelOperator = []
         self._inputs: List[DataFlow] = []
         self._outputs: List[DataFlow] = []
-        input_names = [i.name for i in global_config.input]
-        output_names = [i.name for i in global_config.output]
+
         # set up the inference flow
         for model_config in global_config.models:
             self._operators.append(ModelOperator(model_config, check_point_dir))

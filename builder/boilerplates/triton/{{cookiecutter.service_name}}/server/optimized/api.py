@@ -1,20 +1,54 @@
+import base64
+import json
 from typing import Dict, Optional, List, Union
 import numpy as np
 from inferencemodeltoolkit.interfaces.fastapi import FastApiTritonInterface
 from data_model import ChatRequest, ChatCompletion, ChatCompletionChunk, ChoiceChunk, Message, Choice, Usage
 from common.config import global_config
-from common.mapping import InputMapping
-from omegaconf import OmegaConf
+from omegaconf.errors import ConfigKeyError
+from jinja2 import Template
+import re
 
 
 class Interface(FastApiTritonInterface):
     def process_request(self, request: ChatRequest, headers: Dict[str, str]):
-        inputs = OmegaConf.to_container(global_config.input)
-        i_map = dict()
-        # load the input mapping if there is any
-        if hasattr(global_config, "input_map"):
-            i_map = OmegaConf.to_container(global_config.input_map)
-        return InputMapping(inputs, request.model_dump_json(), i_map)()
+        result = json.loads(request.model_dump_json())
+        # load the input config if there is any
+        input_config = None
+        try:
+            input_config = global_config.projections.input
+        except ConfigKeyError:
+            pass
+        if input_config is not None:
+            if hasattr(input_config, 'templates'):
+                tpl = base64.b64decode(input_config.templates['request']).decode()
+                json_string = Template(tpl).render(result)
+                result = json.loads(json_string)
+                for key, value in input_config.templates.items():
+                    if key in result:
+                        tpl = base64.b64decode(value).decode()
+                        result[key] = Template(tpl).render(data=result[key])
+            if hasattr(input_config, 'filters'):
+                for key, filter in input_config.filters.items():
+                    if not key in result:
+                        continue
+                    text = result[key]
+                    if not isinstance(text, str):
+                        continue
+                    regx = filter[0]
+                    keys = filter[1:]
+                    matches = re.findall(regx, text)
+                    for match in matches:
+                        if len(keys) != len(match):
+                            continue
+                        for x, y in zip(keys, match):
+                            if x == '-':
+                                # '-' represents replacing
+                                result[key] = text.replace(y, "", 1)
+                            if not x:
+                                continue
+                        result[x].append(y)
+        return result
 
     def process_response(
         self,

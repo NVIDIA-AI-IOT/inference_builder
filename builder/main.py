@@ -1,6 +1,7 @@
 
 
 import argparse
+import base64
 import tempfile
 import shutil
 from omegaconf import OmegaConf
@@ -12,10 +13,12 @@ from pathlib import Path
 import datamodel_code_generator as data_generator
 from utils import get_resource_path, copy_files
 from triton.utils import generate_pbtxt
+from omegaconf.errors import ConfigKeyError
 
 ALLOWED_SERVER = ["triton"]
 
 logging.basicConfig(level=logging.INFO)
+OmegaConf.register_new_resolver("multiline", lambda x: x, replace=False)
 
 def build_args(parser):
     parser.add_argument(
@@ -42,6 +45,17 @@ def build_args(parser):
     parser.add_argument("config", type=str, help="Path the the configuration")
 
 def build_tree(server_type, config, temp_dir):
+    input_templates = None
+    try:
+        input_templates = config.projections.input.templates
+    except ConfigKeyError:
+        pass
+    if input_templates:
+        # these are json templates and need be encoded before being embeded as yaml strings
+        encoded_templates = dict()
+        for key, value in input_templates.items():
+            encoded_templates[key] = base64.b64encode(value.encode())
+        config.projections.input.templates = encoded_templates
     configuration = OmegaConf.to_yaml(config)
     ep = OmegaConf.to_container(config.endpoints)
     cookiecutter.main.cookiecutter(
