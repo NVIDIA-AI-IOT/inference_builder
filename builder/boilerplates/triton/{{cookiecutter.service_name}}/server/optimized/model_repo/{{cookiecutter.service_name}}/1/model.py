@@ -2,7 +2,6 @@ from common.config import global_config
 from common.inference import ModelBackend, Inference, Error
 import triton_python_backend_utils as pb_utils
 from omegaconf import OmegaConf
-import queue
 from typing import List
 from common.utils import get_logger
 import os
@@ -16,15 +15,15 @@ CHECKPOINTS_DIR = os.getenv("CHECKPOINTS_DIR", "/workspace/checkpoints")
 PIPELINE_GPU_ID=int(os.getenv("PIPELINE_GPU_ID", "0"))
 
 
-class TrtLLMBackend(ModelBackend):
+class TritonBackend(ModelBackend):
     def __init__(self, model_name:str, input_names: List[str], output_names: List[str]):
         self._model_name = model_name
         self._input_names = input_names
         self._output_names = output_names
-        logger.debug(f"TrtLLMBackend created for {model_name} with inputs {input_names} and outputs {output_names}")
+        logger.debug(f"TritonBackend created for {model_name} with inputs {input_names} and outputs {output_names}")
 
     def __call__(self, **kwargs):
-        logger.debug(f"TrtLLMBackend {self._model_name} triggerred with {kwargs}")
+        logger.debug(f"TritonBackend {self._model_name} triggerred with {kwargs}")
 
         llm_request = pb_utils.InferenceRequest(
             model_name = self._model_name,
@@ -43,7 +42,7 @@ class TrtLLMBackend(ModelBackend):
                 if not output:
                     finish_reason = "stop"
                 expected[name] = output
-            logger.debug(f"TrtLLMBackend saved inference results to: {expected}")
+            logger.debug(f"TritonBackend saved inference results to: {expected}")
             yield expected
         if all(v for k, v in expected.items()):
             return expected
@@ -60,9 +59,13 @@ class TritonPythonModel(Inference):
         auto_complete_model_config.set_dynamic_batching()
         auto_complete_model_config.set_model_transaction_policy({"decoupled": True})
         for input in global_config.input:
-            auto_complete_model_config.add_input(OmegaConf.to_object(input))
+            input_config = OmegaConf.to_container(input)
+            if input_config["data_type"] == "TYPE_CUSTOM_IMAGE_BASE64":
+                input_config["data_type"] = "TYPE_STRING"
+            auto_complete_model_config.add_input(input_config)
         for output in global_config.output:
-            auto_complete_model_config.add_output(OmegaConf.to_object(output))
+            output_config = OmegaConf.to_container(output)
+            auto_complete_model_config.add_output(output_config)
         return auto_complete_model_config
 
     def initialize(self, args):
@@ -70,13 +73,12 @@ class TritonPythonModel(Inference):
         logger.info(f"CHECKPOINTS_DIR: {CHECKPOINTS_DIR}")
         for operator in self._operators:
             model_config = next((m for m in global_config.models if m.name == operator.model_name), None)
-            if model_config.backend == "tensorrtllm":
-                trtllm = TrtLLMBackend(
-                    model_name=model_config.name,
-                    input_names=[i.name for i in model_config.input],
-                    output_names=[i.name for i in model_config.output],
-                )
-                self._submit(operator, trtllm)
+            triton_backend = TritonBackend(
+                model_name=model_config.name,
+                input_names=[i.name for i in model_config.input],
+                output_names=[i.name for i in model_config.output],
+            )
+            self._submit(operator, triton_backend)
         # thread executor for async bridge
         self._async_executor = ThreadPoolExecutor(max_workers=len(self._outputs))
         # async queues

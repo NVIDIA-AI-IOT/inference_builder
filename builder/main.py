@@ -11,6 +11,7 @@ import logging
 from typing import Dict
 from pathlib import Path
 import datamodel_code_generator as data_generator
+import semver
 from utils import get_resource_path, copy_files
 from triton.utils import generate_pbtxt
 from omegaconf.errors import ConfigKeyError
@@ -66,16 +67,28 @@ def build_tree(server_type, config, temp_dir):
     return Path(temp_dir) / Path(config.name)
 
 def build_inference(server_type, config, model_repo_dir: Path):
+    env = dict()
+    if hasattr(config, "environment"):
+        env = OmegaConf.to_container(config.environment)
     if server_type == "triton":
         for model in config.models:
-            if model.backend == "tensorrtllm":
-                # generate the pbtxt for the tensorrtllm backend
-                model_config = OmegaConf.to_container(model)
-                pbtxt_str = generate_pbtxt(model_config)
-                (model_repo_dir/f"{model.name}/1").mkdir(parents=True)
-                pbtxt_path = model_repo_dir/model.name/"config.pbtxt"
-                with open(pbtxt_path, 'w') as f:
-                    f.write(pbtxt_str)
+            fallback = False
+            # generate the pbtxt for the tensorrtllm backend
+            backend = model.backend.split('-')
+            if len(backend) == 2 and backend[0] in env:
+                required_version = backend[1]
+                env_version = env[backend[0]]
+                if semver.compare(env_version, required_version) < 0:
+                    fallback = True
+                    model.backend = backend[0]
+            pbtxt_str = generate_pbtxt(OmegaConf.to_container(model), fallback)
+            (model_repo_dir/f"{model.name}/1").mkdir(parents=True)
+            pbtxt_path = model_repo_dir/model.name/"config.pbtxt"
+            with open(pbtxt_path, 'w') as f:
+                f.write(pbtxt_str)
+            if fallback:
+                triton_tpl = get_resource_path("templates/triton/model.py")
+                shutil.copy(triton_tpl, model_repo_dir/f"{model.name}/1")
     else:
         raise Exception("Not implemented")
 

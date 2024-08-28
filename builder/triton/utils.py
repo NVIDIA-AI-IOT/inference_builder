@@ -20,10 +20,11 @@ datatype_mapping = {
     "TYPE_BF16": DataType.TYPE_BF16
 }
 
-def generate_pbtxt(model_config: Dict):
+def generate_pbtxt(model_config: Dict, fallback=False):
     triton_model_config = ModelConfig()
     for key, value in model_config.items():
         if hasattr(triton_model_config, key):
+            # only pick the standard triton model configuration items to the pbtxt
             if key == "input" or key == "output":
                 for i in value:
                     entry = triton_model_config.input.add() if key == "input" else triton_model_config.output.add()
@@ -42,6 +43,17 @@ def generate_pbtxt(model_config: Dict):
             elif key == "parameters":
                 for k, p in value.items():
                     triton_model_config.parameters[k].string_value = p
+            elif key == "instance_group":
+                for i in value:
+                    entry = triton_model_config.instance_group.add()
+                    for k, v in i.items():
+                        if k == "gpus":
+                            entry.gpus.extend(v)
+                        else:
+                            setattr(entry, k, v)
             else:
                 setattr(triton_model_config, key, value)
+            if fallback:
+                # fallback to python
+                setattr(triton_model_config, "backend", "python")
     return text_format.MessageToString(triton_model_config)

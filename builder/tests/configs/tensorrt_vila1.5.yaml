@@ -1,107 +1,97 @@
 name: vila
-input: [
-  {
-    name: "prompt",
-    data_type: TYPE_STRING,
-    dims: [ 1 ]
-  },
-  {
-      name: "request_output_len",
-      data_type: TYPE_INT32,
-      dims: [ 1 ]
-  },
-  {
-      name: "runtime_top_p",
-      data_type: TYPE_FP32,
-      dims: [ 1 ]
-  },
-  {
-      name: "temperature",
-      data_type: TYPE_FP32,
-      dims: [ 1 ]
-  },
-  {
-    name: "images",
-    data_type: TYPE_STRING,
-    dims: [ -1 ]
-  }
-]
-output: [
-  {
-    name: "text",
-    data_type: TYPE_STRING,
-    dims: [ -1 ]
-  }
-]
-models: [
-  {
-    name: "vila1.5-13b",
-    backend: "tensorrtllm",
-    input: [
-      {
-        name: "input_ids",
-        data_type: TYPE_INT32,
-        dims: [ -1 ]
-      },
-      {
-        name: "input_lengths",
-        data_type: TYPE_INT32,
-        dims: [ 1 ]
-      },
-      {
-        name: "request_output_len",
-        data_type: TYPE_INT32,
-        dims: [ 1 ]
-      },
-      {
-        name: "temperature",
-        data_type: TYPE_FP32,
-        dims: [ 1 ],
-        reshape: { shape: [ ] },
-        optional: true
-      },
-      {
-        name: "runtime_top_p",
-        data_type: TYPE_FP32,
-        dims: [ 1 ],
-        reshape: { shape: [ ] },
-        optional: true
-      }
-    ],
-    output: [
-      {
-        name: "output_ids",
-        data_type: TYPE_INT32,
-        dims: [ -1, -1 ]
-      },
-      {
-        name: "sequence_length",
-        data_type: TYPE_INT32,
-        dims: [ -1 ]
-      }
-    ],
-    parameters: {
-      "gpt_model_type": "inflight_fused_batching",
-      "gpt_model_path": "${engine_dir}"
-    },
-    tokenizer: {
-      type: "auto",
-      encoder: ["prompt", ["input_ids", "input_lengths"]],
-      decoder: ["output_ids", "output_ids"]
-    }
-  }
-]
 
-routes : {
+# top level inference input specification
+input:
+  - name: "prompt"
+    data_type: TYPE_STRING
+    dims: [ 1 ]
+  - name: "request_output_len"
+    data_type: TYPE_INT32,
+    dims: [ 1 ]
+  - name: "runtime_top_p"
+    data_type: TYPE_FP32
+    dims: [ 1 ]
+  - name: "temperature"
+    data_type: TYPE_FP32
+    dims: [ 1 ]
+  - name: "images"
+    data_type: TYPE_CUSTOM_IMAGE_BASE64
+    dims: [ -1 ]
+
+# top level inference output specification
+output:
+  - name: "text"
+    data_type: TYPE_STRING
+    dims: [ -1 ]
+
+# list of model specifications for inference
+models:
+  - name: "vila1.5-13b"
+    backend: "tensorrtllm"
+    input:
+      - name: "input_ids"
+        data_type: TYPE_INT32
+        dims: [ -1 ]
+      - name: "input_lengths"
+        data_type: TYPE_INT32
+        dims: [ 1 ]
+      - name: "request_output_len"
+        data_type: TYPE_INT32
+        dims: [ 1 ]
+      - name: "temperature"
+        data_type: TYPE_FP32
+        dims: [ 1 ]
+        reshape: { shape: [ ] }
+        optional: true
+      - name: "runtime_top_p"
+        data_type: TYPE_FP32
+        dims: [ 1 ]
+        reshape: { shape: [ ] }
+        optional: true
+    output:
+      - name: "output_ids"
+        data_type: TYPE_INT32
+        dims: [ -1, -1 ]
+      - name: "sequence_length"
+        data_type: TYPE_INT32
+        dims: [ -1 ]
+    parameters:
+      gpt_model_type: "inflight_fused_batching"
+      gpt_model_path: "${engine_dir}"
+    tokenizer:
+      type: "auto"
+      encoder: ["prompt", ["input_ids", "input_lengths"]]
+      decoder: ["output_ids", "output_ids"]
+  - name: "visionenc"
+    backend: "tensorrt-10.3.1"
+    input:
+      - name: "images"
+        data_type: TYPE_FP16
+        dims: [3, -1, -1]
+    output:
+      - name: "features"
+        data_type: TYPE_FP16
+        dims: [-1, -1]
+    parameters:
+      FORCE_CPU_ONLY_INPUT_TENSORS: "no"
+    instance_group:
+      - count: 1
+        kind: KIND_GPU
+        gpus: [0]
+
+# route map
+routes: {
   ':["prompt", "request_output_len"]': 'vila1.5-13b',
+  ':["images"]': "visionenc",
   'vila1.5-13b:["output_ids"]': ':["text"]'
 }
 
-endpoints: {
-  "infer": "/inference",
-  "health": "/health/live"
-}
+# endpoint specification for server
+endpoints:
+  infer: "/inference"
+  health: "/health/live"
 
+# data projection from server to inference and vice versa
 projections:
   input:
     templates:
@@ -114,6 +104,9 @@ projections:
           "images": []
         }
       prompt: "{% for prompt in data %}{{ prompt }}\n{% endfor %}"
-    filters: {
-      "prompt": ['(?P<src_base64_tag><img\ssrc=\"data:image\/(?P<extension>[^;]*);base64,(?P<base64str>[^\"]*)\".*?\/>)', '-', '', 'images']
-    }
+    filters:
+      prompt: ['(?P<src_base64_tag><img\ssrc=\"data:image\/(?P<extension>[^;]*);base64,(?P<base64str>[^\"]*)\".*?\/>)', '-', '', 'images']
+
+# environment specification
+environment:
+  tensorrt: 9.3.0
