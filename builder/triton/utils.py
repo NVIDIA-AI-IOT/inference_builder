@@ -36,8 +36,12 @@ def generate_pbtxt(model_config: Dict, fallback=False):
                                 for dim in v:
                                     entry.dims.append(dim)
                             elif k == "reshape":
-                                for s in v['shape']:
-                                    entry.reshape.shape.append(s)
+                                if len(v['shape']) == 0:
+                                    # WAR: force generating reshape
+                                    entry.reshape.shape.append(-1)
+                                else:
+                                    for s in v['shape']:
+                                        entry.reshape.shape.append(s)
                             else:
                                 setattr(entry, k, v)
             elif key == "parameters":
@@ -56,4 +60,4 @@ def generate_pbtxt(model_config: Dict, fallback=False):
             if fallback:
                 # fallback to python
                 setattr(triton_model_config, "backend", "python")
-    return text_format.MessageToString(triton_model_config)
+    return text_format.MessageToString(triton_model_config, use_short_repeated_primitives=True).replace('shape: [-1]', 'shape: [ ]')

@@ -7,6 +7,8 @@ from common.utils import get_logger
 import os
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+import numpy as np
+import torch
 
 logger = get_logger(__name__)
 
@@ -22,32 +24,33 @@ class TritonBackend(ModelBackend):
         self._output_names = output_names
         logger.debug(f"TritonBackend created for {model_name} with inputs {input_names} and outputs {output_names}")
 
-    def __call__(self, **kwargs):
-        logger.debug(f"TritonBackend {self._model_name} triggerred with {kwargs}")
-
-        llm_request = pb_utils.InferenceRequest(
-            model_name = self._model_name,
-            requested_output_names = self._output_names,
-            inputs = [pb_utils.Tensor(k, v) for k, v in kwargs.items()]
-        )
-        finish_reason = ""
-        for idx, llm_response in enumerate(llm_request.exec(decoupled=True)):
-            expected = {n: None for n in self._output_names}
-            if llm_response.has_error():
-                yield Error(message=f"{llm_response.error().message()}, stream_id={idx}")
-            if not llm_response.output_tensors():
-                continue
-            for name in expected:
-                output = pb_utils.get_output_tensor_by_name(llm_response, name)
-                if not output:
-                    finish_reason = "stop"
-                expected[name] = output
-            logger.debug(f"TritonBackend saved inference results to: {expected}")
-            yield expected
-        if all(v for k, v in expected.items()):
-            return expected
-
-
+    def __call__(self, *args, **kwargs):
+        logger.debug(f"TritonBackend {self._model_name} triggerred with {args if args else kwargs}")
+        in_data_list = args if args else [kwargs]
+        for in_data in in_data_list:
+            llm_request = pb_utils.InferenceRequest(
+                model_name = self._model_name,
+                requested_output_names = self._output_names,
+                inputs = [pb_utils.Tensor(k, v) if isinstance(v, np.ndarray) else pb_utils.Tensor.from_dlpack(k, v) for k, v in in_data.items()]
+            )
+            finish_reason = ""
+            for idx, response in enumerate(llm_request.exec(decoupled=True)):
+                logger.debug(f"TritonBackend received a response: {response}")
+                expected = {n: None for n in self._output_names}
+                if response.has_error():
+                    yield Error(message=f"{response.error().message()}, stream_id={idx}")
+                if not response.output_tensors():
+                    continue
+                for name in expected:
+                    output = pb_utils.get_output_tensor_by_name(response, name)
+                    if not output:
+                        finish_reason = "stop"
+                    if pb_utils.Tensor.is_cpu(output):
+                        expected[name] = output.as_numpy()
+                    else:
+                        expected[name] = torch.utils.dlpack.from_dlpack(output.to_dlpack())
+                logger.debug(f"TritonBackend saved inference results to: {expected}")
+                yield expected
 
 class TritonPythonModel(Inference):
     """The top level python model that drives the inference flow"""
@@ -66,6 +69,7 @@ class TritonPythonModel(Inference):
         for output in global_config.output:
             output_config = OmegaConf.to_container(output)
             auto_complete_model_config.add_output(output_config)
+        logger.info(f"Model configuration completed as {auto_complete_model_config.as_dict()}")
         return auto_complete_model_config
 
     def initialize(self, args):
@@ -83,6 +87,8 @@ class TritonPythonModel(Inference):
         self._async_executor = ThreadPoolExecutor(max_workers=len(self._outputs))
         # async queues
         self._async_outputs = [asyncio.Queue() for o in self._outputs]
+        logger.info(f"Model {global_config.name} initialized:")
+        logger.info(f"Inputs: {[f.o_names for f in self._inputs]}, Outputs:  {[f.o_names for f in self._outputs]}")
 
     async def execute(self, requests):
         """ execute a list of requests"""
@@ -105,7 +111,14 @@ class TritonPythonModel(Inference):
                 continue
             for input in self._inputs:
                 logger.info(f"Submitting request {request}")
-                input.put({n: pb_utils.get_input_tensor_by_name(request, n) for n in input.in_names})
+                tensors = {n: pb_utils.get_input_tensor_by_name(request, n) for n in input.in_names}
+                # the tensors need to be transformed to generic type
+                for name, tensor in tensors.items():
+                    if pb_utils.Tensor.is_cpu(tensor):
+                        tensors[name] = tensor.as_numpy()
+                    else:
+                        tensors[name] = torch.utils.dlpack.from_dlpack(tensor.to_dlpack())
+                input.put(tensors)
             # fetch result
             loop = asyncio.get_event_loop()
             for a_output, output in zip(self._async_outputs, self._outputs):
@@ -113,6 +126,7 @@ class TritonPythonModel(Inference):
             response_data = dict()
             for a_output, output in zip(self._async_outputs, self._outputs):
                 try:
+                    logger.debug(f"Waiting for tensors {output.o_names} from async queue")
                     out_data = await a_output.get()
                     logger.info(f"Got output data: {out_data}")
                     if isinstance(out_data, Error):
@@ -125,12 +139,15 @@ class TritonPythonModel(Inference):
                     response_data.update(out_data)
                 except Exception as e:
                     logger.exception(e)
+                logger.debug("Generating response....")
                 response_sender.send(pb_utils.InferenceResponse(
                     output_tensors=[
                         pb_utils.Tensor(name, tensor) for name, tensor in response_data.items()
                     ]
                 ))
             response_sender.send(flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL)
+            logger.debug(f"Finalizing the response for requests: {request}")
+        logger.debug(f"All request done")
 
     def finalize(self):
         super().finalize()

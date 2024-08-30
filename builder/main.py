@@ -15,6 +15,7 @@ import semver
 from utils import get_resource_path, copy_files
 from triton.utils import generate_pbtxt
 from omegaconf.errors import ConfigKeyError
+from jinja2 import Environment, FileSystemLoader
 
 ALLOWED_SERVER = ["triton"]
 
@@ -48,7 +49,7 @@ def build_args(parser):
 def build_tree(server_type, config, temp_dir):
     input_templates = None
     try:
-        input_templates = config.projections.input.templates
+        input_templates = config.io_map.input.templates
     except ConfigKeyError:
         pass
     if input_templates:
@@ -56,7 +57,7 @@ def build_tree(server_type, config, temp_dir):
         encoded_templates = dict()
         for key, value in input_templates.items():
             encoded_templates[key] = base64.b64encode(value.encode())
-        config.projections.input.templates = encoded_templates
+        config.io_map.input.templates = encoded_templates
     configuration = OmegaConf.to_yaml(config)
     ep = OmegaConf.to_container(config.endpoints)
     cookiecutter.main.cookiecutter(
@@ -68,6 +69,8 @@ def build_tree(server_type, config, temp_dir):
 
 def build_inference(server_type, config, model_repo_dir: Path):
     env = dict()
+    tpl_dir = get_resource_path("templates")
+    jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
     if hasattr(config, "environment"):
         env = OmegaConf.to_container(config.environment)
     if server_type == "triton":
@@ -87,8 +90,16 @@ def build_inference(server_type, config, model_repo_dir: Path):
             with open(pbtxt_path, 'w') as f:
                 f.write(pbtxt_str)
             if fallback:
-                triton_tpl = get_resource_path("templates/triton/model.py")
-                shutil.copy(triton_tpl, model_repo_dir/f"{model.name}/1")
+                target_dir = model_repo_dir/f"{model.name}/1"
+                model_file = target_dir/"model.py"
+                triton_tpl = jinja_env.get_template('triton/model.jinja.py')
+                if "tensorrt" in model.backend:
+                    trt_tpl = get_resource_path("templates/trt/backend.py")
+                    with open(trt_tpl, 'r') as f:
+                        trt_backend = f.read()
+                        output = triton_tpl.render(backend=trt_backend)
+                        with open (model_file, 'w') as o:
+                            o.write(output)
     else:
         raise Exception("Not implemented")
 
@@ -117,8 +128,6 @@ def main(args):
             shutil.copytree(tree, target, dirs_exist_ok=True)
         except FileExistsError:
             logging.error(f"{target} already exists in the output directory")
-
-
 
 
 if __name__ == "__main__":

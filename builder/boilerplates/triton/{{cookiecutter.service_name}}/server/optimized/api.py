@@ -16,7 +16,7 @@ class Interface(FastApiTritonInterface):
         # load the input config if there is any
         input_config = None
         try:
-            input_config = global_config.projections.input
+            input_config = global_config.io_map.input
         except ConfigKeyError:
             pass
         if input_config is not None:
