@@ -55,15 +55,17 @@ class TritonBackend(ModelBackend):
                 if not response.output_tensors():
                     continue
                 for name in expected:
+                    config = next((c for c in self._model_config['output'] if c['name'] == name), None)
+                    dims = config['dims']
                     output = pb_utils.get_output_tensor_by_name(response, name)
                     if not output:
                         finish_reason = "stop"
-                    batched = "max_batch_size" in self._model_config and self._model_config["max_batch_size"] > 0
                     if pb_utils.Tensor.is_cpu(output):
-                        expected[name] = np.squeeze(output.as_numpy(), 0) if batched else output.as_numpy()
+                        tensor = output.as_numpy()
+                        expected[name] = np.squeeze(tensor, 0) if len(tensor.shape) == (len(dims)+1) else tensor
                     else:
                         tensor = torch.utils.dlpack.from_dlpack(output.to_dlpack())
-                        expected[name] = torch.squeeze(tensor, 0) if batched else tensor
+                        expected[name] = torch.squeeze(tensor, 0) if len(tensor.shape) == (len(dims)+1) else tensor
                 logger.debug(f"TritonBackend saved inference results to: {expected}")
                 yield expected
 
