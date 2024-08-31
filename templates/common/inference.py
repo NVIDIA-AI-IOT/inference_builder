@@ -69,7 +69,7 @@ class DataFlow:
                     f.write(base64.b64decode(image.decode()))
                 frame = MediaExtractor(chunks=[MediaChunk(asset_path)])()[0].get()
                 image_list.append(torch.utils.dlpack.from_dlpack(frame.tensor))
-        return torch.stack(image_list, dim=0)
+        return image_list
 
     @property
     def in_names(self):
@@ -98,9 +98,6 @@ class DataFlow:
             data_type = cfg["data_type"]
             if  data_type not in np_datatype_mapping and isinstance(tensor, np.ndarray):
                 logger.debug(f"Processing custom type: {data_type}")
-                if len(tensor.shape) == (len(cfg['dims'])+1):
-                    # this is a batched array
-                    tensor = tensor.flatten()
                 if data_type == "TYPE_CUSTOM_IMAGE_BASE64":
                     tensor = self._process_base64_image(tensor)
             collected[o_name] = tensor
@@ -142,7 +139,7 @@ class Tokenizer:
         return self._encoder_config
 
     def encode(self, *args):
-        return self._tokenizer(args)
+        return self._tokenizer(*args)
 
     def decode(self, *args, **kwargs):
         return self._tokenizer.decode(args, kwargs)
@@ -181,20 +178,13 @@ class VilaMuxer:
             self.vocab_size = config["pretrained_config"]["vocab_size"]
 
     def __call__(self, input_ids, features):
-        assert len(input_ids) == len(features), "Token list and feature list doesn't match"
-        extended_ids = []
-        id_lengths = []
-        for id, feature in zip(input_ids, features):
-            image_embed_input_ids = np.arange(
-                    self.vocab_size,
-                    self.vocab_size + feature.shape[0])
-            extended = np.append(id, image_embed_input_ids)
-            id_lengths.append(extended.shape[0])
-            extended_ids.append(extended)
-        extended_ids = np.array(extended_ids)
-        id_lengths = np.array(id_lengths)
-        vocab_size = features.shape[1]
-        return extended_ids, np.array([id_lengths]), np.array([[vocab_size]]), features.cpu().numpy()
+        image_embed_input_ids = np.arange(
+                self.vocab_size,
+                self.vocab_size + features.shape[0])
+        extended_ids = np.append(input_ids, image_embed_input_ids)
+        id_length = extended_ids.shape[0]
+        vocab_size = features.shape[0]
+        return extended_ids, np.array([id_length]), np.array([vocab_size]), features.cpu().numpy()
 
 class VilaVisionEncoderProcessor:
     def __init__(self, model_path):
@@ -305,14 +295,18 @@ class ModelOperator:
                 if self._tokenizer:
                     selected = self._tokenizer.encoder_config[0]
                     value = kwargs.pop(selected)
-                    # TODO by default the input string is (1, -1) from triton
-                    msg_str = value[0][0].decode()
-                    tokenized = self._tokenizer.encode(msg_str)
+                    msg_str = [ v.decode() for v in value ]
+                    tokenized = self._tokenizer.encode(*msg_str)
                     o_key = self._tokenizer.encoder_config[1]
-                    kwargs[o_key] = np.array(tokenized[o_key], dtype=np.int32)
+                    kwargs[o_key] = np.array(tokenized[o_key])
                 if all([isinstance(v, list) for _, v in kwargs.items()]):
                     # construct multiple inference requests
-                    args = ([{key: value} for key in kwargs for value in kwargs[key]])
+                    vs = [kwargs[k] for k in kwargs]
+                    lengths = {len(i) for i in vs}
+                    if len(lengths) == 1:
+                        # construct multiple inference requests
+                        l = lengths.pop()
+                        args = [{k: kwargs[k][i] for k in kwargs } for i in range(l)]
                 else:
                     args = [kwargs]
                 # call preprocess() before passing args to the backend
@@ -331,17 +325,17 @@ class ModelOperator:
                         if len(expected_result) != len(out.in_names):
                             logger.error(f"Not all the expected result is received from model {self._model_name}")
                             continue
-                        if not self._tokenizer:
-                            out.put(expected_result)
-                        else:
+                        if self._tokenizer:
                             expected_key = self._tokenizer.decoder_config[0]
-                            value = result.pop(expected_key, None)
+                            value = expected_result.pop(expected_key, None)
                             if value is not None and isinstance(value, np.ndarray):
                                 # CPU only tokenizer for now
                                 value = value.flatten().tolist()
                                 text = self._tokenizer._tokenizer.decode(value, skip_special_tokens=True)
                                 expected_result[expected_key] = np.array([text], np.object_)
-                            out.put(expected_result)
+                            else:
+                                logger.error("Format not supported by tokenizer")
+                        out.put(expected_result)
             except Exception as e:
                 logger.exception(e)
 
@@ -420,6 +414,8 @@ class Inference:
         self._operators: ModelOperator = []
         self._inputs: List[DataFlow] = []
         self._outputs: List[DataFlow] = []
+        self._input_config = OmegaConf.to_container(global_config.input)
+        self._output_config = OmegaConf.to_container(global_config.output)
 
         # set up the inference flow
         for model_config in global_config.models:

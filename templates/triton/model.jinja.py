@@ -5,6 +5,7 @@ from common.utils import get_logger
 import torch
 import json
 import os
+import numpy as np
 
 logger = get_logger(__name__)
 
@@ -45,11 +46,21 @@ class TritonPythonModel:
         for request in requests:
             inputs = {k: None for k in self._in_names}
             for name in self._in_names:
+                config = next((c for c in self._model_config['input'] if c['name'] == name), None)
+                dims = config['dims']
                 pb_tensor = pb_utils.get_input_tensor_by_name(request, name)
                 if pb_utils.Tensor.is_cpu(pb_tensor):
-                    inputs[name] = pb_tensor.as_numpy()
+                    tensor = pb_tensor.as_numpy()
+                    # auto reshape
+                    if len(dims) > 1 and len(tensor.shape) == (len(dims)+1):
+                        tensor = np.squeeze(tensor, 0)
                 else:
-                    inputs[name] = torch.utils.dlpack.from_dlpack(pb_tensor.to_dlpack())
+                    tensor = torch.utils.dlpack.from_dlpack(pb_tensor.to_dlpack())
+                    # auto reshape
+                    if len(dims) > 1 and len(tensor.shape) == (len(dims)+1):
+                        tensor = torch.squeeze(tensor, 0)
+                inputs[name] = tensor
+
             for output in self._model_backend(**inputs):
                 r_list.append(output)
         for r in r_list:

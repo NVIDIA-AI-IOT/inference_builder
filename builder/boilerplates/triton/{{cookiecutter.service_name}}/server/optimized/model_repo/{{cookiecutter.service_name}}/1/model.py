@@ -1,8 +1,9 @@
+import json
 from common.config import global_config
 from common.inference import ModelBackend, Inference, Error
 import triton_python_backend_utils as pb_utils
 from omegaconf import OmegaConf
-from typing import List
+from typing import List, Dict
 from common.utils import get_logger
 import os
 import asyncio
@@ -18,24 +19,36 @@ PIPELINE_GPU_ID=int(os.getenv("PIPELINE_GPU_ID", "0"))
 
 
 class TritonBackend(ModelBackend):
-    def __init__(self, model_name:str, input_names: List[str], output_names: List[str]):
+    def __init__(self, model_name:str, input_names: List[str], output_names: List[str], model_config: Dict):
         self._model_name = model_name
         self._input_names = input_names
         self._output_names = output_names
+        self._model_config = model_config
         logger.debug(f"TritonBackend created for {model_name} with inputs {input_names} and outputs {output_names}")
+        logger.debug(f"model_config: {model_config}")
 
     def __call__(self, *args, **kwargs):
         logger.debug(f"TritonBackend {self._model_name} triggerred with {args if args else kwargs}")
         in_data_list = args if args else [kwargs]
         for in_data in in_data_list:
+            tensors = []
+            for k in in_data:
+                tensor = in_data[k]
+                batched = "max_batch_size" in self._model_config and self._model_config["max_batch_size"] > 0
+                if isinstance(tensor, np.ndarray):
+                    tensor = pb_utils.Tensor(k, np.expand_dims(tensor, 0)) if batched else pb_utils.Tensor(k, tensor)
+                elif isinstance(tensor, torch.Tensor):
+                    tensor = pb_utils.Tensor(k, tensor.unsqueeze(0)) if batched else pb_utils.Tensor(k, tensor)
+                else:
+                    tensor = pb_utils.Tensor.from_dlpack(k, tensor)
+                tensors.append(tensor)
             llm_request = pb_utils.InferenceRequest(
                 model_name = self._model_name,
                 requested_output_names = self._output_names,
-                inputs = [pb_utils.Tensor(k, v) if isinstance(v, np.ndarray) else pb_utils.Tensor.from_dlpack(k, v) for k, v in in_data.items()]
+                inputs = tensors
             )
             finish_reason = ""
             for idx, response in enumerate(llm_request.exec(decoupled=True)):
-                logger.debug(f"TritonBackend received a response: {response}")
                 expected = {n: None for n in self._output_names}
                 if response.has_error():
                     yield Error(message=f"{response.error().message()}, stream_id={idx}")
@@ -45,10 +58,12 @@ class TritonBackend(ModelBackend):
                     output = pb_utils.get_output_tensor_by_name(response, name)
                     if not output:
                         finish_reason = "stop"
+                    batched = "max_batch_size" in self._model_config and self._model_config["max_batch_size"] > 0
                     if pb_utils.Tensor.is_cpu(output):
-                        expected[name] = output.as_numpy()
+                        expected[name] = np.squeeze(output.as_numpy(), 0) if batched else output.as_numpy()
                     else:
-                        expected[name] = torch.utils.dlpack.from_dlpack(output.to_dlpack())
+                        tensor = torch.utils.dlpack.from_dlpack(output.to_dlpack())
+                        expected[name] = torch.squeeze(tensor, 0) if batched else tensor
                 logger.debug(f"TritonBackend saved inference results to: {expected}")
                 yield expected
 
@@ -81,6 +96,7 @@ class TritonPythonModel(Inference):
                 model_name=model_config.name,
                 input_names=[i.name for i in model_config.input],
                 output_names=[i.name for i in model_config.output],
+                model_config=OmegaConf.to_container(model_config)
             )
             self._submit(operator, triton_backend)
         # thread executor for async bridge
@@ -101,7 +117,7 @@ class TritonPythonModel(Inference):
                 return
             asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
 
-        logger.info(f"received {len(requests)} requests")
+        logger.info(f"Received {len(requests)} request(s)")
         for request in requests:
             response_sender = request.get_response_sender()
             if request.is_cancelled():
@@ -110,14 +126,27 @@ class TritonPythonModel(Inference):
                     flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL)
                 continue
             for input in self._inputs:
-                logger.info(f"Submitting request {request}")
                 tensors = {n: pb_utils.get_input_tensor_by_name(request, n) for n in input.in_names}
                 # the tensors need to be transformed to generic type
-                for name, tensor in tensors.items():
+                for name in tensors:
+                    tensor = tensors[name]
+                    config = next((c for c in self._input_config if c['name'] == name), None)
+                    if config is None:
+                        logger.warning(f"Invalid input parsed: {name}")
+                        continue
+                    dims = config['dims']
                     if pb_utils.Tensor.is_cpu(tensor):
-                        tensors[name] = tensor.as_numpy()
+                        tensor = tensor.as_numpy()
+                        # auto reshape
+                        if len(tensor.shape) == (len(dims)+1):
+                            tensor = np.squeeze(tensor, 0)
                     else:
-                        tensors[name] = torch.utils.dlpack.from_dlpack(tensor.to_dlpack())
+                        tensor = torch.utils.dlpack.from_dlpack(tensor.to_dlpack())
+                        # auto reshape
+                        if len(tensor.shape) == (len(dims)+1):
+                            tensor = torch.squeeze(tensor, 0)
+                    tensors[name] = tensor
+                logger.debug(f"Injecting tensors {tensors}")
                 input.put(tensors)
             # fetch result
             loop = asyncio.get_event_loop()

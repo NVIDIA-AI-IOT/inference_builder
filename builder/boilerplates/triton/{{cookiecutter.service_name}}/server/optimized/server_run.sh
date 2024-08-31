@@ -38,8 +38,6 @@ instance_group [
     }
 ]' >> /workspace/model_repo/vila/config.pbtxt
 
-echo "
-max_batch_size: "${MAX_BATCH_SIZE} >> /workspace/model_repo/vila1.5-13b/config.pbtxt
 
 if [ -z "${VISION_BATCH_SIZE}" ]; then
     VISION_BATCH_SIZE=4
