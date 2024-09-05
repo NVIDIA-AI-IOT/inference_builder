@@ -39,7 +39,7 @@ io_map:
           "request_output_len": {{ max_tokens }},
           "temperature": {{ temperature }},
           "images": [],
-          "streaming": true
+          "streaming": false
         }
       # optional templates for fields
       prompt: "{% for prompt in data %}{{ prompt }}\n{% endfor %}"
