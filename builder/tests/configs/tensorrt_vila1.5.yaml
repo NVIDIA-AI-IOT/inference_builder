@@ -39,7 +39,7 @@ io_map:
           "request_output_len": {{ max_tokens }},
           "temperature": {{ temperature }},
           "images": [],
-          "streaming": false
+          "streaming": true
         }
       # optional templates for fields
       prompt: "{% for prompt in data %}{{ prompt }}\n{% endfor %}"
@@ -57,7 +57,7 @@ io_map:
             [
               {
                 "index": 0,
-                "delta": { "role": "assistant", "content": {{ data["text"][-1][0]|tojson }} },
+                "delta": { "role": "assistant", "content": {{ data["text"][0]|tojson }} },
                 "finish_reason": "stop"
               }
             ]
