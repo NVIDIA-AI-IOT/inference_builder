@@ -62,15 +62,6 @@ class Interface(FastApiTritonInterface):
         logger.debug(f"Processing response {response}")
         type_map = { i.name: i.data_type for i in global_config.output}
 
-        # first collect the response data
-        responses = previous_responses + [response]  if previous_responses else [response]
-        data = dict()
-        for r in responses:
-            for k, v in r.items():
-                if not k in data:
-                    data[k] = []
-                data[k].append(v)
-
         # load the input config if there is any
         output_config = None
         try:
@@ -83,25 +74,26 @@ class Interface(FastApiTritonInterface):
 
         # Formulating streaming response
         if request.stream:
-            streamed = { k: [] for k in data }
-            for name, values in data.items():
+            streamed = dict()
+            for name, value in response.items():
                 expected_type = type_map[name]
-                for value in values:
-                    if isinstance(value, np.ndarray):
-                        l = value.tolist()
-                        if expected_type == "TYPE_STRING" and value.dtype != np.string_:
-                            l = [i.decode("utf-8", "ignore") for i in l]
-                        streamed[name].append(l)
-                    else:
-                        streamed[name].append(value)
+                if isinstance(value, np.ndarray):
+                    l = value.tolist()
+                    if expected_type == "TYPE_STRING" and value.dtype != np.string_:
+                        l = [i.decode("utf-8", "ignore") for i in l]
+                    streamed[name] = l
+                else:
+                    streamed[name] = value
             json_string = Template(tpl).render(request=request, data=streamed)
             return ChatCompletionChunk(**json.loads(json_string))
 
-        # Formulating aggregated response
+        # Formulating aggregated response from all the responses
+        responses = previous_responses + [response]  if previous_responses else [response]
         acc = dict()
-        for name, values in data.items():
-            expected_type = type_map[name]
-            for value in values:
+        # aggregate the data
+        for response in responses:
+            for name, value in response.items():
+                expected_type = type_map[name]
                 if isinstance(value, np.ndarray):
                     if name in acc:
                         acc[name] = np.append(acc[name], value)
@@ -109,6 +101,8 @@ class Interface(FastApiTritonInterface):
                         acc[name] = value
                 else:
                     acc[name] += value
+        # transform numpy ndarray to universal value types
+        for name in acc:
             if isinstance(acc[name], np.ndarray):
                 l = acc[name].tolist()
                 if acc[name].dtype != np.string_ and expected_type == "TYPE_STRING":
