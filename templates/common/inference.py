@@ -4,7 +4,6 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 from queue import Queue, Empty
 import tempfile
-from typing import List
 from abc import ABC, abstractmethod
 from typing import Callable
 import uuid
@@ -13,7 +12,7 @@ from common.utils import get_logger
 from transformers import AutoTokenizer
 from omegaconf import OmegaConf
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 import numpy as np
 from collections import namedtuple
 import json
@@ -43,6 +42,13 @@ np_datatype_mapping = {
 @dataclass
 class Error:
     message: str
+
+    def __bool__(self):
+        return False
+
+@dataclass
+class Stop:
+    reason: str
 
     def __bool__(self):
         return False
@@ -85,7 +91,11 @@ class DataFlow:
                 return i, config
         return -1, None
 
-    def put(self, item: Dict):
+    def put(self, item: Union[Dict, Error, Stop]):
+        if not item:
+            self._queue.put(item, timeout=self._timeout)
+            return
+        # collect data and put to the queue
         collected = dict()
         for name in item:
             tensor = item[name]
@@ -287,7 +297,7 @@ class ModelOperator:
                 for input in self._in:
                     data = input.get()
                     if not data:
-                        logger.error(f"Error getting input data: {data}")
+                        # Not data, skip it
                         continue
                     kwargs.update(data)
                 logger.debug(f"Input collected: {kwargs}")
@@ -313,28 +323,31 @@ class ModelOperator:
                 args = self._preprocess(args)
                 # execute inference backend and collect result
                 for result in self._backend(*args):
-                    if not result:
+                    if isinstance(result, Error):
                         logger.error(f"Error in inferece: {result}")
                         break
                     # collect the result
                     for out in self._out:
-                        expected_result = dict()
-                        for n in out.in_names:
-                            if n in result:
-                                expected_result[n] = result[n]
-                        if len(expected_result) != len(out.in_names):
-                            logger.error(f"Not all the expected result is received from model {self._model_name}")
-                            continue
-                        if self._tokenizer:
-                            expected_key = self._tokenizer.decoder_config[0]
-                            value = expected_result.pop(expected_key, None)
-                            if value is not None and isinstance(value, np.ndarray):
-                                # CPU only tokenizer for now
-                                value = value.flatten().tolist()
-                                text = self._tokenizer._tokenizer.decode(value, skip_special_tokens=True)
-                                expected_result[expected_key] = np.array([text], np.object_)
-                            else:
-                                logger.error("Format not supported by tokenizer")
+                        if isinstance(result, Stop):
+                            expected_result = result
+                        else:
+                            expected_result = dict()
+                            for n in out.in_names:
+                                if n in result:
+                                    expected_result[n] = result[n]
+                            if len(expected_result) != len(out.in_names):
+                                logger.error(f"Not all the expected result is received from model {self._model_name}")
+                                continue
+                            if self._tokenizer:
+                                expected_key = self._tokenizer.decoder_config[0]
+                                value = expected_result.pop(expected_key, None)
+                                if value is not None and isinstance(value, np.ndarray):
+                                    # CPU only tokenizer for now
+                                    value = value.flatten().tolist()
+                                    text = self._tokenizer._tokenizer.decode(value, skip_special_tokens=True)
+                                    expected_result[expected_key] = np.array([text], np.string_)
+                                else:
+                                    logger.error("Format not supported by tokenizer")
                         out.put(expected_result)
             except Exception as e:
                 logger.exception(e)

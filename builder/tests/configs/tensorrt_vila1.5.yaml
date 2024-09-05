@@ -17,7 +17,10 @@ input:
   - name: "images"
     data_type: TYPE_CUSTOM_IMAGE_BASE64
     dims: [ -1 ]
-
+  - name: "streaming"
+    data_type: TYPE_BOOL
+    dims: [ 1 ]
+    optional: true
 # top level inference output specification
 output:
   - name: "text"
@@ -28,23 +31,59 @@ output:
 io_map:
   input:
     templates:
+      # root template for generating input json from the request
       request: >
         {
           "prompt": {% for item in messages %}[{% if item.role == "user" %}{{ item.content|tojson }}{% if not loop.last %},{% endif %}{% endif %}]{% endfor %},
           "runtime_top_p": {{ top_p }},
           "request_output_len": {{ max_tokens }},
           "temperature": {{ temperature }},
-          "images": []
+          "images": [],
+          "streaming": false
         }
+      # optional templates for fields
       prompt: "{% for prompt in data %}{{ prompt }}\n{% endfor %}"
+    # optional filters for filtering each field with regex
     filters:
       prompt: ['(?P<src_base64_tag><img\ssrc=\"data:image\/(?P<extension>[^;]*);base64,(?P<base64str>[^\"]*)\".*?\/>)', '-', '', 'images']
+  output:
+    templates:
+      # root template for formulating responses
+      response: >
+        {% if request.stream %}
+        {
+          "id": "{{ reqeust._id }}",
+          "choices":
+            [
+              {
+                "index": 0,
+                "delta": { "role": "assistant", "content": {{ data["text"][-1][0]|tojson }} },
+                "finish_reason": "stop"
+              }
+            ]
+        }
+        {% else %}
+        {
+          "id": "{{ request._id }}",
+          "choices":
+            [
+              {
+                "index": 0,
+                "message": { "role": "assistant", "content": {{ data["text"][0]|tojson }} },
+                "finish_reason": "stop"
+              }
+            ],
+          "usage": {"completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0}
+        }
+        {% endif %}
 
 # list of model specifications for inference
 models:
   - name: "vila1.5-13b"
     backend: "tensorrtllm"
     max_batch_size: 8
+    model_transaction_policy:
+      decoupled: True
     input:
       - name: "input_ids"
         data_type: TYPE_INT32
@@ -76,6 +115,20 @@ models:
         dims: [ -1, -1 ]
         optional: true
         allow_ragged_batch: true
+      - name: "streaming"
+        data_type: TYPE_BOOL
+        dims: [ 1 ]
+        optional: true
+      - name: "end_id"
+        data_type: TYPE_INT32
+        dims: [ 1 ]
+        reshape: { shape: [ ] }
+        optional: true
+      - name: "pad_id"
+        data_type: TYPE_INT32
+        dims: [ 1 ]
+        reshape: { shape: [ ] }
+    optional: true
     output:
       - name: "output_ids"
         data_type: TYPE_INT32
@@ -126,7 +179,7 @@ models:
 # Model name is optional, so <:["TENSOR_NAME1", "TENSOR_NAME2", ...]> is valid
 # Tensor list is optional too and <my_model:> is valid
 routes: {
-  ':["prompt", "request_output_len", "temperature"]': 'vila1.5-13b',
+  ':["prompt", "request_output_len", "temperature", "streaming"]': 'vila1.5-13b',
   ':["images"]': "visionenc",
   "visionenc": 'vila1.5-13b:',
   'vila1.5-13b:["output_ids"]': ':["text"]'

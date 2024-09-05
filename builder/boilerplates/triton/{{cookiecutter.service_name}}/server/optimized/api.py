@@ -4,11 +4,13 @@ from typing import Dict, Optional, List, Union
 import numpy as np
 from inferencemodeltoolkit.interfaces.fastapi import FastApiTritonInterface
 from data_model import ChatRequest, ChatCompletion, ChatCompletionChunk, ChoiceChunk, Message, Choice, Usage
+from common.utils import get_logger
 from common.config import global_config
 from omegaconf.errors import ConfigKeyError
 from jinja2 import Template
 import re
 
+logger = get_logger(__name__)
 
 class Interface(FastApiTritonInterface):
     def process_request(self, request: ChatRequest, headers: Dict[str, str]):
@@ -57,24 +59,45 @@ class Interface(FastApiTritonInterface):
         previous_responses: Optional[List[Dict[str, np.ndarray]]],
         headers
     ) -> Union[ChatCompletion, ChatCompletionChunk]:
-        text = response['text'][0].decode('utf-8', 'ignore')
-        if request.stream:
-            if previous_responses:
-                prev_text = previous_responses[-1]["text"][0].decode("utf-8", "ignore")
-            choice = ChoiceChunk(
-                index=0,
-                delta=Message(role="assistant", content=text),
-                finish_reason="stop"
-            )
-            return ChatCompletionChunk(id=request._id, choices=[choice])
+        logger.debug(f"Processing response {response}")
+        type_map = { i.name: i.data_type for i in global_config.output}
+        # first collect the response data
+        responses = previous_responses + [response]  if previous_responses else [response]
+        data = dict()
+        for r in responses:
+            for k, v in r.items():
+                if not k in data:
+                    data[k] = []
+                data[k].append(v)
+        # Try transforming collected tensors to universal data
+        streamed = { k: [] for k in data }
+        for name, values in data.items():
+            expected_type = type_map[name]
+            for value in values:
+                if isinstance(value, np.ndarray):
+                    l = value.tolist()
+                    if expected_type == "TYPE_STRING" and value.dtype != np.string_:
+                        l = [i.decode("utf-8", "ignore") for i in l]
+                    streamed[name].append(l)
+                else:
+                    streamed[name].append(value)
+        final = {k: sum(v, []) for k, v in streamed.items()}
 
-        choice = Choice(
-            index=0,
-            message=Message(role="assistant", content=text),
-            finish_reason="stop",
-        )
-        usage = Usage(completion_tokens=0, prompt_tokens=0, total_tokens=0)
-        return ChatCompletion(id=request._id, choices=[choice], usage=usage)
+        # load the input config if there is any
+        output_config = None
+        try:
+            output_config = global_config.io_map.output
+        except ConfigKeyError:
+            pass
+        if output_config is None or not hasattr(output_config, 'templates'):
+            raise Exception("Output mapping not found or templates are missing")
+
+        tpl = base64.b64decode(output_config.templates['response']).decode()
+        json_string = Template(tpl).render(request=request, data=streamed if request.stream else final)
+
+        if request.stream:
+            return ChatCompletionChunk(**json.loads(json_string))
+        return ChatCompletion(**json.loads(json_string))
 
 if __name__ == "__main__":
     interface = Interface(

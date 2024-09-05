@@ -47,17 +47,24 @@ def build_args(parser):
     parser.add_argument("config", type=str, help="Path the the configuration")
 
 def build_tree(server_type, config, temp_dir):
+    def encode_templates(templates):
+        encoded_templates = dict()
+        for key, value in templates.items():
+            # these are json templates and need be encoded before being embeded as yaml strings
+            encoded_templates[key] = base64.b64encode(value.encode())
+        return encoded_templates
+
     input_templates = None
+    output_templates = None
     try:
         input_templates = config.io_map.input.templates
+        output_templates = config.io_map.output.templates
     except ConfigKeyError:
         pass
     if input_templates:
-        # these are json templates and need be encoded before being embeded as yaml strings
-        encoded_templates = dict()
-        for key, value in input_templates.items():
-            encoded_templates[key] = base64.b64encode(value.encode())
-        config.io_map.input.templates = encoded_templates
+        config.io_map.input.templates = encode_templates(input_templates)
+    if output_templates:
+        config.io_map.output.templates = encode_templates(output_templates)
     configuration = OmegaConf.to_yaml(config)
     ep = OmegaConf.to_container(config.endpoints)
     cookiecutter.main.cookiecutter(

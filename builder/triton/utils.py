@@ -55,6 +55,9 @@ def generate_pbtxt(model_config: Dict, fallback=False):
                             entry.gpus.extend(v)
                         else:
                             setattr(entry, k, v)
+            elif key == "model_transaction_policy":
+                for k, v in value.items():
+                    setattr(triton_model_config.model_transaction_policy, k, v)
             else:
                 setattr(triton_model_config, key, value)
             if fallback:

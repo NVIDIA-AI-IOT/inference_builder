@@ -1,6 +1,6 @@
 import json
 from common.config import global_config
-from common.inference import ModelBackend, Inference, Error
+from common.inference import ModelBackend, Inference, Error, Stop
 import triton_python_backend_utils as pb_utils
 from omegaconf import OmegaConf
 from typing import List, Dict
@@ -47,7 +47,7 @@ class TritonBackend(ModelBackend):
                 requested_output_names = self._output_names,
                 inputs = tensors
             )
-            finish_reason = ""
+            finish_reason = "done"
             for idx, response in enumerate(llm_request.exec(decoupled=True)):
                 expected = {n: None for n in self._output_names}
                 if response.has_error():
@@ -59,15 +59,20 @@ class TritonBackend(ModelBackend):
                     dims = config['dims']
                     output = pb_utils.get_output_tensor_by_name(response, name)
                     if not output:
-                        finish_reason = "stop"
+                        continue
                     if pb_utils.Tensor.is_cpu(output):
                         tensor = output.as_numpy()
-                        expected[name] = np.squeeze(tensor, 0) if len(tensor.shape) == (len(dims)+1) else tensor
+                        if tensor.size != 0:
+                            expected[name] = np.squeeze(tensor, 0) if len(tensor.shape) == (len(dims)+1) else tensor
                     else:
                         tensor = torch.utils.dlpack.from_dlpack(output.to_dlpack())
-                        expected[name] = torch.squeeze(tensor, 0) if len(tensor.shape) == (len(dims)+1) else tensor
+                        if tensor.numel() != 0:
+                            expected[name] = torch.squeeze(tensor, 0) if len(tensor.shape) == (len(dims)+1) else tensor
                 logger.debug(f"TritonBackend saved inference results to: {expected}")
-                yield expected
+                if all([expected[k] is not None for k in expected]):
+                    yield expected
+        yield Stop(finish_reason)
+        logger.info(f"Infernece with TritonBackend {self._model_name} accomplished")
 
 class TritonPythonModel(Inference):
     """The top level python model that drives the inference flow"""
@@ -113,11 +118,12 @@ class TritonPythonModel(Inference):
         async def async_put(queue, item):
             await queue.put(item)
         def thread_to_async_bridge(thread_queue, async_queue, loop):
-            item = thread_queue.get()
-            if not item:
-                logger.error(f"Failed to read from data flow: {item}")
-                return
-            asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
+            while True:
+                item = thread_queue.get()
+                asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
+                if not item:
+                    break
+
 
         logger.info(f"Received {len(requests)} request(s)")
         for request in requests:
@@ -154,28 +160,37 @@ class TritonPythonModel(Inference):
             loop = asyncio.get_event_loop()
             for a_output, output in zip(self._async_outputs, self._outputs):
                 self._async_executor.submit(thread_to_async_bridge, output, a_output, loop)
-            response_data = dict()
-            for a_output, output in zip(self._async_outputs, self._outputs):
+            stop = False
+            while not stop:
                 try:
-                    logger.debug(f"Waiting for tensors {output.o_names} from async queue")
-                    out_data = await a_output.get()
-                    logger.info(f"Got output data: {out_data}")
-                    if isinstance(out_data, Error):
-                        error = pb_utils.TritonError(f"steam llm_response, error received: {out_data.message}")
-                        response_sender.send(
-                            pb_utils.InferenceResponse(error=error),
-                            flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL
-                        )
-                        return
-                    response_data.update(out_data)
+                    logger.debug("Waiting for tensors from async queue")
+                    response_data = dict()
+                    done, _ = await asyncio.wait([ao.get() for ao in self._async_outputs], return_when=asyncio.FIRST_COMPLETED)
+                    for f in done:
+                        data = f.result()
+                        logger.info(f"Got output data: {data}")
+                        if isinstance(data, Error):
+                            error = pb_utils.TritonError(f"steam llm_response, error received: {data.message}")
+                            response_sender.send(
+                                pb_utils.InferenceResponse(error=error),
+                                flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL
+                            )
+                            return
+                        elif isinstance(data, Stop):
+                            stop = True
+                            continue
+                        # collect the output
+                        for k, v in data.items():
+                            response_data[k] = v
+                    # response with partial data
+                    response_sender.send(pb_utils.InferenceResponse(
+                        output_tensors=[
+                            pb_utils.Tensor(name, tensor) for name, tensor in response_data.items()
+                        ]
+                    ))
                 except Exception as e:
                     logger.exception(e)
-                logger.debug("Generating response....")
-                response_sender.send(pb_utils.InferenceResponse(
-                    output_tensors=[
-                        pb_utils.Tensor(name, tensor) for name, tensor in response_data.items()
-                    ]
-                ))
+
             response_sender.send(flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL)
             logger.debug(f"Finalizing the response for requests: {request}")
         logger.debug(f"All request done")
