@@ -61,6 +61,7 @@ class Interface(FastApiTritonInterface):
     ) -> Union[ChatCompletion, ChatCompletionChunk]:
         logger.debug(f"Processing response {response}")
         type_map = { i.name: i.data_type for i in global_config.output}
+
         # first collect the response data
         responses = previous_responses + [response]  if previous_responses else [response]
         data = dict()
@@ -69,19 +70,6 @@ class Interface(FastApiTritonInterface):
                 if not k in data:
                     data[k] = []
                 data[k].append(v)
-        # Try transforming collected tensors to universal data
-        streamed = { k: [] for k in data }
-        for name, values in data.items():
-            expected_type = type_map[name]
-            for value in values:
-                if isinstance(value, np.ndarray):
-                    l = value.tolist()
-                    if expected_type == "TYPE_STRING" and value.dtype != np.string_:
-                        l = [i.decode("utf-8", "ignore") for i in l]
-                    streamed[name].append(l)
-                else:
-                    streamed[name].append(value)
-        final = {k: sum(v, []) for k, v in streamed.items()}
 
         # load the input config if there is any
         output_config = None
@@ -91,12 +79,42 @@ class Interface(FastApiTritonInterface):
             pass
         if output_config is None or not hasattr(output_config, 'templates'):
             raise Exception("Output mapping not found or templates are missing")
-
         tpl = base64.b64decode(output_config.templates['response']).decode()
-        json_string = Template(tpl).render(request=request, data=streamed if request.stream else final)
 
+        # Formulating streaming response
         if request.stream:
+            streamed = { k: [] for k in data }
+            for name, values in data.items():
+                expected_type = type_map[name]
+                for value in values:
+                    if isinstance(value, np.ndarray):
+                        l = value.tolist()
+                        if expected_type == "TYPE_STRING" and value.dtype != np.string_:
+                            l = [i.decode("utf-8", "ignore") for i in l]
+                        streamed[name].append(l)
+                    else:
+                        streamed[name].append(value)
+            json_string = Template(tpl).render(request=request, data=streamed)
             return ChatCompletionChunk(**json.loads(json_string))
+
+        # Formulating aggregated response
+        acc = dict()
+        for name, values in data.items():
+            expected_type = type_map[name]
+            for value in values:
+                if isinstance(value, np.ndarray):
+                    if name in acc:
+                        acc[name] = np.append(acc[name], value)
+                    else:
+                        acc[name] = value
+                else:
+                    acc[name] += value
+            if isinstance(acc[name], np.ndarray):
+                l = acc[name].tolist()
+                if acc[name].dtype != np.string_ and expected_type == "TYPE_STRING":
+                    l = [i.decode("utf-8", "ignore") for i in l]
+                acc[name] = l
+        json_string = Template(tpl).render(request=request, data=acc)
         return ChatCompletion(**json.loads(json_string))
 
 if __name__ == "__main__":

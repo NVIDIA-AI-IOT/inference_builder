@@ -52,7 +52,7 @@ io_map:
       response: >
         {% if request.stream %}
         {
-          "id": "{{ reqeust._id }}",
+          "id": "{{ request._id }}",
           "choices":
             [
               {
