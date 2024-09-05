@@ -106,8 +106,8 @@ class Interface(FastApiTritonInterface):
             if isinstance(acc[name], np.ndarray):
                 l = acc[name].tolist()
                 if acc[name].dtype != np.string_ and expected_type == "TYPE_STRING":
-                    l = [i.decode("utf-8", "ignore") for i in l]
-                acc[name] = l
+                    l = ' '.join([i.decode("utf-8", "ignore") for i in l])
+                acc[name] = [l]
         json_string = Template(tpl).render(request=request, data=acc)
         return ChatCompletion(**json.loads(json_string))
 
