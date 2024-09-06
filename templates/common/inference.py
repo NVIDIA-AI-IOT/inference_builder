@@ -194,7 +194,7 @@ class VilaMuxer:
         extended_ids = np.append(input_ids, image_embed_input_ids)
         id_length = extended_ids.shape[0]
         vocab_size = features.shape[0]
-        return extended_ids, np.array([id_length]), np.array([vocab_size]), features.cpu().numpy()
+        return extended_ids, np.array([id_length]), np.array([vocab_size]), features
 
 class VilaVisionEncoderProcessor:
     def __init__(self, model_path):

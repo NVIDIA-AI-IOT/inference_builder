@@ -38,10 +38,16 @@ class TritonBackend(ModelBackend):
                 if isinstance(tensor, np.ndarray):
                     tensor = pb_utils.Tensor(k, np.expand_dims(tensor, 0)) if batched else pb_utils.Tensor(k, tensor)
                 elif isinstance(tensor, torch.Tensor):
-                    tensor = pb_utils.Tensor(k, tensor.unsqueeze(0)) if batched else pb_utils.Tensor(k, tensor)
-                else:
+                    if batched:
+                        tensor = tensor.unsqueeze(0)
+                    tensor = pb_utils.Tensor.from_dlpack(k, torch.utils.dlpack.to_dlpack(tensor))
+                elif hasattr(tensor, "__dlpack__") and hasattr(tensor, "__dlpack_device__"):
                     tensor = pb_utils.Tensor.from_dlpack(k, tensor)
+                else:
+                    yield Error(message="Unsupported input tensor format")
+                    return
                 tensors.append(tensor)
+
             llm_request = pb_utils.InferenceRequest(
                 model_name = self._model_name,
                 requested_output_names = self._output_names,
@@ -168,7 +174,7 @@ class TritonPythonModel(Inference):
                     done, _ = await asyncio.wait([ao.get() for ao in self._async_outputs], return_when=asyncio.FIRST_COMPLETED)
                     for f in done:
                         data = f.result()
-                        logger.info(f"Got output data: {data}")
+                        logger.debug(f"Got output data: {data}")
                         if isinstance(data, Error):
                             error = pb_utils.TritonError(f"steam llm_response, error received: {data.message}")
                             response_sender.send(
