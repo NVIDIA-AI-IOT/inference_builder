@@ -8,7 +8,7 @@ from omegaconf import OmegaConf
 import cookiecutter.main
 import cookiecutter
 import logging
-from typing import Dict
+from typing import List
 from pathlib import Path
 import datamodel_code_generator as data_generator
 import semver
@@ -16,10 +16,12 @@ from utils import get_resource_path, copy_files
 from triton.utils import generate_pbtxt
 from omegaconf.errors import ConfigKeyError
 from jinja2 import Environment, FileSystemLoader
+import ast
 
 ALLOWED_SERVER = ["triton"]
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("Main")
 OmegaConf.register_new_resolver("multiline", lambda x: x, replace=False)
 
 def build_args(parser):
@@ -32,6 +34,7 @@ def build_args(parser):
         help="Choose the server type"
     )
     parser.add_argument(
+        "-o",
         "--output-dir",
         type=str,
         nargs='?',
@@ -39,10 +42,18 @@ def build_args(parser):
         help="Output directory"
     )
     parser.add_argument(
+        "-a",
         "--api-spec",
         type=argparse.FileType('r'),
         nargs='?',
         help="File for OpenAPI specification"
+    )
+    parser.add_argument(
+        "-c",
+        "--custom-module",
+        type=argparse.FileType('r'),
+        nargs='*',
+        help="Custome python modules"
     )
     parser.add_argument("config", type=str, help="Path the the configuration")
 
@@ -73,6 +84,50 @@ def build_tree(server_type, config, temp_dir):
         extra_context={"service_name" : config.name, "configuration": '{% raw %}' + configuration +'{% endraw %}', "endpoints": ep},
         output_dir=temp_dir)
     return Path(temp_dir) / Path(config.name)
+
+def build_custom_modules(custom_modules: List, tree):
+    cls_list = []
+    tpl_dir = get_resource_path("templates")
+    jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
+    for m in custom_modules:
+        module_id = str(id(m))
+        with m as f:
+            valid = False
+            source = f.read()
+            py = ast.parse(source)
+            for node in ast.walk(py):
+                if isinstance(node, ast.ClassDef):
+                    name = None
+                    has_call = False
+                    for cls_node in node.body:
+                        if isinstance(cls_node, ast.Assign):
+                            for target in cls_node.targets:
+                                if isinstance(target, ast.Name) and target.id == "name":
+                                    name = ast.literal_eval(cls_node.value)
+                        if isinstance(cls_node, ast.FunctionDef):
+                            if cls_node.name == "__call__":
+                                has_call = True
+                    if name and has_call:
+                        if next((i for i in cls_list if i["name"] == name), None):
+                            logger.warning(f"Custom class {name} defined more than once")
+                            continue
+                        cls_list.append({
+                            "name": name,
+                            "module": module_id,
+                            "class_name": node.name
+                        })
+                        valid = True
+            if valid:
+                # write the python module
+                target_path = tree / f"{module_id}.py"
+                with open(target_path, "w") as t:
+                    t.write(source)
+    custom_tpl = jinja_env.get_template('common/custom.__init__.jinja.py')
+    output = custom_tpl.render(classes=cls_list)
+    with open(tree/"__init__.py", 'w') as f:
+        f.write(output)
+
+
 
 def build_inference(server_type, config, model_repo_dir: Path):
     env = dict()
@@ -131,10 +186,13 @@ def main(args):
         common_src = get_resource_path("templates/common")
         copy_files(common_src, tree/"server/optimized/common")
         target = Path(args.output_dir).resolve() / config.name
+        if args.custom_module:
+            build_custom_modules(args.custom_module, tree/"server/optimized/custom")
         try:
             shutil.copytree(tree, target, dirs_exist_ok=True)
         except FileExistsError:
             logging.error(f"{target} already exists in the output directory")
+
 
 
 if __name__ == "__main__":

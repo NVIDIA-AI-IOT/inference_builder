@@ -9,7 +9,8 @@ from typing import Callable
 import uuid
 from common.config import global_config
 from common.utils import get_logger
-from transformers import AutoTokenizer
+import custom
+import transformers
 from omegaconf import OmegaConf
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Union
@@ -18,6 +19,7 @@ from collections import namedtuple
 import json
 from pyservicemaker.utils import MediaChunk, MediaExtractor
 import torch
+
 
 logger = get_logger(__name__)
 
@@ -137,7 +139,7 @@ class Tokenizer:
         self._tokenizer = None
         if self._type == 'auto':
             logger.info(f"Loading pretrained tokenizer from {model_path}")
-            self._tokenizer = AutoTokenizer.from_pretrained(
+            self._tokenizer = transformers.AutoTokenizer.from_pretrained(
                 os.path.join(check_point_dir, self._model_path), use_fast=True, use_legacy=False)
 
     @property
@@ -154,7 +156,7 @@ class Tokenizer:
     def decode(self, *args, **kwargs):
         return self._tokenizer.decode(args, kwargs)
 
-class Preprocessor(ABC):
+class Processor(ABC):
     def __init__(self, config: Dict):
         self._kind = config['kind'] if 'kind' in config else 'auto'
         self._input = config['input'] if 'input' in config else []
@@ -177,51 +179,35 @@ class Preprocessor(ABC):
     def __call__(self, *args, **kwargs):
         pass
 
-#############################################################################
-# Below implementation should be provide while the package is being built
-#############################################################################
-class VilaMuxer:
-    def __init__(self, model_path):
-        llm_config_path = os.path.join(model_path, "fp16", "1-gpu", "config.json")
-        with open(llm_config_path, "r") as f:
-            config = json.load(f)
-            self.vocab_size = config["pretrained_config"]["vocab_size"]
-
-    def __call__(self, input_ids, features):
-        image_embed_input_ids = np.arange(
-                self.vocab_size,
-                self.vocab_size + features.shape[0])
-        extended_ids = np.append(input_ids, image_embed_input_ids)
-        id_length = extended_ids.shape[0]
-        vocab_size = features.shape[0]
-        return extended_ids, np.array([id_length]), np.array([vocab_size]), features
-
-class VilaVisionEncoderProcessor:
-    def __init__(self, model_path):
-        from llava.model.multimodal_encoder.siglip.image_processing_siglip import SiglipImageProcessor
-        self._preprocessor = SiglipImageProcessor.from_pretrained(model_path)
-
-    def __call__(self, *args, **kwargs):
-        # TODO value parser should be configurable
-        return self._preprocessor(*args)['pixel_values'][0]
-#####################################################################################################
-
-class AutoPreprocessor(Preprocessor):
-    """AutoPreprocessor loads the preprocessor from pretrained"""
+class AutoProcessor(Processor):
+    """AutoPrrocessor loads the preprocessor from pretrained"""
     def __init__(self, config: Dict, check_point_dir: str, model_path: str):
         super().__init__(config)
         if "model_path" in config:
             model_path = config["model_path"]
-        # TODO these should come from the registry or provided by user
-        if self._kind == 'vila-visionenc':
-            logger.info(f"Loading pretrained preprocessor from {model_path}")
-            self._preprocessor = VilaVisionEncoderProcessor(os.path.join(check_point_dir, model_path))
-        elif self._kind == 'vila-muxer':
-            self._preprocessor = VilaMuxer(os.path.join(check_point_dir, model_path))
+        self._processor = transformers.AutoProcessor.from_pretrained(os.path.join(check_point_dir, model_path))
+        if self._processor is None:
+            logger.error(f"Failed to load AutoProcessor from {model_path}")
 
     def __call__(self, *args, **kwargs):
         # TODO value parser should be configurable
-        return self._preprocessor(*args, **kwargs)
+        return self._processor(*args, **kwargs)
+
+class CustomProcessor(Processor):
+    """CustomProcessor loads the processor from custom module"""
+    def __init__(self, config: Dict, check_point_dir: str, model_path: str):
+        super().__init__(config)
+        name = config["name"]
+        config = {k: v for k, v in config.items()}
+        if "model_path" not in config:
+            config["model_path"] = model_path
+        config["model_path"] = os.path.join(check_point_dir, config["model_path"])
+        self._processor = custom.create_instance(name, config)
+        if self._processor is None:
+            logger.error(f"Failed to create processor {name}")
+
+    def __call__(self, *args, **kwargs):
+        return self._processor(*args, **kwargs)
 
 
 class ModelOperator:
@@ -242,13 +228,21 @@ class ModelOperator:
             )
         if "preprocessors" in model_config:
             for config in model_config["preprocessors"]:
-                self._preprocessors.append(
-                    AutoPreprocessor(
-                        config=config,
-                        check_point_dir=check_point_dir,
-                        model_path=self._model_name
+                ProcessorClass = None
+                if config["kind"] == "auto":
+                    ProcessorClass = AutoProcessor
+                elif config["kind"] == "custom":
+                    ProcessorClass = CustomProcessor
+                if ProcessorClass is not None:
+                    self._preprocessors.append(
+                        ProcessorClass(
+                            config=config,
+                            check_point_dir=check_point_dir,
+                            model_path=self._model_name
+                        )
                     )
-                )
+                else:
+                    raise Exception("Invalid Preprocessor")
         self._model_config = model_config
         self._backend = None
 
@@ -370,7 +364,8 @@ class ModelOperator:
                 output = preprocessor(*input)
                 logger.debug(f"{self._model_name} preprocessor {preprocessor.kind} generated output {output}")
                 if not isinstance(output, tuple):
-                    output = (output,)
+                    logger.error("Return value of a processor must be a tuple")
+                    continue
                 if len(output) != len(preprocessor.output):
                     logger.warning(f"Number of preprocessing output doesn't match the configuration, expecting {len(preprocessor.output)}, while getting {len(output)}")
                     continue

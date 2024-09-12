@@ -128,7 +128,7 @@ models:
         data_type: TYPE_INT32
         dims: [ 1 ]
         reshape: { shape: [ ] }
-    optional: true
+        optional: true
     output:
       - name: "output_ids"
         data_type: TYPE_INT32
@@ -144,7 +144,8 @@ models:
       encoder: ["prompt", "input_ids"]
       decoder: ["output_ids", "output_ids"]
     preprocessors:
-      - kind: "vila-muxer"
+      - kind: "custom"
+        name: "vila-muxer"
         input: ["input_ids", "features"]
         output: ["input_ids", "input_lengths", "prompt_vocab_size", "prompt_embedding_table"]
   - name: "visionenc"
@@ -166,7 +167,8 @@ models:
         kind: KIND_GPU
         gpus: [0]
     preprocessors:
-      - kind: "vila-visionenc"
+      - kind: "custom"
+        name: "vila-preprocessor"
         model_path: "vila1.5-13b"
         input: ["images"]
         output: ["images"]
