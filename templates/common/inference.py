@@ -17,6 +17,7 @@ from typing import Dict, List, Tuple, Union
 import numpy as np
 from collections import namedtuple
 import json
+from pyservicemaker import Pipeline
 from pyservicemaker.utils import MediaChunk, MediaExtractor
 import torch
 
@@ -476,6 +477,11 @@ class Inference:
             logger.error("Unable to set up inference routes")
         self._executor = ThreadPoolExecutor(max_workers=len(self._operators))
         self._future = None
+        # sanity check on vision pipeline
+        try:
+            Pipeline("vision")
+        except Exception as e:
+            logger.exception(e)
 
     def finalize(self):
         self._executor.shutdown()
