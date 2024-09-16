@@ -1,7 +1,5 @@
 # nim-templates
 
-
-
 ## Getting started
 
 ### Clone the repository
@@ -20,9 +18,16 @@ cd nim-templates
 pip3 install -r requirements.txt
 ```
 
-
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+The project provides developers a easy-to-use command line tool to generate inference codes for various VLM/CV NIMs. Before running the tool, developers need to create a comprehensive inference configuration file and the API spec. For some NIMs, custom code snippet would also be needed.
+
+Under the tests/configs we provides a sample configuration for creating vila NIM, the inference code can be generate from the following command:
+
+```bash
+python builder/main.py builder/tests/configs/tensorrt_vila1.5.yaml -a ../vila/api_doc/openapi_vila.json -c builder/tests/configs/vila_custom.py -o ..
+```
+
+A new folder named 'vila' will be generated in the parent folder containing all the inference code for vila NIM.
 
 ## Support
 Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
