@@ -184,7 +184,7 @@ def main(args):
         build_server(args.server_type, api_schema, config, tree/"server/optimized")
         build_inference(args.server_type, config, tree/"server/optimized/model_repo")
         common_src = get_resource_path("templates/common")
-        copy_files(common_src, tree/"server/optimized/common")
+        copy_files(common_src, tree/"server/optimized/common", lambda file: ".jinja." not in file)
         target = Path(args.output_dir).resolve() / config.name
         if args.custom_module:
             build_custom_modules(args.custom_module, tree/"server/optimized/custom")

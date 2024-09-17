@@ -111,14 +111,17 @@ class Interface(FastApiTritonInterface):
         json_string = Template(tpl).render(request=request, data=acc)
         return ChatCompletion(**json.loads(json_string))
 
-if __name__ == "__main__":
+def main():
     interface = Interface(
         triton_url="grpc://localhost:8001",
-        model_name="{{cookiecutter.service_name}}",
+        model_name="vila",
         stream_triton=True,
         stream_http=lambda request: request.stream,
-        infer_endpoint="{{cookiecutter.endpoints.infer}}",
-        health_endpoint="{{cookiecutter.endpoints.health}}",
+        infer_endpoint="/inference",
+        health_endpoint="/health/live",
         triton_timeout_s = 60,
     )
     interface.serve()
+
+if __name__ == "__main__":
+    main()
