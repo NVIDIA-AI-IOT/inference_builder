@@ -3,9 +3,40 @@ import sys
 import logging
 import time
 from typing import Optional
+import importlib
+import numpy as np
+import torch
 
 kDebug = int(os.getenv("DEBUG", "0"))
 PACKAGE_NAME = "NIM"
+
+def stack_tensors_in_dict(list_of_tensor_dicts):
+    result = {}
+
+    # Iterate over each dictionary in the list
+    for d in list_of_tensor_dicts:
+        for key, value in d.items():
+            if key not in result:
+                result[key] = []  # Create a new list for each new key
+            result[key].append(value)  # Append the value to the list
+    # Iterate over the combined dictionary
+    for key in result:
+        tensor_list = result[key]
+        if isinstance(tensor_list[0], np.ndarray):
+            result[key] = np.stack(tensor_list, axis=0)
+        elif isinstance(tensor_list[0], torch.Tensor):
+            result[key] = torch.stack(tensor_list, dim=0)
+
+    return result
+
+def import_class(module_name, class_name):
+    # Import the module using importlib
+    module = importlib.import_module(module_name)
+
+    # Get the class from the module using getattr
+    class_ = getattr(module, class_name)
+
+    return class_
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
     """ Get component logger

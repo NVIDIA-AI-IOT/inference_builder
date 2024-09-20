@@ -1,0 +1,60 @@
+################################################################################
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+#
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+################################################################################
+version: '3'
+
+services:
+  nim-vila:
+    build:
+      context: vila
+      target: api_server
+      dockerfile: Dockerfile
+    image: nim-vila:0.7.0
+    volumes:
+      # correct the below mapping for your vila checkpoints
+      - '/opt/models/via-models/vila/checkpoints/optimized:/config/models/vila'
+
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              # count: 1
+              device_ids: ['4']
+              capabilities: [gpu]
+    environment:
+      # DEBUG: 1
+      CHECKPOINTS_DIR: /config/models/vila
+  nim-nvclip:
+    build:
+      context: nvclip
+      target: nim_builder_base
+      dockerfile: Dockerfile
+    image: nim-nvclip
+
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              #count: 1
+              device_ids: ['4']
+              capabilities: [gpu]
+    environment:
+      NGC_API_KEY: ""

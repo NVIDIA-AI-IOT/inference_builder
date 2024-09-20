@@ -42,6 +42,24 @@ np_datatype_mapping = {
     "TYPE_BF16": None
 }
 
+torch_datatype_mapping = {
+    "TYPE_INVALID": None,
+    "TYPE_BOOL": torch.bool,
+    "TYPE_UINT8": torch.int8,
+    "TYPE_UINT16": torch.int16,
+    "TYPE_UINT32": torch.int32,
+    "TYPE_UINT64": torch.int64,
+    "TYPE_INT8": torch.int8,
+    "TYPE_INT16": torch.int16,
+    "TYPE_INT32": torch.int32,
+    "TYPE_INT64": torch.int64,
+    "TYPE_FP16": torch.float16,
+    "TYPE_FP32": torch.float32,
+    "TYPE_FP64": torch.float64,
+    "TYPE_STRING": None,
+    "TYPE_BF16": None
+}
+
 @dataclass
 class Error:
     message: str
@@ -208,8 +226,10 @@ class CustomProcessor(Processor):
             logger.error(f"Failed to create processor {name}")
 
     def __call__(self, *args, **kwargs):
-        return self._processor(*args, **kwargs)
-
+        ret = self._processor(*args, **kwargs)
+        if not isinstance(ret, tuple):
+            ret = ret,
+        return ret
 
 class ModelOperator:
     """An model operator runs a single model"""
@@ -220,7 +240,7 @@ class ModelOperator:
         self._out: List[DataFlow] = []
         self._running = False
         self._tokenizer = None
-        self._preprocessors = []
+        self._processors = []
         if "tokenizer" in model_config:
             self._tokenizer = Tokenizer(
                 config=model_config["tokenizer"],
@@ -235,7 +255,7 @@ class ModelOperator:
                 elif config["kind"] == "custom":
                     ProcessorClass = CustomProcessor
                 if ProcessorClass is not None:
-                    self._preprocessors.append(
+                    self._processors.append(
                         ProcessorClass(
                             config=config,
                             check_point_dir=check_point_dir,
@@ -295,6 +315,8 @@ class ModelOperator:
                         # Not data, skip it
                         continue
                     kwargs.update(data)
+                if not kwargs:
+                    continue
                 logger.debug(f"Input collected: {kwargs}")
                 # apply tokenizer if required
                 if self._tokenizer:
@@ -352,7 +374,7 @@ class ModelOperator:
 
         # go through the preprocess chain
         outcome = args
-        for preprocessor in self._preprocessors:
+        for preprocessor in self._processors:
             result = []
             for data in outcome:
                 # initialize the processed as the original values
@@ -372,21 +394,30 @@ class ModelOperator:
                     continue
                 # update as processed
                 for key, value in zip(preprocessor.output, output):
-                    # data validation first
-                    i_config = next((i for i in self._model_config['input'] if i["name"] == key), None)
-                    if i_config is None:
-                        logger.warning(f"Unexpected data: {key}")
-                        continue
-                    else:
-                        data_type = i_config["data_type"]
-                        if isinstance(value, np.ndarray):
-                            data_type = np_datatype_mapping[data_type]
-                            if value.dtype != data_type:
-                                value = value.astype(data_type)
                     processed[key] = value
                 result.append(processed)
             # update outcome
             outcome = result
+        # correct the data type
+        for data in outcome:
+            for key in data:
+                value = data[key]
+                i_config = next((i for i in self._model_config['input'] if i["name"] == key), None)
+                if i_config is None:
+                    logger.warning(f"Unexpected data: {key}")
+                    continue
+                else:
+                    data_type = i_config["data_type"]
+                    if isinstance(value, np.ndarray):
+                        data_type = np_datatype_mapping[data_type]
+                        if value.dtype != data_type:
+                            data[key] = value.astype(data_type)
+                    elif isinstance(value, torch.Tensor):
+                        data_type = torch_datatype_mapping[data_type]
+                        if value.dtype != data_type:
+                            data[key] = value.to(data_type)
+                    else:
+                        raise Exception(f"Unexpected tensor type: {type(value)}")
         return outcome
 
 class Inference:
@@ -435,7 +466,16 @@ class Inference:
             for k, v in global_config.routes.items():
                 route = parse_route(k, v)
                 logger.debug(f"Adding route {route}")
-                if route.model.target:
+                if not route.model.source and not route.model.target:
+                    # this is a direct passthrough from input to output, we can use a standalone dataflow
+                    if not route.data.source:
+                        logger.error(f"Invalid route: {route}, source is required for a direct pass")
+                        continue
+                    configs = [OmegaConf.to_container(c) for c in global_config.input if c.name in route.data.source]
+                    dataflow = DataFlow(configs, route.data.target if route.data.target else route.data.source)
+                    self._inputs.append(dataflow)
+                    self._outputs.append(dataflow)
+                elif route.model.target:
                     operator = next((o for o in self._operators if o.model_name == route.model.target), None)
                     if operator is None:
                         logger.error(f"Model {route.model.target} in the routes not found")

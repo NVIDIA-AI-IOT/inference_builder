@@ -19,15 +19,16 @@ pip3 install -r requirements.txt
 ```
 
 ## Usage
-The project provides developers a easy-to-use command line tool to generate inference codes for various VLM/CV NIMs. Before running the tool, developers need to create a comprehensive inference configuration file and the API spec. For some NIMs, custom code snippet would also be needed.
+The project provides developers an easy-to-use command line tool to generate inference codes for various VLM/CV NIMs. Before running the tool, developers need to create a comprehensive inference configuration file and the API spec. For some NIMs, custom code snippet would also be needed.
 
 Under the tests/configs we provides a sample configuration for creating vila NIM, the inference code can be generate from the following command:
 
 ```bash
-python builder/main.py builder/tests/configs/tensorrt_vila1.5.yaml -a ../vila/api_doc/openapi_vila.json -c builder/tests/configs/vila_custom.py -o ..
+pyton builder/main.py
+usage: Inference Builder [-h] [--server-type [{triton}]] [-o [OUTPUT_DIR]] [-a [API_SPEC]] [-c [CUSTOM_MODULE ...]] config
 ```
 
-A new folder named 'vila' will be generated in the parent folder containing all the inference code for vila NIM.
+There're two builtin samples under _samples_ folder for generating vila NIMs and nvclip NIMs respectively.
 
 ## Support
 Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.

@@ -1,0 +1,525 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FastAPI",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/inference": {
+      "post": {
+        "summary": " Infer",
+        "operationId": "_infer_inference_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatCompletion"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatCompletionChunk"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_live_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChatCompletion": {
+        "properties": {
+          "id": {
+            "description": "A unique identifier for the completion.",
+            "format": "uuid",
+            "maxLength": 36,
+            "title": "Id",
+            "type": "string"
+          },
+          "choices": {
+            "description": "The list of completion choices the model generated for the input prompt.",
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "maxItems": 1,
+            "title": "Choices",
+            "type": "array"
+          },
+          "usage": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Usage"
+              }
+            ],
+            "description": "Usage statistics for the completion request."
+          }
+        },
+        "required": [
+          "id",
+          "choices",
+          "usage"
+        ],
+        "title": "ChatCompletion",
+        "type": "object"
+      },
+      "ChatCompletionChunk": {
+        "properties": {
+          "id": {
+            "description": "A unique identifier for the completion.",
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "choices": {
+            "description": "The list of completion choices the model generated for the input prompt.",
+            "items": {
+              "$ref": "#/components/schemas/ChoiceChunk"
+            },
+            "title": "Choices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "choices"
+        ],
+        "title": "ChatCompletionChunk",
+        "type": "object"
+      },
+      "ChatRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "messages": {
+            "description": "A list of messages comprising the conversation. For VQA task only single message with `user` role and single image is supported.",
+            "examples": [
+              [
+                {
+                  "content": "Hi! What is in this image? <img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII==\" />",
+                  "role": "user"
+                }
+              ],
+              [
+                {
+                  "content": "Hi! What is in this image? <img src=\"data:image/png;asset_id,87b132b0-08f9-43ea-8fab-f107350a5d00\" />",
+                  "role": "user"
+                }
+              ]
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            },
+            "maxItems": 1024,
+            "minItems": 1,
+            "title": "Messages",
+            "type": "array"
+          },
+          "temperature": {
+            "default": 0.2,
+            "description": "The sampling temperature to use for text generation. The higher the temperature value is, the less deterministic the output text will be. It is not recommended to modify both temperature and top_p in the same call.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Temperature",
+            "type": "number"
+          },
+          "top_p": {
+            "default": 0.7,
+            "description": "The top-p sampling mass used for text generation. The top-p value determines the probability mass that is sampled at sampling time. For example, if top_p = 0.2, only the most likely tokens (summing to 0.2 cumulative probability) will be sampled. It is not recommended to modify both temperature and top_p in the same call.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Top P",
+            "type": "number"
+          },
+          "max_tokens": {
+            "default": 1024,
+            "description": "The maximum number of tokens to generate in any given call. Note that the model is not aware of this value, and generation will simply stop at the number of tokens specified.",
+            "format": "int32",
+            "maximum": 2048,
+            "minimum": 1,
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 18446744073709551615,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "If specified, our system will make a best effort to sample deterministically, such that repeated requests with the same seed and parameters should return the same result.",
+            "examples": [
+              42
+            ],
+            "format": "int64",
+            "title": "Seed"
+          },
+          "stream": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "description": "If set, partial message deltas will be sent. Tokens will be sent as data-only server-sent events (SSE) as they become available (JSON responses are prefixed by `data: `), with the stream terminated by a `data: [DONE]` message.",
+            "title": "Stream"
+          }
+        },
+        "required": [
+          "messages"
+        ],
+        "title": "ChatRequest",
+        "type": "object"
+      },
+      "Choice": {
+        "properties": {
+          "index": {
+            "default": 0,
+            "description": "The index of the choice in the list of choices (always 0).",
+            "exclusiveMaximum": 1,
+            "format": "int32",
+            "minimum": 0,
+            "title": "Index",
+            "type": "integer"
+          },
+          "message": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Message"
+              }
+            ],
+            "description": "A chat completion message generated by the model.",
+            "examples": [
+              {
+                "content": "The image features a gray and white checkered pattern on a white background.",
+                "role": "assistant"
+              }
+            ]
+          },
+          "finish_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "stop",
+                  "length"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The reason the model stopped generating tokens. This will be `stop` if the model hit a natural stop point or a provided stop sequence, or `length` if the maximum number of tokens specified in the request was reached.",
+            "examples": [
+              "stop"
+            ],
+            "title": "Finish Reason"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "Choice",
+        "type": "object"
+      },
+      "ChoiceChunk": {
+        "properties": {
+          "index": {
+            "description": "The index of the choice in the list of choices (always 0).",
+            "title": "Index",
+            "type": "integer"
+          },
+          "delta": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Message"
+              }
+            ],
+            "description": "A chat completion delta generated by streamed model responses.",
+            "examples": [
+              {
+                "content": "The",
+                "role": "assistant"
+              }
+            ]
+          },
+          "finish_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "stop",
+                  "length"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The reason the model stopped generating tokens. This will be `stop` if the model hit a natural stop point or a provided stop sequence, or `length` if the maximum number of tokens specified in the request was reached. Will be `null` if the model has not finished generating.",
+            "title": "Finish Reason"
+          }
+        },
+        "required": [
+          "index",
+          "delta"
+        ],
+        "title": "ChoiceChunk",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Message": {
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "description": "The role of the message author.",
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "maxLength": 20480000,
+                "type": "string"
+              },
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/UserTextContent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserImageContent"
+                    }
+                  ]
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The contents of the message.\n<br>Can only be `null` as part of a last request message with role=`assistant` (used to give a role or labels for the next generation).\n<br>To pass images (only with role=`user`):\n<br>    - When content is a string, images can be passed together with the text with `img` HTML tags with base64 data: `<img src=\"data:image/{format};base64,{base64encodedimage}\" />` .\n If the size of an image is more than 200KB, it needs to be uploaded to a presigned S3 bucket using NVCF Asset APIs. Once uploaded you can refer to it using the following format: `<img src=\"data:image/png;asset_id,{asset_id}\" />` .\n<br>    - When content is a list of objects, images can be passed with objects with type=`image_url`, and image_url containing the base64 image data: `data:image/{format};base64,{base64encodedimage}`. HTML `img` tags will not be parsed from objects with type=`text`.\n<br>    - In both cases, images can be PNG, JPG or JPEG.\n<br>For `assistant` role, the object list format is not supported.\n",
+            "title": "Content"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "Message",
+        "type": "object"
+      },
+      "Usage": {
+        "properties": {
+          "completion_tokens": {
+            "description": "Number of tokens in the generated completion.",
+            "examples": [
+              19
+            ],
+            "format": "int32",
+            "maximum": 2048,
+            "minimum": 0,
+            "title": "Completion Tokens",
+            "type": "integer"
+          },
+          "prompt_tokens": {
+            "description": "Number of tokens in the prompt.",
+            "examples": [
+              46
+            ],
+            "format": "int32",
+            "maximum": 4096,
+            "minimum": 0,
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "description": "Total number of tokens used in the request (prompt + completion).",
+            "examples": [
+              65
+            ],
+            "format": "int32",
+            "maximum": 6144,
+            "minimum": 0,
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "completion_tokens",
+          "prompt_tokens",
+          "total_tokens"
+        ],
+        "title": "Usage",
+        "type": "object"
+      },
+      "UserImageContent": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "const": "image_url",
+            "description": "The type of the content part.",
+            "title": "Type"
+          },
+          "image_url": {
+            "description": "Base64 encoded image data in form of `data:image/{format};base64,{base64encodedimage}`.\n        If the size of an image is more than 200KB, it needs to be uploaded to a presigned S3 bucket using NVCF Asset APIs.\n        Once uploaded you can refer to it using the following format: `data:image/png;asset_id,{asset_id}`.\n        Accepted formats are `jpg`, `png` and `jpeg`.",
+            "maxLength": 204800,
+            "pattern": "^[\\s\\S]+$",
+            "title": "Image Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "image_url"
+        ],
+        "title": "UserImageContent",
+        "type": "object"
+      },
+      "UserTextContent": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "const": "text",
+            "description": "The type of the content part.",
+            "title": "Type"
+          },
+          "text": {
+            "description": "The text content.",
+            "maxLength": 204800,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "UserTextContent",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "Token": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "security": [
+    {
+      "Token": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "nspect_id",
+      "description": "NSPECT-0000-0000"
+    }
+  ],
+  "servers": [
+    {
+      "url": "https://ai.api.nvidia.com/",
+      "description": "Visual Insights Agent Endpoints."
+    }
+  ]
+}

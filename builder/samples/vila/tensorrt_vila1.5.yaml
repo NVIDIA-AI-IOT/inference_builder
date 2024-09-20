@@ -32,12 +32,12 @@ io_map:
   input:
     templates:
       # root template for generating input json from the request
-      request: >
+      ChatRequest: >
         {
-          "prompt": {% for item in messages %}[{% if item.role == "user" %}{{ item.content|tojson }}{% if not loop.last %},{% endif %}{% endif %}]{% endfor %},
-          "runtime_top_p": {{ top_p }},
-          "request_output_len": {{ max_tokens }},
-          "temperature": {{ temperature }},
+          "prompt": [{% for item in request.messages %}{% if item.role == "user" %}{{ item.content|tojson }}{% if not loop.last %},{% endif %}{% endif %}{% endfor %}],
+          "runtime_top_p": {{ request.top_p }},
+          "request_output_len": {{ request.max_tokens }},
+          "temperature": {{ request.temperature }},
           "images": [],
           "streaming": true
         }
@@ -49,33 +49,32 @@ io_map:
   output:
     templates:
       # root template for formulating responses
-      response: >
-        {% if request.stream %}
+      ChatCompletion: >
         {
           "id": "{{ request._id }}",
           "choices":
             [
               {
                 "index": 0,
-                "delta": { "role": "assistant", "content": {{ data["text"][0]|tojson }} },
-                "finish_reason": "stop"
-              }
-            ]
-        }
-        {% else %}
-        {
-          "id": "{{ request._id }}",
-          "choices":
-            [
-              {
-                "index": 0,
-                "message": { "role": "assistant", "content": {{ data["text"][0]|tojson }} },
+                "message": { "role": "assistant", "content": {{ response.text|tojson }} },
                 "finish_reason": "stop"
               }
             ],
           "usage": {"completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0}
         }
-        {% endif %}
+      ChatCompletionChunk: >
+        {
+          "id": "{{ request._id }}",
+          "choices":
+            [
+              {
+                "index": 0,
+                "delta": { "role": "assistant", "content": {{ response.text[0]|tojson }} },
+                "finish_reason": "stop"
+              }
+            ]
+        }
+
 
 # list of model specifications for inference
 models:

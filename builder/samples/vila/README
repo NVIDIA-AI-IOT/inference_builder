@@ -1,0 +1,27 @@
+Before generating usable vila NIM, we need the optimized checkpoints in hand. Please follow the instruction from Wind (https://gitlab-master.nvidia.com/dl/JoC/ai_foundation_models/-/blob/wind-dev/vila-0.7.0/llm/vila/README.md?ref_type=heads) to create the trt engine for Vila 1.5 and correct the volume mapping in docker-composer.yml accordingly.
+
+Get the llava (Why don't integrate it into the container image?):
+
+cd builder/samples/vila
+git clone https://github.com/Efficient-Large-Model/VILA.git
+
+Build the NIM inference flow:
+
+cd builder
+python main.py samples/vila/tensorrt_vila1.5.yaml -a samples/vila/openapi.json -c samples/vila/processors.py -o samples
+
+Build and run the docker image:
+
+
+Test with the client:
+
+cd builder/samples/vila
+./api_client.sh false http://localhost:8803/inference <PNG or JPG file>
+
+Or
+
+cd builder/samples/vila
+./api_client.sh true http://localhost:8803/inference <PNG or JPG file>
+
+
+

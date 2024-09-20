@@ -1,20 +1,21 @@
 import json
 from common.config import global_config
-from common.inference import ModelBackend, Inference, Error, Stop
+from common.inference import ModelBackend, CustomProcessor, Inference, Error, Stop
 import triton_python_backend_utils as pb_utils
 from omegaconf import OmegaConf
 from typing import List, Dict
-from common.utils import get_logger
+from common.utils import get_logger, stack_tensors_in_dict
 import os
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import torch
+from pathlib import Path
 
 logger = get_logger(__name__)
 
 # environment variables
-CHECKPOINTS_DIR = os.getenv("CHECKPOINTS_DIR", "/workspace/checkpoints")
+CHECKPOINTS_DIR = os.getenv("CHECKPOINTS_DIR", Path(__file__).resolve().parent.parent.parent)
 PIPELINE_GPU_ID=int(os.getenv("PIPELINE_GPU_ID", "0"))
 
 
@@ -30,6 +31,21 @@ class TritonBackend(ModelBackend):
     def __call__(self, *args, **kwargs):
         logger.debug(f"TritonBackend {self._model_name} triggerred with {args if args else kwargs}")
         in_data_list = args if args else [kwargs]
+        input_config = self._model_config["input"]
+        # to determine if we need to stack the input, TODO: below logic needs be more generic
+        need_stack = False
+        for in_data in in_data_list:
+            for key, value in in_data.items():
+                input_config = next((i for i in self._model_config["input"] if i['name'] == key), None)
+                if input_config is None:
+                    logger.error(f"Unexpected input: {key}")
+                    continue
+                expected_dims = len(input_config["dims"])
+                if expected_dims == len(value.shape) + 1:
+                    need_stack = True
+                    break
+        if need_stack:
+            in_data_list = [stack_tensors_in_dict(in_data_list)]
         for in_data in in_data_list:
             tensors = []
             for k in in_data:
@@ -101,8 +117,8 @@ class TritonPythonModel(Inference):
         return auto_complete_model_config
 
     def initialize(self, args):
-        super().initialize(check_point_dir=CHECKPOINTS_DIR)
         logger.info(f"CHECKPOINTS_DIR: {CHECKPOINTS_DIR}")
+        super().initialize(check_point_dir=CHECKPOINTS_DIR)
         for operator in self._operators:
             model_config = next((m for m in global_config.models if m.name == operator.model_name), None)
             triton_backend = TritonBackend(
@@ -112,6 +128,16 @@ class TritonPythonModel(Inference):
                 model_config=OmegaConf.to_container(model_config)
             )
             self._submit(operator, triton_backend)
+        # post processing:
+        self._processors = []
+        if hasattr(global_config, "post_processors"):
+            configs = OmegaConf.to_container(global_config.post_processors)
+            for config in configs:
+                if config["kind"] == "custom":
+                    self._processors.append(
+                        CustomProcessor(config, CHECKPOINTS_DIR, global_config.name)
+                    )
+
         # thread executor for async bridge
         self._async_executor = ThreadPoolExecutor(max_workers=len(self._outputs))
         # async queues
@@ -140,6 +166,7 @@ class TritonPythonModel(Inference):
                     flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL)
                 continue
             for input in self._inputs:
+                # select the tensors for the input
                 tensors = {n: pb_utils.get_input_tensor_by_name(request, n) for n in input.in_names}
                 # the tensors need to be transformed to generic type
                 for name in tensors:
@@ -162,6 +189,7 @@ class TritonPythonModel(Inference):
                     tensors[name] = tensor
                 logger.debug(f"Injecting tensors {tensors}")
                 input.put(tensors)
+                input.put(Stop(reason="end"))
             # fetch result
             loop = asyncio.get_event_loop()
             for a_output, output in zip(self._async_outputs, self._outputs):
@@ -171,7 +199,7 @@ class TritonPythonModel(Inference):
                 try:
                     logger.debug("Waiting for tensors from async queue")
                     response_data = dict()
-                    done, _ = await asyncio.wait([ao.get() for ao in self._async_outputs], return_when=asyncio.FIRST_COMPLETED)
+                    done, _ = await asyncio.wait([ao.get() for ao in self._async_outputs], return_when=asyncio.ALL_COMPLETED)
                     for f in done:
                         data = f.result()
                         logger.debug(f"Got output data: {data}")
@@ -188,6 +216,7 @@ class TritonPythonModel(Inference):
                         # collect the output
                         for k, v in data.items():
                             response_data[k] = v
+                    response_data = self._post_process(response_data)
                     # response with partial data
                     response_sender.send(pb_utils.InferenceResponse(
                         output_tensors=[
@@ -204,3 +233,20 @@ class TritonPythonModel(Inference):
     def finalize(self):
         super().finalize()
 
+    def _post_process(self, data: Dict):
+        processed = {k: v for k, v in data.items()}
+        for processor in self._processors:
+            if not all([i in data for i in processor.input]):
+                logger.warning(f"Input settings invalid for the processor: {processor}")
+                continue
+            input = [processed.pop(i) for i in processor.input]
+            logger.debug(f"Post-processor invoked with given input {input}")
+            output = processor(*input)
+            logger.debug(f"Post-processor generated output {output}")
+            if len(output) != len(processor.output):
+                logger.warning(f"Number of postprocessing output doesn't match the configuration, expecting {len(processor.output)}, while getting {len(output)}")
+                continue
+            # update as processed
+            for key, value in zip(processor.output, output):
+                processed[key] = value
+        return processed

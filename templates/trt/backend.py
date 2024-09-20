@@ -19,13 +19,13 @@ def trt_dtype_to_torch(dtype):
 
 class TensorRTBackend(ModelBackend):
     """Python TensorRT Backend"""
-    def __init__(self, model_name:str, output_name: str, engine_file: str, device_id: int=0):
+    def __init__(self, model_name:str, output_names: List[str], engine_file: str, device_id: int=0):
         self._model_name = model_name
-        self._output_name = output_name
+        self._output_names = output_names
         self._device = f"cuda:{device_id}"
         self._stream = torch.cuda.Stream(torch.cuda.current_device())
         torch.cuda.set_stream(self._stream)
-        logger.debug(f"TensorRTBackend created for {model_name} to generate {self._output_name}")
+        logger.debug(f"TensorRTBackend created for {model_name} to generate {self._output_names}")
         logger.info(f"Loading TensorRT Engine from {engine_file}...")
         with open(engine_file, 'rb') as f:
             engine_buffer = f.read()
@@ -47,4 +47,5 @@ class TensorRTBackend(ModelBackend):
                 ok = self._trt_session.run(trt_in, trt_out, self._stream.cuda_stream)
                 assert ok, "Runtime execution failed for vision encoder session"
                 self._stream.synchronize()
-                yield {self._output_name: trt_out['output']}
+                # TODO associate trt output names with triton output names
+                yield {self._output_names[0]: trt_out['output']}

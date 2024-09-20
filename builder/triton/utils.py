@@ -20,7 +20,7 @@ datatype_mapping = {
     "TYPE_BF16": DataType.TYPE_BF16
 }
 
-def generate_pbtxt(model_config: Dict, fallback=False):
+def generate_pbtxt(model_config: Dict, is_python_backend=False):
     triton_model_config = ModelConfig()
     for key, value in model_config.items():
         if hasattr(triton_model_config, key):
@@ -60,7 +60,7 @@ def generate_pbtxt(model_config: Dict, fallback=False):
                     setattr(triton_model_config.model_transaction_policy, k, v)
             else:
                 setattr(triton_model_config, key, value)
-            if fallback:
+            if is_python_backend:
                 # fallback to python
                 setattr(triton_model_config, "backend", "python")
     return text_format.MessageToString(triton_model_config, use_short_repeated_primitives=True).replace('shape: [-1]', 'shape: [ ]')

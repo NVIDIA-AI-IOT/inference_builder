@@ -29,12 +29,21 @@ class TritonPythonModel:
         self._out_config = {o["name"]: o for o in self._model_config["output"]}
         self._model_repo = args["model_repository"]
         self._device_id = int(json.loads(args["model_instance_device_id"]))
-        # create backend
-        if "tensorrt" in model_config.backend:
-            if not hasattr(model_config, "tensorrt_engine"):
-                raise Exception(f"{model_name}: Engine file must be specified for tensorrt backend")
+        # default model path
+        engine_path = os.path.join(self._model_repo, "1", "model.plan")
+        if hasattr(model_config, "tensorrt_engine"):
             engine_path = os.path.join(CHECKPOINTS_DIR, model_config.tensorrt_engine)
-            self._model_backend = TensorRTBackend(model_name, next(iter(self._out_config)), engine_path, self._device_id)
+        # create backend
+        BackendClass = None
+        if "tensorrt" in model_config.backend:
+            BackendClass = TensorRTBackend
+        elif model_config.backend == "polygraphy":
+            BackendClass = PolygraphBackend
+        if BackendClass is not None:
+            self._model_backend = BackendClass(model_name, [k for k in self._out_config], engine_path, self._device_id)
+        else:
+            raise Exception(f"Backend not supported: {model_config.backend}")
+
 
     def execute(self, requests):
         """

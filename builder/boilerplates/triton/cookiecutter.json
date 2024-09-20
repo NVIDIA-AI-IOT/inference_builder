@@ -4,5 +4,8 @@
 		"infer": "/inference",
 		"health": "/health"
 	},
-	"configuration": ""
+	"configuration": "",
+	"request_class": "Request",
+	"response_class": "Response",
+	"streaming_response_class": "StreamingResponse"
 }
