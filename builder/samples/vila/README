@@ -3,7 +3,7 @@ Before generating usable vila NIM, we need the optimized checkpoints in hand. Pl
 Get the llava (Why don't integrate it into the container image?):
 
 cd builder/samples/vila
-git clone https://github.com/Efficient-Large-Model/VILA.git
+git clone https://github.com/NVlabs/VILA.git && git checkout vila1.5
 
 Build the NIM inference flow:
 
@@ -11,7 +11,7 @@ cd builder
 python main.py samples/vila/tensorrt_vila1.5.yaml -a samples/vila/openapi.json -c samples/vila/processors.py -o samples
 
 Build and run the docker image:
-
+docker compose up --build nim-vila
 
 Test with the client:
 

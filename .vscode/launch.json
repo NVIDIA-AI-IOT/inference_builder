@@ -10,10 +10,17 @@
             "request": "launch",
             "program": "${workspaceFolder}/builder/main.py",
             "console": "integratedTerminal",
+            "justMyCode": false,
             "args": [
+                "--output-dir",
+                "${workspaceFolder}/builder/samples",
+                "--custom-module",
+//                "${workspaceFolder}/builder/tests/configs/vila_custom.py",
+                "${workspaceFolder}/builder/samples/vila/processors.py",
                 "--api-spec",
-                "/home/chunlinl/Projects/ai_foundation_models/llm/vila/api_doc/openapi_vila.json",
-                "${workspaceFolder}/builder/tests/configs/tensorrt_vila1.5.yaml"
+//                "/home/chunlinl/vila/api_doc/openapi_vila.json",
+                "${workspaceFolder}/builder/samples/vila/openapi.json",
+                "${workspaceFolder}/builder/samples/vila/tensorrt_vila1.5.yaml"
             ]
         }
     ]
