@@ -112,12 +112,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 WORKDIR $NIM_DIR_PATH
 
 
+# This should be downloaded by nimlib
+COPY NVCLIP_224_700M_ViTH14.json $NIM_DIR_PATH/model_repo/nvclip_clipa_vit_h14_700M_text/1/NVCLIP_224_700M_ViTH14.json
+COPY nvclip_clipa_vit_h14_700M_text.plan $NIM_DIR_PATH/model_repo/nvclip_clipa_vit_h14_700M_text/1/model.plan
+COPY nvclip_clipa_vit_h14_700M_vision.plan $NIM_DIR_PATH/model_repo/nvclip_clipa_vit_h14_700M_vision/1/model.plan
 # Copy data models.
-COPY data_model.py $NIM_DIR_PATH
-COPY api.py $NIM_DIR_PATH
-ADD common $NIM_DIR_PATH/common
-ADD custom $NIM_DIR_PATH/custom
-ADD model_repo $NIM_DIR_PATH/model_repo
+ADD nvclip.tgz $NIM_DIR_PATH
 
 RUN groupadd --gid 1000 --non-unique nvs && \
     useradd --create-home --shell /usr/sbin/nologin --uid 1000 --non-unique --gid 1000 nvs && \

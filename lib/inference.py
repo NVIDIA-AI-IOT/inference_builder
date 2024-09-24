@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Callable
 import uuid
 from common.config import global_config
-from common.utils import get_logger
+from .utils import get_logger
 import custom
 import transformers
 from omegaconf import OmegaConf
@@ -420,7 +420,7 @@ class ModelOperator:
                         raise Exception(f"Unexpected tensor type: {type(value)}")
         return outcome
 
-class Inference:
+class InferenceBase:
     """The base model that drives the inference flow"""
     def initialize(self, check_point_dir: str):
         def parse_route(i1, i2) -> Route:

@@ -3,10 +3,14 @@ Before generating usable nvclip NIM, we need optimized tensorrt engines in hand.
 Build the NIM inference flow:
 
 cd builder
-python main.py samples/nvclip/tensorrt_nvclip.yaml -a samples/nvclip/openapi.yaml -c samples/nvclip/processors.py -o samples
+python main.py samples/nvclip/tensorrt_nvclip.yaml -a samples/nvclip/openapi.yaml -c samples/nvclip/processors.py -o samples/nvclip -t
 
-Copy the trt engine for text and vision to model_repo/nvclip_clipa_vit_h14_700M_text/1 and model_repo/nvclip_clipa_vit_h14_700M_vision/1, and rename them both to model.plan so the trt engine can find them.
-Copy NVCLIP_224_700M_ViTH14.json to model_repo/nvclip_clipa_vit_h14_700M_text/1, which is for loading custom tokenizer.
+Copy the trt engines and configuration for text and vision to samples/nvclip:
+
+cp NVCLIP_224_700M_ViTH14.json samples/nvclip
+cp nvclip_clipa_vit_h14_700M_text.plan samples/nvclip
+cp nvclip_clipa_vit_h14_700M_vision.plan samples/nvclip
+
 
 Build and run the docker image:
 docker compose up --build nim-nvclip

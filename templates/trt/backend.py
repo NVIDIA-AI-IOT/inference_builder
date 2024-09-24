@@ -1,5 +1,5 @@
 from typing import List
-from common.inference import ModelBackend
+from lib.inference import ModelBackend
 from tensorrt_llm.runtime import ModelRunner, Session, TensorInfo
 import tensorrt as trt
 import numpy

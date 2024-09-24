@@ -12,7 +12,7 @@ from typing import List
 from pathlib import Path
 import datamodel_code_generator as data_generator
 import semver
-from utils import get_resource_path, copy_files
+from utils import get_resource_path, copy_files, create_tar_gz
 from triton.utils import generate_pbtxt
 from omegaconf.errors import ConfigKeyError
 from jinja2 import Environment, FileSystemLoader
@@ -55,6 +55,18 @@ def build_args(parser):
         type=argparse.FileType('r'),
         nargs='*',
         help="Custome python modules"
+    )
+    parser.add_argument(
+        "-x",
+        "--exclude-lib",
+        action='store_true',
+        help="Include common lib to the generated code."
+    )
+    parser.add_argument(
+        "-t",
+        "--tar-output",
+        action='store_true',
+        help="Zip the output to a single file"
     )
     parser.add_argument("config", type=str, help="Path the the configuration")
 
@@ -166,7 +178,7 @@ def build_inference(server_type, config, model_repo_dir: Path):
                 target_dir = model_repo_dir/f"{model.name}/1"
                 model_file = target_dir/"model.py"
                 triton_tpl = jinja_env.get_template('triton/model.jinja.py')
-                backend_tpl = get_resource_path(f"templates/{model.backend}/backend.py")
+                backend_tpl = get_resource_path(f"templates/backend/{model.backend}.py")
                 with open(backend_tpl, 'r') as f:
                     output = triton_tpl.render(backend=f.read())
                     with open (model_file, 'w') as o:
@@ -198,10 +210,8 @@ def build_inference(server_type, config, model_repo_dir: Path):
             pbtxt_path = model_repo_dir/model.name/"config.pbtxt"
             with open(pbtxt_path, 'w') as f:
                 f.write(pbtxt_str)
-
     else:
         raise Exception("Not implemented")
-
 
 
 def build_server(server_type, api_schema, config, output_dir):
@@ -220,15 +230,19 @@ def main(args):
             api_schema = f.read()
         build_server(args.server_type, api_schema, config, tree)
         build_inference(args.server_type, config, tree/"model_repo")
-        common_src = get_resource_path("templates/common")
-        copy_files(common_src, tree/"common", lambda file: ".jinja." not in file)
-        target = Path(args.output_dir).resolve() / config.name
+        if not args.exclude_lib :
+            copy_files(get_resource_path("lib"), tree/"lib")
         if args.custom_module:
             build_custom_modules(args.custom_module, tree)
-        try:
-            shutil.copytree(tree, target, dirs_exist_ok=True)
-        except FileExistsError:
-            logging.error(f"{target} already exists in the output directory")
+        if args.tar_output:
+            target = Path(args.output_dir).resolve() / f"{config.name}.zip"
+            create_tar_gz(f"{config.name}.tgz", tree)
+        else:
+            try:
+                target = Path(args.output_dir).resolve() / config.name
+                shutil.copytree(tree, target, dirs_exist_ok=True)
+            except FileExistsError:
+                logging.error(f"{target} already exists in the output directory")
 
 
 

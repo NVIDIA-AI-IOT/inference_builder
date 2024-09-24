@@ -1,7 +1,7 @@
 from common.config import global_config
 import triton_python_backend_utils as pb_utils
 from omegaconf import OmegaConf
-from common.utils import get_logger
+from lib.utils import get_logger
 import torch
 import json
 import os

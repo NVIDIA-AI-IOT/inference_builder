@@ -151,6 +151,7 @@ ENV CHECKPOINTS_DIR=/workspace/checkpoints
 ENV NVCF_METER_EVENT=AIPlayground_Inference
 
 ADD ./common /workspace/common
+ADD ./lib /workspace/lib
 ADD ./custom /workspace/custom
 ADD ./model_repo /workspace/model_repo
 ADD ./server_run.sh /workspace/

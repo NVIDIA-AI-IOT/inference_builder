@@ -32,7 +32,7 @@ services:
           devices:
             - driver: nvidia
               # count: 1
-              device_ids: ['4']
+              device_ids: ['0']
               capabilities: [gpu]
     environment:
       # DEBUG: 1
@@ -54,7 +54,7 @@ services:
           devices:
             - driver: nvidia
               #count: 1
-              device_ids: ['4']
+              device_ids: ['0']
               capabilities: [gpu]
     environment:
       NGC_API_KEY: ""

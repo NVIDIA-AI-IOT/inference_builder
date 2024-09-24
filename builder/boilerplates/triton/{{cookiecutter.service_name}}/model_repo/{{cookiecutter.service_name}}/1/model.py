@@ -1,10 +1,9 @@
-import json
 from common.config import global_config
-from common.inference import ModelBackend, CustomProcessor, Inference, Error, Stop
+from lib.inference import ModelBackend, CustomProcessor, InferenceBase, Error, Stop
+from lib.utils import get_logger, stack_tensors_in_dict
 import triton_python_backend_utils as pb_utils
 from omegaconf import OmegaConf
 from typing import List, Dict
-from common.utils import get_logger, stack_tensors_in_dict
 import os
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -96,7 +95,7 @@ class TritonBackend(ModelBackend):
         yield Stop(finish_reason)
         logger.info(f"Infernece with TritonBackend {self._model_name} accomplished")
 
-class TritonPythonModel(Inference):
+class TritonPythonModel(InferenceBase):
     """The top level python model that drives the inference flow"""
 
     @staticmethod

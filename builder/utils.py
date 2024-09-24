@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import shutil
 from typing import Callable
+import tarfile
 
 def get_resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -25,3 +26,7 @@ def copy_files(source_dir, destination_dir, filter: Callable[[str], bool]=None):
         # Check if it's a file (not a directory)
         if os.path.isfile(full_file_name):
             shutil.copy(full_file_name, destination_dir)
+
+def create_tar_gz(output_filename, source_dir):
+    with tarfile.open(output_filename, "w:gz") as tar:
+        tar.add(source_dir, arcname=".")

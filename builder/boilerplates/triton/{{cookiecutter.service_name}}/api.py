@@ -4,7 +4,7 @@ from typing import Dict, Optional, List, Union
 import numpy as np
 from inferencemodeltoolkit.interfaces.fastapi import FastApiTritonInterface
 import data_model
-from common.utils import get_logger
+from lib.utils import get_logger
 from common.config import global_config
 from omegaconf.errors import ConfigKeyError
 from jinja2 import Environment
