@@ -1,7 +1,5 @@
-from lib.inference import ModelBackend
 from polygraphy.backend.common import BytesFromPath
 from polygraphy.backend.trt import EngineFromBytes, TrtRunner
-from typing import List
 
 class PolygraphBackend(ModelBackend):
     """Python TensorRT Backend from polygraph"""

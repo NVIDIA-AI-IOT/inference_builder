@@ -1,18 +1,181 @@
-from common.config import global_config
+from config import global_config
 import triton_python_backend_utils as pb_utils
+from lib.inference import *
+from lib.utils import *
 from omegaconf import OmegaConf
-from lib.utils import get_logger
-import torch
 import json
 import os
+from typing import List, Dict
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
+import torch
+from pathlib import Path
 
 logger = get_logger(__name__)
 
-CHECKPOINTS_DIR = os.getenv("CHECKPOINTS_DIR", "/workspace/checkpoints")
+CHECKPOINTS_DIR = os.getenv("CHECKPOINTS_DIR", Path(__file__).resolve().parent.parent.parent)
 
+{% for backend in backends %}
 {{ backend }}
+{% endfor %}
 
+{% if top_level %}
+
+class TritonPythonModel(InferenceBase):
+    """The top level python model that drives the inference flow"""
+
+    @staticmethod
+    def auto_complete_config(auto_complete_model_config):
+        # create a minimum config
+        auto_complete_model_config.set_max_batch_size(1)
+        auto_complete_model_config.set_dynamic_batching()
+        auto_complete_model_config.set_model_transaction_policy({"decoupled": True})
+        for input in global_config.input:
+            input_config = OmegaConf.to_container(input)
+            if input_config["data_type"] == "TYPE_CUSTOM_IMAGE_BASE64":
+                input_config["data_type"] = "TYPE_STRING"
+            auto_complete_model_config.add_input(input_config)
+        for output in global_config.output:
+            output_config = OmegaConf.to_container(output)
+            auto_complete_model_config.add_output(output_config)
+        logger.info(f"Model configuration completed as {auto_complete_model_config.as_dict()}")
+        return auto_complete_model_config
+
+    def initialize(self, args):
+        logger.info(f"CHECKPOINTS_DIR: {CHECKPOINTS_DIR}")
+        super().initialize(check_point_dir=CHECKPOINTS_DIR)
+        for operator in self._operators:
+            model_config = next((m for m in global_config.models if m.name == operator.model_name), None)
+            backend_spec = model_config.backend.split('/')
+            backend_instance = None
+            if len(backend_spec) == 3 and backend_spec[0] == 'triton' and backend_spec[1] == 'python':
+                backend_instance = TritonBackend(model_config=OmegaConf.to_container(model_config))
+            self._submit(operator, backend_instance)
+        # post processing:
+        self._processors = []
+        if hasattr(global_config, "post_processors"):
+            configs = OmegaConf.to_container(global_config.post_processors)
+            for config in configs:
+                if config["kind"] == "custom":
+                    self._processors.append(
+                        CustomProcessor(config, CHECKPOINTS_DIR, global_config.name)
+                    )
+
+        # thread executor for async bridge
+        self._async_executor = ThreadPoolExecutor(max_workers=len(self._outputs))
+        # async queues
+        self._async_outputs = [asyncio.Queue() for o in self._outputs]
+        logger.info(f"Model {global_config.name} initialized:")
+        logger.info(f"Inputs: {[f.o_names for f in self._inputs]}, Outputs:  {[f.o_names for f in self._outputs]}")
+
+    async def execute(self, requests):
+        """ execute a list of requests"""
+        async def async_put(queue, item):
+            await queue.put(item)
+        def thread_to_async_bridge(thread_queue, async_queue, loop):
+            while True:
+                item = thread_queue.get()
+                asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
+                if not item:
+                    break
+
+
+        logger.info(f"Received {len(requests)} request(s)")
+        for request in requests:
+            response_sender = request.get_response_sender()
+            if request.is_cancelled():
+                response_sender.send(pb_utils.InferenceResponse(
+                    error=pb_utils.TritonError("request is cancelled", pb_utils.TritonError.CANCELLED)),
+                    flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL)
+                continue
+            for input in self._inputs:
+                # select the tensors for the input
+                tensors = {n: pb_utils.get_input_tensor_by_name(request, n) for n in input.in_names}
+                # the tensors need to be transformed to generic type
+                for name in tensors:
+                    tensor = tensors[name]
+                    config = next((c for c in self._input_config if c['name'] == name), None)
+                    if config is None:
+                        logger.warning(f"Invalid input parsed: {name}")
+                        continue
+                    dims = config['dims']
+                    if pb_utils.Tensor.is_cpu(tensor):
+                        tensor = tensor.as_numpy()
+                        # auto reshape
+                        if len(tensor.shape) == (len(dims)+1):
+                            tensor = np.squeeze(tensor, 0)
+                    else:
+                        tensor = torch.utils.dlpack.from_dlpack(tensor.to_dlpack())
+                        # auto reshape
+                        if len(tensor.shape) == (len(dims)+1):
+                            tensor = torch.squeeze(tensor, 0)
+                    tensors[name] = tensor
+                logger.debug(f"Injecting tensors {tensors}")
+                input.put(tensors)
+                input.put(Stop(reason="end"))
+            # fetch result
+            loop = asyncio.get_event_loop()
+            for a_output, output in zip(self._async_outputs, self._outputs):
+                self._async_executor.submit(thread_to_async_bridge, output, a_output, loop)
+            stop = False
+            while not stop:
+                try:
+                    logger.debug("Waiting for tensors from async queue")
+                    response_data = dict()
+                    done, _ = await asyncio.wait([ao.get() for ao in self._async_outputs], return_when=asyncio.ALL_COMPLETED)
+                    for f in done:
+                        data = f.result()
+                        logger.debug(f"Got output data: {data}")
+                        if isinstance(data, Error):
+                            error = pb_utils.TritonError(f"steam llm_response, error received: {data.message}")
+                            response_sender.send(
+                                pb_utils.InferenceResponse(error=error),
+                                flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL
+                            )
+                            return
+                        elif isinstance(data, Stop):
+                            stop = True
+                            continue
+                        # collect the output
+                        for k, v in data.items():
+                            response_data[k] = v
+                    response_data = self._post_process(response_data)
+                    # response with partial data
+                    response_sender.send(pb_utils.InferenceResponse(
+                        output_tensors=[
+                            pb_utils.Tensor(name, tensor) for name, tensor in response_data.items()
+                        ]
+                    ))
+                except Exception as e:
+                    logger.exception(e)
+
+            response_sender.send(flags=pb_utils.TRITONSERVER_RESPONSE_COMPLETE_FINAL)
+            logger.debug(f"Finalizing the response for requests: {request}")
+        logger.debug(f"All request done")
+
+    def finalize(self):
+        super().finalize()
+
+    def _post_process(self, data: Dict):
+        processed = {k: v for k, v in data.items()}
+        for processor in self._processors:
+            if not all([i in data for i in processor.input]):
+                logger.warning(f"Input settings invalid for the processor: {processor}")
+                continue
+            input = [processed.pop(i) for i in processor.input]
+            logger.debug(f"Post-processor invoked with given input {input}")
+            output = processor(*input)
+            logger.debug(f"Post-processor generated output {output}")
+            if len(output) != len(processor.output):
+                logger.warning(f"Number of postprocessing output doesn't match the configuration, expecting {len(processor.output)}, while getting {len(output)}")
+                continue
+            # update as processed
+            for key, value in zip(processor.output, output):
+                processed[key] = value
+        return processed
+
+{% else %}
 class TritonPythonModel:
     def initialize(self, args):
         """
@@ -35,9 +198,10 @@ class TritonPythonModel:
             engine_path = os.path.join(CHECKPOINTS_DIR, model_config.tensorrt_engine)
         # create backend
         BackendClass = None
-        if "tensorrt" in model_config.backend:
-            BackendClass = TensorRTBackend
-        elif model_config.backend == "polygraphy":
+        backend_spec = model_config.backend.split('/')
+        if backend_spec[-1] == "tensorrtllm":
+            BackendClass = TensorRTLLMBackend
+        elif backend_spec[-1]  == "polygraphy":
             BackendClass = PolygraphBackend
         if BackendClass is not None:
             self._model_backend = BackendClass(model_name, [k for k in self._out_config], engine_path, self._device_id)
@@ -94,3 +258,4 @@ class TritonPythonModel:
             responses.append(pb_utils.InferenceResponse(output_tensors=[r[k] for k in r]))
 
         return responses
+{% endif %}

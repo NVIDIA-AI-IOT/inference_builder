@@ -17,7 +17,7 @@ def trt_dtype_to_torch(dtype):
     else:
         raise TypeError("%s is not supported" % dtype)
 
-class TensorRTBackend(ModelBackend):
+class TensorRTLLMBackend(ModelBackend):
     """Python TensorRT Backend"""
     def __init__(self, model_name:str, output_names: List[str], engine_file: str, device_id: int=0):
         self._model_name = model_name

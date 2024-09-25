@@ -13,14 +13,13 @@
             "justMyCode": false,
             "args": [
                 "--output-dir",
-                "${workspaceFolder}/builder/samples",
+                "${workspaceFolder}/builder/samples/vila",
                 "--custom-module",
-//                "${workspaceFolder}/builder/tests/configs/vila_custom.py",
                 "${workspaceFolder}/builder/samples/vila/processors.py",
                 "--api-spec",
-//                "/home/chunlinl/vila/api_doc/openapi_vila.json",
                 "${workspaceFolder}/builder/samples/vila/openapi.json",
-                "${workspaceFolder}/builder/samples/vila/tensorrt_vila1.5.yaml"
+                "${workspaceFolder}/builder/samples/vila/tensorrt_vila1.5.yaml",
+//                "-t"
             ]
         }
     ]

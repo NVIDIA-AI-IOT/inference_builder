@@ -63,7 +63,7 @@ io_map:
 # list of model specifications for inference
 models:
   - name: nvclip_clipa_vit_h14_700M_text
-    backend: "polygraphy"
+    backend: "triton/python/polygraphy"
     max_batch_size: 64
     input:
       - name: "TEXT"
@@ -82,7 +82,7 @@ models:
         input: ["text"]
         output: ["TEXT"]
   - name: nvclip_clipa_vit_h14_700M_vision
-    backend: "polygraphy"
+    backend: "triton/python/polygraphy"
     max_batch_size: 64
     input:
       - name: "IMAGE"

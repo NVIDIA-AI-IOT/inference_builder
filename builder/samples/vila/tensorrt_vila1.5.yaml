@@ -148,7 +148,7 @@ models:
         input: ["input_ids", "features"]
         output: ["input_ids", "input_lengths", "prompt_vocab_size", "prompt_embedding_table"]
   - name: "visionenc"
-    backend: "tensorrt-10.3.1"
+    backend: "triton/python/tensorrtllm"
     max_batch_size: 8
     input:
       - name: "images"

@@ -89,15 +89,11 @@ def build_tree(server_type, config, temp_dir):
         pass
     if input_templates:
         request_classes = [k for k in config.io_map.input.templates]
-        config.io_map.input.templates = encode_templates(input_templates)
     if output_templates:
         response_classes = [k for k in config.io_map.output.templates]
-        config.io_map.output.templates = encode_templates(output_templates)
-    configuration = OmegaConf.to_yaml(config)
     ep = OmegaConf.to_container(config.endpoints)
     user_context = {
             "service_name": config.name,
-            "configuration": '{% raw %}' + configuration +'{% endraw %}',
             "endpoints": ep
     }
     if request_classes:
@@ -163,53 +159,53 @@ def build_custom_modules(custom_modules: List, tree):
 
 
 def build_inference(server_type, config, model_repo_dir: Path):
-    env = dict()
     tpl_dir = get_resource_path("templates")
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
-    if hasattr(config, "environment"):
-        env = OmegaConf.to_container(config.environment)
+
     if server_type == "triton":
+        # first build the top level model
+        triton_tpl = jinja_env.get_template("triton/model.jinja.py")
+        t_backends = []
         for model in config.models:
-            fallback = False
-            is_python = False
-            (model_repo_dir/f"{model.name}/1").mkdir(parents=True)
-            # customized python backend
-            if model.backend == "polygraphy":
-                target_dir = model_repo_dir/f"{model.name}/1"
-                model_file = target_dir/"model.py"
-                triton_tpl = jinja_env.get_template('triton/model.jinja.py')
-                backend_tpl = get_resource_path(f"templates/backend/{model.backend}.py")
-                with open(backend_tpl, 'r') as f:
-                    output = triton_tpl.render(backend=f.read())
-                    with open (model_file, 'w') as o:
-                        o.write(output)
-                is_python = True
-            else:
-                backend = model.backend.split('-')
-                if len(backend) == 2 and backend[0] in env:
-                    required_version = backend[1]
-                    env_version = env[backend[0]]
-                    if semver.compare(env_version, required_version) < 0:
-                        fallback = True
-                        model.backend = backend[0]
-                # WAR for TRT version conflict caused by Triton
-                if fallback:
+            backend_spec = model.backend.split('/')
+            if backend_spec[0] == "triton":
+                (model_repo_dir/f"{model.name}/1").mkdir(parents=True)
+                if len(backend_spec) < 2:
+                    raise Exception("Triton backend needs a triton backend type")
+                if backend_spec[1] == "python":
+                    if len(backend_spec) < 3:
+                        raise Exception("Triton python backend needs an implementation type")
+                    # generating triton model for triton backend
                     target_dir = model_repo_dir/f"{model.name}/1"
                     model_file = target_dir/"model.py"
-                    triton_tpl = jinja_env.get_template('triton/model.jinja.py')
-                    if "tensorrt" in model.backend:
-                        trt_tpl = get_resource_path("templates/trt/backend.py")
-                        with open(trt_tpl, 'r') as f:
-                            trt_backend = f.read()
-                            output = triton_tpl.render(backend=trt_backend)
-                            with open (model_file, 'w') as o:
-                                o.write(output)
-                        is_python = True
-            # write the pbtxt
-            pbtxt_str = generate_pbtxt(OmegaConf.to_container(model), is_python)
-            pbtxt_path = model_repo_dir/model.name/"config.pbtxt"
-            with open(pbtxt_path, 'w') as f:
-                f.write(pbtxt_str)
+                        # Triton python backend needs a model.py
+                    backend_tpl = get_resource_path(f"templates/backend/{backend_spec[2]}.py")
+                    with open(backend_tpl, 'r') as f:
+                        output = triton_tpl.render(backends=[f.read()], top_level=False)
+                        with open (model_file, 'w') as o:
+                            o.write(output)
+                    if "triton" not in t_backends:
+                        t_backends.append("triton")
+                # write the pbtxt
+                pbtxt_str = generate_pbtxt(OmegaConf.to_container(model), backend_spec[1] )
+                pbtxt_path = model_repo_dir/model.name/"config.pbtxt"
+                with open(pbtxt_path, 'w') as f:
+                    f.write(pbtxt_str)
+            else:
+                bare_backend = backend_spec[0]
+                if bare_backend not in t_backends:
+                    t_backends.append(bare_backend)
+        # add top level backend
+        backends = []
+        model_file = model_repo_dir/f"{config.name}"/"1/model.py"
+        for backend in t_backends:
+            backend_tpl = get_resource_path(f"templates/backend/{backend}.py")
+            with open(backend_tpl, 'r') as f:
+                backends.append(f.read())
+            output = triton_tpl.render(backends=backends, top_level=True)
+            with open (model_file, 'w') as o:
+                o.write(output)
+
     else:
         raise Exception("Not implemented")
 
@@ -221,6 +217,33 @@ def build_server(server_type, api_schema, config, output_dir):
         api_schema, output=output_file, output_model_type=data_generator.DataModelType.PydanticV2BaseModel
     )
 
+def generate_configuration(config, tree):
+    def encode_templates(templates):
+        encoded_templates = dict()
+        for key, value in templates.items():
+            # these are json templates and need be encoded before being embeded as yaml strings
+            encoded_templates[key] = base64.b64encode(value.encode())
+        return encoded_templates
+    # base64 encode the templates
+    input_templates = None
+    output_templates = None
+    try:
+        input_templates = config.io_map.input.templates
+        output_templates = config.io_map.output.templates
+    except ConfigKeyError:
+        pass
+    if input_templates:
+        config.io_map.input.templates = encode_templates(input_templates)
+    if output_templates:
+        config.io_map.output.templates = encode_templates(output_templates)
+    # generate from the template
+    tpl_dir = get_resource_path("templates")
+    jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
+    config_tpl = jinja_env.get_template('common/config.jinja.py')
+    output = config_tpl.render(config=OmegaConf.to_yaml(config))
+    with open(tree/"config.py", 'w') as f:
+        f.write(output)
+
 def main(args):
     config = OmegaConf.load(args.config)
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -230,13 +253,14 @@ def main(args):
             api_schema = f.read()
         build_server(args.server_type, api_schema, config, tree)
         build_inference(args.server_type, config, tree/"model_repo")
+        generate_configuration(config, tree)
         if not args.exclude_lib :
             copy_files(get_resource_path("lib"), tree/"lib")
         if args.custom_module:
             build_custom_modules(args.custom_module, tree)
         if args.tar_output:
-            target = Path(args.output_dir).resolve() / f"{config.name}.zip"
-            create_tar_gz(f"{config.name}.tgz", tree)
+            target = Path(args.output_dir).resolve() / f"{config.name}.tgz"
+            create_tar_gz(target, tree)
         else:
             try:
                 target = Path(args.output_dir).resolve() / config.name

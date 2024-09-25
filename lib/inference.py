@@ -7,7 +7,7 @@ import tempfile
 from abc import ABC, abstractmethod
 from typing import Callable
 import uuid
-from common.config import global_config
+from config import global_config
 from .utils import get_logger
 import custom
 import transformers
@@ -145,6 +145,9 @@ class DataFlow:
 
 class ModelBackend(ABC):
     """Interface for standardizing the model backend """
+    def __init__(self, model_config: Dict):
+        self._model_config = model_config
+
     @abstractmethod
     def __call__(self, *args, **kwargs):
         raise Exception("Not Implemented")

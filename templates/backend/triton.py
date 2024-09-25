@@ -1,0 +1,78 @@
+
+class TritonBackend(ModelBackend):
+    """Triton Python Backend"""
+    def __init__(self, model_config: Dict):
+        logger.debug(f"model_config: {model_config}")
+        super().__init__(model_config)
+        self._model_name = model_config["name"]
+        self._input_names = [i['name'] for i in model_config['input']]
+        self._output_names = [o['name'] for o in model_config['output']]
+        logger.debug(f"TritonBackend created for {self._model_name} with inputs {self._input_names} and outputs {self._output_names}")
+
+    def __call__(self, *args, **kwargs):
+        logger.debug(f"TritonBackend {self._model_name} triggered with {args if args else kwargs}")
+        in_data_list = args if args else [kwargs]
+        input_config = self._model_config["input"]
+        # to determine if we need to stack the input, TODO: below logic needs be more generic
+        need_stack = False
+        for in_data in in_data_list:
+            for key, value in in_data.items():
+                input_config = next((i for i in self._model_config["input"] if i['name'] == key), None)
+                if input_config is None:
+                    logger.error(f"Unexpected input: {key}")
+                    continue
+                expected_dims = len(input_config["dims"])
+                if expected_dims == len(value.shape) + 1:
+                    need_stack = True
+                    break
+        if need_stack:
+            in_data_list = [stack_tensors_in_dict(in_data_list)]
+        for in_data in in_data_list:
+            tensors = []
+            for k in in_data:
+                tensor = in_data[k]
+                batched = "max_batch_size" in self._model_config and self._model_config["max_batch_size"] > 0
+                if isinstance(tensor, np.ndarray):
+                    tensor = pb_utils.Tensor(k, np.expand_dims(tensor, 0)) if batched else pb_utils.Tensor(k, tensor)
+                elif isinstance(tensor, torch.Tensor):
+                    if batched:
+                        tensor = tensor.unsqueeze(0)
+                    tensor = pb_utils.Tensor.from_dlpack(k, torch.utils.dlpack.to_dlpack(tensor))
+                elif hasattr(tensor, "__dlpack__") and hasattr(tensor, "__dlpack_device__"):
+                    tensor = pb_utils.Tensor.from_dlpack(k, tensor)
+                else:
+                    yield Error(message="Unsupported input tensor format")
+                    return
+                tensors.append(tensor)
+
+            llm_request = pb_utils.InferenceRequest(
+                model_name = self._model_name,
+                requested_output_names = self._output_names,
+                inputs = tensors
+            )
+            finish_reason = "done"
+            for idx, response in enumerate(llm_request.exec(decoupled=True)):
+                expected = {n: None for n in self._output_names}
+                if response.has_error():
+                    yield Error(message=f"{response.error().message()}, stream_id={idx}")
+                if not response.output_tensors():
+                    continue
+                for name in expected:
+                    config = next((c for c in self._model_config['output'] if c['name'] == name), None)
+                    dims = config['dims']
+                    output = pb_utils.get_output_tensor_by_name(response, name)
+                    if not output:
+                        continue
+                    if pb_utils.Tensor.is_cpu(output):
+                        tensor = output.as_numpy()
+                        if tensor.size != 0:
+                            expected[name] = np.squeeze(tensor, 0) if len(tensor.shape) == (len(dims)+1) else tensor
+                    else:
+                        tensor = torch.utils.dlpack.from_dlpack(output.to_dlpack())
+                        if tensor.numel() != 0:
+                            expected[name] = torch.squeeze(tensor, 0) if len(tensor.shape) == (len(dims)+1) else tensor
+                logger.debug(f"TritonBackend saved inference results to: {expected}")
+                if all([expected[k] is not None for k in expected]):
+                    yield expected
+        yield Stop(finish_reason)
+        logger.info(f"Infernece with TritonBackend {self._model_name} accomplished")
