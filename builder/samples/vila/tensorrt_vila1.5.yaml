@@ -79,7 +79,7 @@ io_map:
 # list of model specifications for inference
 models:
   - name: "vila1.5-13b"
-    backend: "tensorrtllm"
+    backend: "triton/tensorrtllm"
     max_batch_size: 8
     model_transaction_policy:
       decoupled: True

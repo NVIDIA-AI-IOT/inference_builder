@@ -13,7 +13,7 @@
             "justMyCode": false,
             "args": [
                 "--output-dir",
-                "${workspaceFolder}/builder/samples/vila",
+                "${workspaceFolder}/builder/samples/",
                 "--custom-module",
                 "${workspaceFolder}/builder/samples/vila/processors.py",
                 "--api-spec",

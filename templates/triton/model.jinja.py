@@ -49,8 +49,10 @@ class TritonPythonModel(InferenceBase):
             model_config = next((m for m in global_config.models if m.name == operator.model_name), None)
             backend_spec = model_config.backend.split('/')
             backend_instance = None
-            if len(backend_spec) == 3 and backend_spec[0] == 'triton' and backend_spec[1] == 'python':
+            if backend_spec[0] == 'triton':
                 backend_instance = TritonBackend(model_config=OmegaConf.to_container(model_config))
+            if backend_instance is None:
+                raise Exception(f"Unable to create backend {model_config.backend}")
             self._submit(operator, backend_instance)
         # post processing:
         self._processors = []

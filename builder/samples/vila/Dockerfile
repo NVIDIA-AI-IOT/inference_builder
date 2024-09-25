@@ -150,13 +150,14 @@ RUN rm -rf /usr/local/nvm/versions/node \
 ENV CHECKPOINTS_DIR=/workspace/checkpoints
 ENV NVCF_METER_EVENT=AIPlayground_Inference
 
-ADD ./common /workspace/common
+
 ADD ./lib /workspace/lib
 ADD ./custom /workspace/custom
 ADD ./model_repo /workspace/model_repo
 ADD ./server_run.sh /workspace/
 ADD ./api.py /workspace/
 ADD ./data_model.py /workspace/
+ADD ./config.py /workspace/
 
 
 ENV PYTHONPATH="/workspace/VILA:/workspace:${PYTHONPATH}"
