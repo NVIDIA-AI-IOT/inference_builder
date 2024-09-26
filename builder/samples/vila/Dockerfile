@@ -155,7 +155,7 @@ ADD ./lib /workspace/lib
 ADD ./custom /workspace/custom
 ADD ./model_repo /workspace/model_repo
 ADD ./server_run.sh /workspace/
-ADD ./api.py /workspace/
+ADD ./inference.py /workspace/
 ADD ./data_model.py /workspace/
 
 

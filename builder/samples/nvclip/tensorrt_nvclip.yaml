@@ -26,39 +26,43 @@ output:
   - name: "num_images"
     data_type: TYPE_INT32
     dims: [ 1 ]
-io_map:
-  input:
-    templates:
-      # root template for generating input json from the request
-      EmbeddingsRequest: >
-        {
-          "text": [
-            {% set text_items = request.input | reject('startswith', 'data:image') | list %}
-            {% for item in text_items %}
-              {{ item|tojson }}{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          ],
-          "image": [
-            {% set image_items = request.input | select('startswith', 'data:image') | map('remove_prefix', 'data:image/png;base64,') | list %}
-            {% for item in image_items %}
-              {{ item|tojson }}{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          ],
-          "indices": [
-            {% for item in request.input %}
-              "{{ 'image' if item.startswith('data:image') else 'text' }}"{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          ]
-        }
-  output:
-    templates:
-      EmbeddingsResponse: >
-        {
-          "data": [{% for item in response.embeddings %} {"index": {{ loop.index }}, "embedding": {{ item|tojson }}, "object": "embedding"}{% if not loop.last %}, {% endif %}{% endfor %}],
-          "usage": { "num_images": {{ response.num_images }}, "prompt_tokens": {{ response.total_tokens }}, "total_tokens": {{ response.total_tokens }}},
-          "model": "nvidia/nvclip-vit-h-14",
-          "object": "list"
-        }
+
+server:
+  endpoints:
+    health:
+      path: "/health/live"
+    infer:
+      path: "/v1/embeddings"
+      requests:
+        # root template for generating input json from the request
+        EmbeddingsRequest: >
+          {
+            "text": [
+              {% set text_items = request.input | reject('startswith', 'data:image') | list %}
+              {% for item in text_items %}
+                {{ item|tojson }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            ],
+            "image": [
+              {% set image_items = request.input | select('startswith', 'data:image') | map('remove_prefix', 'data:image/png;base64,') | list %}
+              {% for item in image_items %}
+                {{ item|tojson }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            ],
+            "indices": [
+              {% for item in request.input %}
+                "{{ 'image' if item.startswith('data:image') else 'text' }}"{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            ]
+          }
+      responses:
+        EmbeddingsResponse: >
+          {
+            "data": [{% for item in response.embeddings %} {"index": {{ loop.index }}, "embedding": {{ item|tojson }}, "object": "embedding"}{% if not loop.last %}, {% endif %}{% endfor %}],
+            "usage": { "num_images": {{ response.num_images }}, "prompt_tokens": {{ response.total_tokens }}, "total_tokens": {{ response.total_tokens }}},
+            "model": "nvidia/nvclip-vit-h-14",
+            "object": "list"
+          }
 
 # list of model specifications for inference
 models:

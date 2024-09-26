@@ -28,52 +28,51 @@ output:
     dims: [ -1 ]
 
 # top level data map from server to inference and vice versa
-io_map:
-  input:
-    templates:
+server:
+  endpoints:
+    health:
+      path: /health/live
+    infer:
+      path: /inference
+      requests:
       # root template for generating input json from the request
-      ChatRequest: >
-        {
-          "prompt": [{% for item in request.messages %}{% if item.role == "user" %}{{ item.content|tojson }}{% if not loop.last %},{% endif %}{% endif %}{% endfor %}],
-          "runtime_top_p": {{ request.top_p }},
-          "request_output_len": {{ request.max_tokens }},
-          "temperature": {{ request.temperature }},
-          "images": [],
-          "streaming": true
-        }
-      # optional templates for fields
-      prompt: "{% for prompt in data %}{{ prompt }}\n{% endfor %}"
-    # optional filters for filtering each field with regex
-    filters:
-      prompt: ['(?P<src_base64_tag><img\ssrc=\"data:image\/(?P<extension>[^;]*);base64,(?P<base64str>[^\"]*)\".*?\/>)', '-', '', 'images']
-  output:
-    templates:
-      # root template for formulating responses
-      ChatCompletion: >
-        {
-          "id": "{{ request._id }}",
-          "choices":
-            [
-              {
-                "index": 0,
-                "message": { "role": "assistant", "content": {{ response.text|tojson }} },
-                "finish_reason": "stop"
-              }
-            ],
-          "usage": {"completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0}
-        }
-      ChatCompletionChunk: >
-        {
-          "id": "{{ request._id }}",
-          "choices":
-            [
-              {
-                "index": 0,
-                "delta": { "role": "assistant", "content": {{ response.text[0]|tojson }} },
-                "finish_reason": "stop"
-              }
-            ]
-        }
+        ChatRequest: >
+          {
+            "prompt": {% for item in request.messages %}{% if item.role == "user" %}{{ item.content|tojson }}{% if not loop.last %}\n{% endif %}{% endif %}{% endfor %},
+            "runtime_top_p": {{ request.top_p }},
+            "request_output_len": {{ request.max_tokens }},
+            "temperature": {{ request.temperature }},
+            "images": [],
+            "streaming": true
+          }
+      # optional filters for filtering each field with regex
+        prompt: ['(?P<src_base64_tag><img\ssrc=\"data:image\/(?P<extension>[^;]*);base64,(?P<base64str>[^\"]*)\".*?\/>)', '-', '', 'images']
+      responses:
+        ChatCompletion: >
+          {
+            "id": "{{ request._id }}",
+            "choices":
+              [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": {{ response.text|tojson }} },
+                  "finish_reason": "stop"
+                }
+              ],
+            "usage": {"completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0}
+          }
+        ChatCompletionChunk: >
+          {
+            "id": "{{ request._id }}",
+            "choices":
+              [
+                {
+                  "index": 0,
+                  "delta": { "role": "assistant", "content": {{ response.text[0]|tojson }} },
+                  "finish_reason": "stop"
+                }
+              ]
+          }
 
 
 # list of model specifications for inference

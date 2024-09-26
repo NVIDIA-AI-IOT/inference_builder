@@ -8,7 +8,7 @@ from omegaconf import OmegaConf
 import cookiecutter.main
 import cookiecutter
 import logging
-from typing import List
+from typing import Dict, List
 from pathlib import Path
 import datamodel_code_generator as data_generator
 import semver
@@ -71,43 +71,10 @@ def build_args(parser):
     parser.add_argument("config", type=str, help="Path the the configuration")
 
 def build_tree(server_type, config, temp_dir):
-    def encode_templates(templates):
-        encoded_templates = dict()
-        for key, value in templates.items():
-            # these are json templates and need be encoded before being embeded as yaml strings
-            encoded_templates[key] = base64.b64encode(value.encode())
-        return encoded_templates
-
-    input_templates = None
-    output_templates = None
-    request_classes = []
-    response_classes = []
-    try:
-        input_templates = config.io_map.input.templates
-        output_templates = config.io_map.output.templates
-    except ConfigKeyError:
-        pass
-    if input_templates:
-        request_classes = [k for k in config.io_map.input.templates]
-    if output_templates:
-        response_classes = [k for k in config.io_map.output.templates]
-    ep = OmegaConf.to_container(config.endpoints)
-    user_context = {
-            "service_name": config.name,
-            "endpoints": ep
-    }
-    if request_classes:
-        user_context["request_class"] = request_classes[0]
-    if len(response_classes) == 1:
-        user_context["response_class"] = response_classes[0]
-        user_context["streaming_response_class"] = response_classes[0]
-    elif len(response_classes) == 2:
-        user_context["response_class"] = response_classes[0]
-        user_context["streaming_response_class"] = response_classes[1]
     cookiecutter.main.cookiecutter(
         get_resource_path(f"builder/boilerplates/{server_type}"),
         no_input=True,
-        extra_context=user_context,
+        extra_context={"service_name": config.name},
         output_dir=temp_dir)
     return Path(temp_dir) / Path(config.name)
 
@@ -155,8 +122,6 @@ def build_custom_modules(custom_modules: List, tree):
     output = custom_tpl.render(classes=cls_list)
     with open(tree/"__init__.py", 'w') as f:
         f.write(output)
-
-
 
 def build_inference(server_type, config, model_repo_dir: Path):
     tpl_dir = get_resource_path("templates")
@@ -210,32 +175,59 @@ def build_inference(server_type, config, model_repo_dir: Path):
         raise Exception("Not implemented")
 
 
-def build_server(server_type, api_schema, config, output_dir):
+def build_server(server_type, model_name, api_schema, config: Dict, output_dir):
     # generate pydantic data models from swagger spec
     output_file = output_dir / "data_model.py"
     data_generator.generate(
         api_schema, output=output_file, output_model_type=data_generator.DataModelType.PydanticV2BaseModel
     )
+    # generate the server
+    tpl_dir = get_resource_path("templates")
+    jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
+    if server_type == 'triton':
+        svr_tpl = jinja_env.get_template('api_server/triton.jinja.py')
+    else:
+        raise Exception(f"Unsupported server type: {server_type}")
+
+    endpoints = { e: v['path'] for e, v in config["endpoints"].items() }
+    if 'infer' not in endpoints:
+        raise Exception("Server configuration must contain infer endpoint")
+
+    req_cls = [k for k in config["endpoints"]["infer"]["requests"]]
+    res_cls = [k for k in config["endpoints"]["infer"]["responses"]]
+    output = svr_tpl.render(
+        service_name=model_name,
+        request_class=req_cls[0],
+        response_class=res_cls[0],
+        streaming_response_class=res_cls[0] if len(res_cls) < 2 else res_cls[1],
+        endpoints=endpoints
+    )
+    with open(output_dir/"inference.py", 'w') as f:
+        f.write(output)
+
 
 def generate_configuration(config, tree):
     def encode_templates(templates):
         encoded_templates = dict()
         for key, value in templates.items():
             # these are json templates and need be encoded before being embeded as yaml strings
-            encoded_templates[key] = base64.b64encode(value.encode())
+            if isinstance(value, str):
+                encoded_templates[key] = base64.b64encode(value.encode())
+            else:
+                encoded_templates[key] = value
         return encoded_templates
     # base64 encode the templates
     input_templates = None
     output_templates = None
     try:
-        input_templates = config.io_map.input.templates
-        output_templates = config.io_map.output.templates
+        input_templates = config.server.endpoints.infer.requests
+        output_templates = config.server.endpoints.infer.responses
     except ConfigKeyError:
         pass
     if input_templates:
-        config.io_map.input.templates = encode_templates(input_templates)
+        config.server.endpoints.infer.requests = encode_templates(input_templates)
     if output_templates:
-        config.io_map.output.templates = encode_templates(output_templates)
+        config.server.endpoints.infer.responses = encode_templates(output_templates)
     # generate from the template
     tpl_dir = get_resource_path("templates")
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
@@ -251,7 +243,7 @@ def main(args):
         api_schema = None
         with args.api_spec as f:
             api_schema = f.read()
-        build_server(args.server_type, api_schema, config, tree)
+        build_server(args.server_type, config.name, api_schema, OmegaConf.to_container(config.server), tree)
         build_inference(args.server_type, config, tree/"model_repo")
         generate_configuration(config, tree)
         if not args.exclude_lib :

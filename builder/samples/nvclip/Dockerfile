@@ -134,7 +134,7 @@ RUN touch $NIM_DIR_PATH/start_server.sh && \
 
 	# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 	# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
-    python3 /opt/nim/api.py & tritonserver --model-repository=/opt/nim/model_repo
+    python3 /opt/nim/inference.py & tritonserver --model-repository=/opt/nim/model_repo
 #    while true; do sleep 5; done
 EOF
 
