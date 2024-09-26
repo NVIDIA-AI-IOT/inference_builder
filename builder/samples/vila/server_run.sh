@@ -58,7 +58,7 @@ export WORLD_SIZE=$world_size
 
 if [ $world_size -eq 1 ]; then
     command="tritonserver --model-repository=/workspace/model_repo --exit-timeout-secs=2 --http-header-forward-pattern '.*' --grpc-header-forward-pattern '.*' --log-verbose=$TRITION_VERBOSE --log-warning=true --log-error=true --log-info=true"
-    python3 api.py & eval "$command"
+    python3 inference.py & eval "$command"
 else
     command='mpirun --allow-run-as-root'
     for i in $(seq 0 "$(($world_size-1))"); do

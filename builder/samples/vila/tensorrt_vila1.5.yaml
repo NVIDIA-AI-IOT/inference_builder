@@ -38,7 +38,7 @@ server:
       # root template for generating input json from the request
         ChatRequest: >
           {
-            "prompt": {% for item in request.messages %}{% if item.role == "user" %}{{ item.content|tojson }}{% if not loop.last %}\n{% endif %}{% endif %}{% endfor %},
+            "prompt": {% for item in request.messages %}{% if item.role == "user" %}{{ (item.content+"\n")|tojson }}{% endif %}{% endfor %},
             "runtime_top_p": {{ request.top_p }},
             "request_output_len": {{ request.max_tokens }},
             "temperature": {{ request.temperature }},
