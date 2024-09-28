@@ -44,7 +44,7 @@ server:
               {% endfor %}
             ],
             "image": [
-              {% set image_items = request.input | select('startswith', 'data:image') | map('remove_prefix', 'data:image/png;base64,') | list %}
+              {% set image_items = request.input | select('startswith', 'data:image') | map('replace', 'data:image\/[a-zA-Z0-9.+-]+;base64,', '') | list %}
               {% for item in image_items %}
                 {{ item|tojson }}{% if not loop.last %}, {% endif %}
               {% endfor %}

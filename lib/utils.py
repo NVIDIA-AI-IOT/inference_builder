@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import logging
 import time
@@ -6,6 +7,7 @@ from typing import Optional
 import importlib
 import numpy as np
 import torch
+import jinja2
 
 kDebug = int(os.getenv("DEBUG", "0"))
 PACKAGE_NAME = "NIM"
@@ -37,6 +39,19 @@ def import_class(module_name, class_name):
     class_ = getattr(module, class_name)
 
     return class_
+
+def create_jinja2_env():
+    def start_with(field, s):
+        return field.startswith(s)
+
+    def replace(value, pattern, text):
+        return re.sub(pattern, text, value)
+
+    jinja2_env = jinja2.Environment()
+    jinja2_env.tests["startswith"] = start_with
+    jinja2_env.filters["replace"] = replace
+
+    return jinja2_env
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
     """ Get component logger

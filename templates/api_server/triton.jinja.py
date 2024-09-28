@@ -4,7 +4,7 @@ from typing import Dict, Optional, List, Union
 import numpy as np
 from inferencemodeltoolkit.interfaces.fastapi import FastApiTritonInterface
 import data_model
-from lib.utils import get_logger
+from lib.utils import get_logger, create_jinja2_env
 from config import global_config
 from omegaconf.errors import ConfigKeyError
 from jinja2 import Environment
@@ -13,17 +13,7 @@ from omegaconf import OmegaConf
 
 logger = get_logger(__name__)
 
-def start_with(field, s):
-    return field.startswith(s)
-
-def remove_prefix(value, prefix):
-    if value.startswith(prefix):
-        return value[len(prefix):]
-    return value
-
-jinja2_env = Environment()
-jinja2_env.tests["startswith"] = start_with
-jinja2_env.filters["remove_prefix"] = remove_prefix
+jinja2_env = create_jinja2_env()
 
 class Interface(FastApiTritonInterface):
     def process_request(

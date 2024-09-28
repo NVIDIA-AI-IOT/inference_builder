@@ -24,5 +24,7 @@ dependencies:
     - name: "onnxruntime-gpu"
       version: "1.19.2"
       extra_installer_args: --extra-index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/
+    - name: "omegaconf"
+      version: "2.3.0"
   deb:
     - name: "libnvinfer-bin"

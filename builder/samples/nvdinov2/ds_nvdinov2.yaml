@@ -1,0 +1,55 @@
+name: "nvdinov2"
+
+input:
+- name: image
+  data_type: TYPE_CUSTOM_IMAGE_BASE64
+  dims: [ -1 ]
+  optional: false
+
+output:
+- name: probabilities
+  data_type: TYPE_FLOAT32
+  dims: [ -1 ]
+
+server:
+  endpoints:
+    health:
+      path: /health/live
+    infer:
+      path: /v1/embeddings
+      requests:
+        EmbeddingsRequest: >
+          {
+            "image": [
+              {% set image_items = request.input if request.input is iterable else [request.input] %}
+              {% for item in image_items %}
+                {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            ]
+          }
+      responses:
+        EmbeddingsResponse: >
+          {
+            "data": [{% for item in response.probabilities %} {"index": {{ loop.index }}, "embedding": {{ item|tojson }}, "object": "embedding"}{% if not loop.last %}, {% endif %}{% endfor %}],
+            "usage": { "num_images": 1},
+            "model": "nvidia/nvdinov2-vit-g",
+            "object": "list"
+          }
+
+models:
+- name: nvdinov2-ds
+  backend: deepstream/nvinferserver
+  max_batch_size: 1
+  input:
+  - name: image
+    data_type: TYPE_UINT8
+    dims: [ 224, 224, 3]
+  output:
+  - name: probs
+    data_type: TYPE_FLOAT32
+    dims: [ -1 ]
+  parameters:
+    infer_config_path: config_inferserver_nvdinov2.txt
+routes:
+  :["image"]: nvdinov2
+  nvdinov2: :["probabilities"]

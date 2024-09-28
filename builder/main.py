@@ -19,7 +19,7 @@ from jinja2 import Environment, FileSystemLoader
 import ast
 import os
 
-ALLOWED_SERVER = ["triton"]
+ALLOWED_SERVER = ["triton", "fastapi"]
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Main")
@@ -82,7 +82,6 @@ def build_custom_modules(custom_modules: List, tree):
     cls_list = []
     tpl_dir = get_resource_path("templates")
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
-    os.mkdir(tree/"custom")
     tree = tree / "custom"
     for m in custom_modules:
         filename = os.path.basename(m.name)
@@ -123,11 +122,12 @@ def build_custom_modules(custom_modules: List, tree):
     with open(tree/"__init__.py", 'w') as f:
         f.write(output)
 
-def build_inference(server_type, config, model_repo_dir: Path):
+def build_inference(server_type, config, output_dir: Path):
     tpl_dir = get_resource_path("templates")
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
 
     if server_type == "triton":
+        model_repo_dir = output_dir/'model_repo'
         # first build the top level model
         triton_tpl = jinja_env.get_template("triton/model.jinja.py")
         t_backends = []
@@ -170,9 +170,21 @@ def build_inference(server_type, config, model_repo_dir: Path):
             output = triton_tpl.render(backends=backends, top_level=True)
             with open (model_file, 'w') as o:
                 o.write(output)
-
     else:
-        raise Exception("Not implemented")
+        # use generic inference flow
+        backends = []
+        for backend in [m.backend for m in config.models]:
+            backend_spec = backend.split('/')
+            backend_name = backend_spec[0]
+            backend_tpl = get_resource_path(f"templates/backend/{backend_name}.py")
+            with open(backend_tpl, 'r') as f:
+                backends.append(f.read())
+        generic_tpl = jinja_env.get_template("generic/model.jinja.py")
+        output = generic_tpl.render(backends=backends)
+        model_file = output_dir/"model.py"
+        with open (model_file, 'w') as o:
+            o.write(output)
+
 
 
 def build_server(server_type, model_name, api_schema, config: Dict, output_dir):
@@ -184,11 +196,7 @@ def build_server(server_type, model_name, api_schema, config: Dict, output_dir):
     # generate the server
     tpl_dir = get_resource_path("templates")
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
-    if server_type == 'triton':
-        svr_tpl = jinja_env.get_template('api_server/triton.jinja.py')
-    else:
-        raise Exception(f"Unsupported server type: {server_type}")
-
+    svr_tpl = jinja_env.get_template(f"api_server/{server_type}.jinja.py")
     endpoints = { e: v['path'] for e, v in config["endpoints"].items() }
     if 'infer' not in endpoints:
         raise Exception("Server configuration must contain infer endpoint")
@@ -244,7 +252,7 @@ def main(args):
         with args.api_spec as f:
             api_schema = f.read()
         build_server(args.server_type, config.name, api_schema, OmegaConf.to_container(config.server), tree)
-        build_inference(args.server_type, config, tree/"model_repo")
+        build_inference(args.server_type, config, tree)
         generate_configuration(config, tree)
         if not args.exclude_lib :
             copy_files(get_resource_path("lib"), tree/"lib")

@@ -3,11 +3,15 @@ from polygraphy.backend.trt import EngineFromBytes, TrtRunner
 
 class PolygraphBackend(ModelBackend):
     """Python TensorRT Backend from polygraph"""
-    def __init__(self, model_name:str, output_names: List[str], engine_file: str, device_id: int=0):
-        self._model_name = model_name
-        self._output_names = output_names
+    def __init__(self, model_config:Dict, device_id: int=0):
+        super().__init__(model_config)
+        self._model_name = model_config["name"]
+        self._output_names = [o['name'] for o in model_config['output']]
         self._device_id = device_id
-        logger.debug(f"PolygraphBackend created for {model_name} to generate {self._output_names}")
+        logger.debug(f"PolygraphBackend created for {self._model_name} to generate {self._output_names}")
+        if "tensorrt_engine" not in model_config:
+            raise("PolygraphBackend requires a path to tensorrt_engine")
+        engine_file = model_config["tensorrt_engine"]
         engine = EngineFromBytes(BytesFromPath(engine_file))
         self._trt_runner = TrtRunner(engine)
         self._trt_runner.activate()

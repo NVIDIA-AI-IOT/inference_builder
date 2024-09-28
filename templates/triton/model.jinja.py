@@ -196,8 +196,10 @@ class TritonPythonModel:
         self._device_id = int(json.loads(args["model_instance_device_id"]))
         # default model path
         engine_path = os.path.join(self._model_repo, "1", "model.plan")
-        if hasattr(model_config, "tensorrt_engine"):
-            engine_path = os.path.join(CHECKPOINTS_DIR, model_config.tensorrt_engine)
+        if "tensorrt_engine" in self._model_config:
+            self._model_config["tensorrt_engine"] = os.path.join(CHECKPOINTS_DIR, self._model_config["tensorrt_engine"])
+        else:
+            self._model_config["tensorrt_engine"] = engine_path
         # create backend
         BackendClass = None
         backend_spec = model_config.backend.split('/')
@@ -206,7 +208,7 @@ class TritonPythonModel:
         elif backend_spec[-1]  == "polygraphy":
             BackendClass = PolygraphBackend
         if BackendClass is not None:
-            self._model_backend = BackendClass(model_name, [k for k in self._out_config], engine_path, self._device_id)
+            self._model_backend = BackendClass(self._model_config, self._device_id)
         else:
             raise Exception(f"Backend not supported: {model_config.backend}")
 

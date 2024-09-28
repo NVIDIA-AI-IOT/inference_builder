@@ -58,3 +58,29 @@ services:
               capabilities: [gpu]
     environment:
       NGC_API_KEY: ""
+  nim-nvdinov2:
+    user: nvs:1000
+    build:
+      context: nvdinov2
+      target: nim_final
+      dockerfile: Dockerfile
+    image: nim-nvdinov2
+    volumes:
+      - '~/.cache/nim:/opt/nim/.cache'
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              #count: 1
+              device_ids: ['0']
+              capabilities: [gpu]
+    environment:
+      NIM_MANIFEST_PROFILE: genericx1_0.0.2
+      DEBUG: 1
+      GST_DEBUG: "*:2"
+      NGC_API_KEY: "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"

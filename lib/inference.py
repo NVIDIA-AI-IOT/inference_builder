@@ -152,6 +152,9 @@ class ModelBackend(ABC):
     def __call__(self, *args, **kwargs):
         raise Exception("Not Implemented")
 
+    def stop(self):
+        logger.info(f'Backend for {self._model_config["name"]} stopped')
+
 class Tokenizer:
     def __init__(self, config: Dict, check_point_dir, model_path: str):
         self._type = config['type'] if "type" in config else 'auto'
