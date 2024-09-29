@@ -81,6 +81,6 @@ services:
               capabilities: [gpu]
     environment:
       NIM_MANIFEST_PROFILE: genericx1_0.0.2
-      DEBUG: 1
-      GST_DEBUG: "*:2"
-      NGC_API_KEY: "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"
+#      DEBUG: 1
+#      GST_DEBUG: "*:3"
+      NGC_API_KEY: ""

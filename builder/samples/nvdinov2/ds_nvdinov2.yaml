@@ -30,7 +30,7 @@ server:
       responses:
         EmbeddingsResponse: >
           {
-            "data": [{% for item in response.probabilities %} {"index": {{ loop.index }}, "embedding": {{ item|tojson }}, "object": "embedding"}{% if not loop.last %}, {% endif %}{% endfor %}],
+            "data": [{"index": 0, "embedding": [{% for item in response.probabilities %} {{item}} {% if not loop.last %}, {% endif %}{% endfor %}], "object": "embedding"}],
             "usage": { "num_images": 1},
             "model": "nvidia/nvdinov2-vit-g",
             "object": "list"
@@ -51,5 +51,5 @@ models:
   parameters:
     infer_config_path: config_inferserver_nvdinov2.txt
 routes:
-  :["image"]: nvdinov2
-  nvdinov2: :["probabilities"]
+  ':["image"]': 'nvdinov2-ds'
+  'nvdinov2-ds': ':["probabilities"]'

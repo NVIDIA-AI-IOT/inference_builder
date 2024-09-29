@@ -9,6 +9,7 @@ from omegaconf.errors import ConfigKeyError
 import re
 from omegaconf import OmegaConf
 import numpy as np
+import torch
 from typing import Dict
 from lib.utils import create_jinja2_env
 
@@ -79,14 +80,16 @@ class Interface(HttpNIMApiInterface):
         # transform numpy ndarray to universal value types
         for name in response:
             expected_type = type_map[name]
-            if isinstance(response[name], np.ndarray):
+            if isinstance(response[name], np.ndarray) or isinstance(response[name], torch.Tensor):
+                data_type = response[name].dtype
                 l = response[name].tolist()
-                if response[name].dtype != np.string_ and expected_type == "TYPE_STRING":
+                if  data_type != np.string_ and expected_type == "TYPE_STRING":
                     response[name] = ' '.join([i.decode("utf-8", "ignore") for i in l])
                 elif len(response[name].shape) == 1 and len(l) == 1:
                     response[name] = l[0]
                 else:
                     response[name] = l
+
         json_string = jinja2_env.from_string(tpl).render(request=request, response=response)
         return data_model.{{ response_class }}(**json.loads(json_string))
 

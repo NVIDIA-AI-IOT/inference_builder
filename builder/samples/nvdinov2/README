@@ -1,0 +1,13 @@
+Build the NIM inference flow:
+
+cd builder
+python main.py samples/nvdinov2/ds_nvdinov2.yaml --server-type fastapi -a samples/nvdinov2/openapi.yaml -o samples
+
+Build and run the docker image:
+
+docker compose up --build nim-nvdinov2
+
+Test the NIM with a client:
+
+cd builder/samples/nvdinov2
+python tests/nim_client.py --host 127.0.0.1 --port 8800 --file test.jpg

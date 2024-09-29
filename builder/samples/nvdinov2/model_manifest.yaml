@@ -1,0 +1,97 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+#
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+model_profile: "genericx1_0.0.3"
+manifest:
+  # This is the ID of the profile that can be specified with the NIM_MANIFEST_PROFILE environment variable.
+  - id: "genericx1_0.0.3"
+    model: "nvidia/nvdinov2-vit-g"
+    nim_name: "nv-dinov2"
+    release: "v0.0.1"
+    tags:
+      backend: triton
+    workspace:
+      components:
+      - dst: "triton-model-repository"
+        src:
+          repo_id: "nvcr.io/nvstaging/nim/nvdinov2-vit-g:genericx1_0.0.3"
+
+  - id: "a100x1_0.0.1"
+    model: "nvidia/nvdinov2-vit-g"
+    nim_name: "nv-dinov2"
+    release: "v0.0.1"
+    tags:
+      backend: triton
+    workspace:
+      components:
+      - dst: "triton-model-repository"
+        src:
+          repo_id: "nvcr.io/nvstaging/nim/nvdinov2-vit-g:a100x1_0.0.1"
+
+  - id: "h100x1_0.0.1"
+    model: "nvidia/nvdinov2-vit-g"
+    nim_name: "nv-dinov2"
+    release: "v0.0.1"
+    tags:
+      backend: triton
+    workspace:
+      components:
+      - dst: "triton-model-repository"
+        src:
+          repo_id: "nvcr.io/nvstaging/nim/nvdinov2-vit-g:h100x1_0.0.1"
+
+
+  - id: "a6000x1_0.0.1"
+    model: "nvidia/nvdinov2-vit-g"
+    nim_name: "nv-dinov2"
+    release: "v0.0.1"
+    tags:
+      backend: triton
+    workspace:
+      components:
+      - dst: "triton-model-repository"
+        src:
+          repo_id: "nvcr.io/nvstaging/nim/nvdinov2-vit-g:a6000x1_0.0.1"
+
+  - id: "l40sx1_0.0.1"
+    model: "nvidia/nvdinov2-vit-g"
+    nim_name: "nv-dinov2"
+    release: "v0.0.1"
+    tags:
+      backend: triton
+    workspace:
+      components:
+      - dst: "triton-model-repository"
+        src:
+          repo_id: "nvcr.io/nvstaging/nim/nvdinov2-vit-g:l40sx1_0.0.1"
+
+  - id: "a10gx1_0.0.1"
+    model: "nvidia/nvdinov2-vit-g"
+    nim_name: "nv-dinov2"
+    release: "v0.0.1"
+    tags:
+      backend: triton
+    workspace:
+      components:
+      - dst: "triton-model-repository"
+        src:
+          repo_id: "nvcr.io/nvstaging/nim/nvdinov2-vit-g:a10gx1_0.0.1"
+
+  - id: "4090x1_0.0.1"
+    model: "nvidia/nvdinov2-vit-g"
+    nim_name: "nv-dinov2"
+    release: "v0.0.1"
+    tags:
+      backend: triton
+    workspace:
+      components:
+      - dst: "triton-model-repository"
+        src:
+          repo_id: "nvcr.io/nvstaging/nim/nvdinov2-vit-g:l40x1_0.0.1"

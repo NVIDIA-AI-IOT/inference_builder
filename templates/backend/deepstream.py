@@ -13,14 +13,18 @@ class TensorInput(BufferProvider):
         self.device = 'gpu'
         self._queue = Queue()
 
-    def handle_metadata(self, batch_meta):
-        result = dict()
-        for frame_meta in batch_meta.frame_items:
-            for user_meta in frame_meta.tensor_items:
-                for n, tensor in user_meta.as_tensor_output().get_layers().items():
-                    tensor = torch.utils.dlpack.from_dlpack(tensor.clone()).to('cpu')
-                    result[n] = tensor
-        self._queue.put(result)
+    def generate(self, size):
+        tensor = self._queue.get()
+        if isinstance(tensor, torch.Tensor):
+            ds_tensor = as_tensor(tensor, "HWC")
+            return ds_tensor.wrap(ColorFormat.RGB)
+        elif isinstance(tensor, Stop):
+            # EOS
+            return Buffer()
+        else:
+            logger.exception("Unexpected input tensor data")
+            return Buffer()
+
 
     def send(self, data):
         self._queue.put(data)
@@ -31,18 +35,13 @@ class TensorOutput(BatchMetadataOperator):
         self._queue = Queue(maxsize=1)
 
     def handle_metadata(self, batch_meta):
+        result = dict()
         for frame_meta in batch_meta.frame_items:
             for user_meta in frame_meta.tensor_items:
                 for n, tensor in user_meta.as_tensor_output().get_layers().items():
-                    print(n)
-                    tensor = tensor.clone()
-                    print(tensor.shape)
-                    print(tensor.strides)
-                    print(tensor.dtype)
-                    print(tensor.size)
                     torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
-                    print(torch_tensor)
-                    self._queue.put(torch_tensor)
+                    result[n] = torch_tensor
+        self._queue.put(result)
 
     def get(self):
         return self._queue.get()

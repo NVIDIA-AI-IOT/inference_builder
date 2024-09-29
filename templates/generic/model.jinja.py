@@ -69,7 +69,7 @@ class GenericInference(InferenceBase):
                     break
 
         logger.info(f"Received request {request}")
-        responses = []
+
         for input in self._inputs:
             # select the tensors for the input
             tensors = {n: request[n] for n in input.in_names}

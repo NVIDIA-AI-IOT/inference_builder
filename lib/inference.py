@@ -92,8 +92,13 @@ class DataFlow:
                 image_id = str(uuid.uuid4())
                 asset_path = os.path.join(temp_dir, image_id)
                 # Shouldn't we decode the bytes directly?
+                if isinstance(image, np.object_):
+                    image = image.decode()
+                elif not isinstance(image, np.str_):
+                    logger.error(f"base64 image must be bytes or string")
+                    continue
                 with open(asset_path, "wb") as f:
-                    f.write(base64.b64decode(image.decode()))
+                    f.write(base64.b64decode(image))
                 frame = MediaExtractor(chunks=[MediaChunk(asset_path)])()[0].get()
                 image_list.append(torch.utils.dlpack.from_dlpack(frame.tensor))
         return image_list
