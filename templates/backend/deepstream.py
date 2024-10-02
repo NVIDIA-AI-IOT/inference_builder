@@ -1,23 +1,22 @@
-from pyservicemaker import Pipeline, Flow, BufferProvider, RenderMode, BatchMetadataOperator, Probe, as_tensor, ColorFormat
+from pyservicemaker import Pipeline, Flow, BufferProvider, Buffer, RenderMode, BatchMetadataOperator, Probe
 from typing import Dict
 from queue import Queue, Empty
 
 class TensorInput(BufferProvider):
 
-    def __init__(self, height, width):
+    def __init__(self, height, width, format):
         super().__init__()
         self.width = width
         self.height = height
-        self.format = "RGB"
+        self.format = format
         self.framerate = 1
-        self.device = 'gpu'
+        self.device = 'cpu'
         self._queue = Queue()
 
     def generate(self, size):
         tensor = self._queue.get()
-        if isinstance(tensor, torch.Tensor):
-            ds_tensor = as_tensor(tensor, "HWC")
-            return ds_tensor.wrap(ColorFormat.RGB)
+        if isinstance(tensor, np.ndarray):
+            return Buffer(tensor.tolist())
         elif isinstance(tensor, Stop):
             # EOS
             return Buffer()
@@ -54,8 +53,6 @@ class DeepstreamBackend(ModelBackend):
         self._output_names = [o['name'] for o in model_config['output']]
         self._device_id = device_id
 
-        if len(model_config['input']) != 1:
-            raise Exception("Deepstream pipeline handles one input")
         dims = model_config['input'][0]['dims']
         d = (dims[1], dims[2]) if dims[0] == 3 else (dims[0], dims[1])
         if "parameters" not in model_config or "infer_config_path" not in model_config["parameters"]:
@@ -64,12 +61,12 @@ class DeepstreamBackend(ModelBackend):
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
         self._tensor_out = TensorOutput()
-        self._tensor_input = TensorInput(d[0], d[1])
+        self._tensor_inputs = [TensorInput(d[0], d[1], 'JPEG')]
         self._pipeline = Pipeline(f"deepstream-{self._model_name}")
 
         # build the inference flow
         flow = Flow(self._pipeline)
-        flow.inject([self._tensor_input]).batch().infer(infer_config_path, with_triton).attach(Probe('tensor_retriver', self._tensor_out)).render(RenderMode.DISCARD, enable_osd=False)
+        flow.inject(self._tensor_inputs).decode().batch().infer(infer_config_path, with_triton).attach(Probe('tensor_retriver', self._tensor_out)).render(RenderMode.DISCARD, enable_osd=False)
         self._pipeline.start()
         logger.debug(f"DeepstreamBackend created for {self._model_name} to generate {self._output_names}")
 
@@ -78,11 +75,20 @@ class DeepstreamBackend(ModelBackend):
         logger.debug(f"DeepstreamBackend {self._model_name} triggerred with  {args if args else kwargs}")
         in_data_list = args if args else [kwargs]
         for item in in_data_list:
+            format = item.pop('format', None)
+            if format is None:
+                yield Error("Format unknown for deepstream pipeline")
             for key in item:
                 tensor = item[key]
-                if not isinstance(tensor, torch.Tensor) or not tensor.is_cuda:
-                    yield Error("Deepstream pipeline only accept GPU tensors")
-            self._tensor_input.send(tensor)
+            format = format.lower()
+            tensor_input = None
+            if format == 'jpg' or format == 'jpeg':
+                tensor_input = next((i for i in self._tensor_inputs if i.format == 'JPEG'), None)
+            elif format == 'png':
+                tensor_input = next((i for i in self._tensor_inputs if i.format == 'PNG'), None)
+            if tensor_input is None:
+                yield Error(f"{format} not supported by deepstream pipline")
+            tensor_input.send(tensor)
             result = self._tensor_out.get()
             if not all([key in result for key in self._output_names]):
                 logger.error(f"Not all the expected output in {self._output_names} are not found in the result")

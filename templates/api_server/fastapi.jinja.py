@@ -79,6 +79,9 @@ class Interface(HttpNIMApiInterface):
 
         # transform numpy ndarray to universal value types
         for name in response:
+            if not name in response:
+                self.logger.error(f"Unexpected output: {name}")
+                continue
             expected_type = type_map[name]
             if isinstance(response[name], np.ndarray) or isinstance(response[name], torch.Tensor):
                 data_type = response[name].dtype

@@ -72,7 +72,7 @@ class GenericInference(InferenceBase):
 
         for input in self._inputs:
             # select the tensors for the input
-            tensors = {n: request[n] for n in input.in_names}
+            tensors = { n: request[n] for n in input.in_names if n in request }
             # the tensors need to be transformed to generic type
             for name in tensors:
                 tensor = tensors[name]

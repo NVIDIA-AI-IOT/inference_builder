@@ -8,11 +8,16 @@ import importlib
 import numpy as np
 import torch
 import jinja2
+from typing import List, Dict
 
 kDebug = int(os.getenv("DEBUG", "0"))
 PACKAGE_NAME = "NIM"
 
-def stack_tensors_in_dict(list_of_tensor_dicts):
+def stack_tensors_in_dict(list_of_tensor_dicts: List):
+    """
+    [{'k1': 'v1', 'k2': 'v2'}, {'k1': 'v3', 'k2': 'v4'}] ->
+    {'k1': ['v1', 'v2'], 'k2': ['v3', 'v4']}
+    """
     result = {}
 
     # Iterate over each dictionary in the list
@@ -28,6 +33,19 @@ def stack_tensors_in_dict(list_of_tensor_dicts):
             result[key] = np.stack(tensor_list, axis=0)
         elif isinstance(tensor_list[0], torch.Tensor):
             result[key] = torch.stack(tensor_list, dim=0)
+
+    return result
+
+def split_tensor_in_dict(dict_of_tensor_list):
+    """
+    {'k1': ['v1', 'v2'], 'k2': ['v3', 'v4']} ->
+    [{'k1': 'v1', 'k2': 'v2'}, {'k1': 'v3', 'k2': 'v4'}]
+    """
+    values = [dict_of_tensor_list[k] for k in dict_of_tensor_list]
+    result = []
+    length = min({len(v) for v in values})
+    for i in range(length):
+        result.append({ k: v[i] for k, v in dict_of_tensor_list.items()})
 
     return result
 
@@ -47,9 +65,14 @@ def create_jinja2_env():
     def replace(value, pattern, text):
         return re.sub(pattern, text, value)
 
+    def extract(value, pattern):
+        match = re.search(pattern, value)
+        return match.group(1) if match else ''
+
     jinja2_env = jinja2.Environment()
     jinja2_env.tests["startswith"] = start_with
     jinja2_env.filters["replace"] = replace
+    jinja2_env.filters["extract"] = extract
 
     return jinja2_env
 

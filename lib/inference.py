@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Callable
 import uuid
 from config import global_config
-from .utils import get_logger
+from .utils import get_logger, split_tensor_in_dict
 import custom
 import transformers
 from omegaconf import OmegaConf
@@ -103,6 +103,17 @@ class DataFlow:
                 image_list.append(torch.utils.dlpack.from_dlpack(frame.tensor))
         return image_list
 
+    def _process_base64_binary(self, inputs: np.ndarray):
+        bytes_list = []
+        for input in inputs:
+            if isinstance(input, np.object_):
+                input = input.decode()
+            elif not isinstance(input, np.str_):
+                logger.error(f"base64 binary must be bytes or string")
+                continue
+            bytes_list.append(np.frombuffer(base64.b64decode(input), dtype=np.uint8))
+        return bytes_list
+
     @property
     def in_names(self):
         return [ i['name'] for i in self._configs]
@@ -121,6 +132,13 @@ class DataFlow:
         if not item:
             self._queue.put(item, timeout=self._timeout)
             return
+        # check data availability
+        for config in self._configs:
+            name = config["name"]
+            optional = "optional" in config and config["optional"]
+            if name not in item and not optional:
+                logger.error(f"{name} is not optional and not found!")
+                return
         # collect data and put to the queue
         collected = dict()
         for name in item:
@@ -136,6 +154,8 @@ class DataFlow:
                 logger.debug(f"Processing custom type: {data_type}")
                 if data_type == "TYPE_CUSTOM_IMAGE_BASE64":
                     tensor = self._process_base64_image(tensor)
+                elif data_type == "TYPE_CUSTOM_BINARY_BASE64":
+                    tensor = self._process_base64_binary(tensor)
             collected[o_name] = tensor
 
         self._queue.put(collected, timeout=self._timeout)
@@ -337,14 +357,9 @@ class ModelOperator:
                     tokenized = self._tokenizer.encode(*msg_str)
                     o_key = self._tokenizer.encoder_config[1]
                     kwargs[o_key] = np.array(tokenized[o_key])
-                if all([isinstance(v, list) for _, v in kwargs.items()]):
+                if any([isinstance(v, list) for _, v in kwargs.items()]):
                     # construct multiple inference requests
-                    vs = [kwargs[k] for k in kwargs]
-                    lengths = {len(i) for i in vs}
-                    if len(lengths) == 1:
-                        # construct multiple inference requests
-                        l = lengths.pop()
-                        args = [{k: kwargs[k][i] for k in kwargs } for i in range(l)]
+                    args = split_tensor_in_dict(kwargs)
                 else:
                     args = [kwargs]
                 # call preprocess() before passing args to the backend
@@ -427,8 +442,6 @@ class ModelOperator:
                         data_type = torch_datatype_mapping[data_type]
                         if value.dtype != data_type:
                             data[key] = value.to(data_type)
-                    else:
-                        raise Exception(f"Unexpected tensor type: {type(value)}")
         return outcome
 
 class InferenceBase:

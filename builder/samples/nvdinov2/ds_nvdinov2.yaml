@@ -1,13 +1,18 @@
 name: "nvdinov2"
 
 input:
-- name: image
-  data_type: TYPE_CUSTOM_IMAGE_BASE64
+- name: images
+  data_type: TYPE_CUSTOM_BINARY_BASE64
+  dims: [ -1 ]
+  optional: false
+
+- name: format
+  data_type: TYPE_STRING
   dims: [ -1 ]
   optional: false
 
 output:
-- name: probabilities
+- name: probs
   data_type: TYPE_FLOAT32
   dims: [ -1 ]
 
@@ -20,17 +25,22 @@ server:
       requests:
         EmbeddingsRequest: >
           {
-            "image": [
-              {% set image_items = request.input if request.input is iterable else [request.input] %}
+            {% set image_items = request.input if request.input is iterable else [request.input] %}
+            "images": [
               {% for item in image_items %}
                 {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            ],
+            "format": [
+              {% for item in image_items %}
+                {{ item|extract('data:image\/(\w+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
               {% endfor %}
             ]
           }
       responses:
         EmbeddingsResponse: >
           {
-            "data": [{"index": 0, "embedding": [{% for item in response.probabilities %} {{item}} {% if not loop.last %}, {% endif %}{% endfor %}], "object": "embedding"}],
+            "data": [{"index": 0, "embedding": [{% for item in response.probs %} {{item}} {% if not loop.last %}, {% endif %}{% endfor %}], "object": "embedding"}],
             "usage": { "num_images": 1},
             "model": "nvidia/nvdinov2-vit-g",
             "object": "list"
@@ -41,15 +51,16 @@ models:
   backend: deepstream/nvinferserver
   max_batch_size: 1
   input:
-  - name: image
+  - name: images
     data_type: TYPE_UINT8
-    dims: [ 224, 224, 3]
+    dims: [224, 224, 3]
+  - name: format
+    data_type: TYPE_STRING
+    dims: [ -1 ]
+    optional: false
   output:
   - name: probs
     data_type: TYPE_FLOAT32
     dims: [ -1 ]
   parameters:
     infer_config_path: config_inferserver_nvdinov2.txt
-routes:
-  ':["image"]': 'nvdinov2-ds'
-  'nvdinov2-ds': ':["probabilities"]'
