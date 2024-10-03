@@ -16,6 +16,11 @@ logger = get_logger(__name__)
 
 CHECKPOINTS_DIR = os.getenv("CHECKPOINTS_DIR", Path(__file__).resolve().parent.parent.parent)
 
+triton_input_type_map = {
+    "TYPE_CUSTOM_BINARY_BASE64": "TYPE_STRING",
+    "TYPE_CUSTOM_IMAGE_BASE64": "TYPE_STRING"
+}
+
 {% for backend in backends %}
 {{ backend }}
 {% endfor %}
@@ -33,8 +38,12 @@ class TritonPythonModel(InferenceBase):
         auto_complete_model_config.set_model_transaction_policy({"decoupled": True})
         for input in global_config.input:
             input_config = OmegaConf.to_container(input)
-            if input_config["data_type"] == "TYPE_CUSTOM_IMAGE_BASE64":
-                input_config["data_type"] = "TYPE_STRING"
+            data_type = input_config["data_type"]
+            if data_type.startswith("TYPE_CUSTOM_"):
+                data_type = triton_input_type_map[data_type] if data_type in triton_input_type_map else None
+                if data_type is None:
+                    raise Exception(f"Unsupported input type: {data_type}")
+                input_config["data_type"] = data_type
             auto_complete_model_config.add_input(input_config)
         for output in global_config.output:
             output_config = OmegaConf.to_container(output)

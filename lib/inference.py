@@ -89,13 +89,14 @@ class DataFlow:
         image_list = []
         with tempfile.TemporaryDirectory() as temp_dir:
             for image in images:
+                print(f"{type(images), type(image)}")
                 image_id = str(uuid.uuid4())
                 asset_path = os.path.join(temp_dir, image_id)
                 # Shouldn't we decode the bytes directly?
-                if isinstance(image, np.object_):
+                if isinstance(image, np.bytes_) or isinstance(image, bytes):
                     image = image.decode()
                 elif not isinstance(image, np.str_):
-                    logger.error(f"base64 image must be bytes or string")
+                    logger.error(f"base64 image must be bytes or string: {type(image)}")
                     continue
                 with open(asset_path, "wb") as f:
                     f.write(base64.b64decode(image))
@@ -106,7 +107,8 @@ class DataFlow:
     def _process_base64_binary(self, inputs: np.ndarray):
         bytes_list = []
         for input in inputs:
-            if isinstance(input, np.object_):
+            print(type(input))
+            if isinstance(input, np.bytes_) or isinstance(input, bytes):
                 input = input.decode()
             elif not isinstance(input, np.str_):
                 logger.error(f"base64 binary must be bytes or string")

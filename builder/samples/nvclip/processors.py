@@ -1,5 +1,6 @@
-import torch
 import numpy as np
+import io
+from PIL import Image
 
 class OpenclipTokenizer:
     name = "openclip-tokenizer"
@@ -16,11 +17,13 @@ class VisionPreprocessor:
     name = "nvclip-vision-preprocessor"
     def __init__(self, config):
 
-        from torchvision.transforms import Compose, Resize, CenterCrop, Normalize
+        from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize, InterpolationMode
         self._transform = Compose(
             [
-                Resize((224, 224)),
+                Resize((224, 224), interpolation=InterpolationMode.BICUBIC),
                 CenterCrop(224),
+                lambda image: image.convert('RGB'),
+                ToTensor(),
                 Normalize(
                     (0.48145466, 0.4578275, 0.40821073),
                     (0.26862954, 0.26130258, 0.27577711),
@@ -29,8 +32,7 @@ class VisionPreprocessor:
         )
 
     def __call__(self, *args, **kwargs):
-        image = args[0].to(torch.float32).permute(2, 0, 1)
-        return self._transform(image)
+        return self._transform(Image.open(io.BytesIO(args[0])))
 
 class NvClipPostProcessor:
     name = "nvclip-postprocessor"
