@@ -16,6 +16,8 @@ dependencies:
       version: "2.8.2"
     - name: "tensorrt"
       version: "10.3.0"
+    - name: "tensorrt-cu12-bindings"
+      version: "10.3.0"
     - name: "polygraphy"
       version: "0.49.9"
     - name: "numpy"
@@ -28,3 +30,4 @@ dependencies:
       version: "2.3.0"
   deb:
     - name: "libnvinfer-bin"
+      version: "10.3.0.26-1+cuda12.5"

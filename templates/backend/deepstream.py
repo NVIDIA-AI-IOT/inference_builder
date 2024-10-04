@@ -61,12 +61,17 @@ class DeepstreamBackend(ModelBackend):
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
         self._tensor_out = TensorOutput()
-        self._tensor_inputs = [TensorInput(d[0], d[1], 'JPEG')]
+        self._tensor_inputs = [
+            TensorInput(d[0], d[1], 'JPEG'),
+            TensorInput(d[0], d[1], 'PNG')
+        ]
         self._pipeline = Pipeline(f"deepstream-{self._model_name}")
 
         # build the inference flow
         flow = Flow(self._pipeline)
-        flow.inject(self._tensor_inputs).decode().batch().infer(infer_config_path, with_triton).attach(Probe('tensor_retriver', self._tensor_out)).render(RenderMode.DISCARD, enable_osd=False)
+        probe = Probe('tensor_retriver', self._tensor_out)
+        flow = flow.inject(self._tensor_inputs).decode().batch(batched_push_timeout=1000, live_source=False)
+        flow = flow.infer(infer_config_path, with_triton).attach(probe).render(RenderMode.DISCARD, enable_osd=False)
         self._pipeline.start()
         logger.debug(f"DeepstreamBackend created for {self._model_name} to generate {self._output_names}")
 

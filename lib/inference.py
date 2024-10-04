@@ -107,7 +107,6 @@ class DataFlow:
     def _process_base64_binary(self, inputs: np.ndarray):
         bytes_list = []
         for input in inputs:
-            print(type(input))
             if isinstance(input, np.bytes_) or isinstance(input, bytes):
                 input = input.decode()
             elif not isinstance(input, np.str_):
