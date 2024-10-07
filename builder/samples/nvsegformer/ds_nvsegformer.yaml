@@ -1,0 +1,66 @@
+name: "nvsegformer"
+
+input:
+- name: images
+  data_type: TYPE_CUSTOM_BINARY_BASE64
+  dims: [ -1 ]
+  optional: false
+
+- name: format
+  data_type: TYPE_STRING
+  dims: [ -1 ]
+  optional: false
+
+output:
+- name: output
+  data_type: TYPE_UINT8
+  dims: [ -1, 512, 512 ]
+
+server:
+  endpoints:
+    health:
+      path: /health/live
+    infer:
+      path: /v1/masks
+      requests:
+        MasksRequest: >
+          {
+            {% set image_items = request.input if request.input is iterable else [request.input] %}
+            "images": [
+              {% for item in image_items %}
+                {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            ],
+            "format": [
+              {% for item in image_items %}
+                {{ item|extract('data:image\/(\w+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            ]
+          }
+      responses:
+        MasksResponse: >
+          {
+            "data": {% for item in response.output %}[{"index": {{loop.index0}}, "mask": {{item}}, "object": "mask"}]{% if not loop.last %}, {% endif %}{% endfor %},
+            "usage": { "num_images": 1},
+            "model": "nvidia/nvdinov2-vit-g",
+            "object": "list"
+          }
+
+models:
+- name: nv-segformer
+  backend: deepstream/nvinfer
+  max_batch_size: 1
+  input:
+  - name: images
+    data_type: TYPE_UINT8
+    dims: [512, 512, 3]
+  - name: format
+    data_type: TYPE_STRING
+    dims: [ -1 ]
+    optional: false
+  output:
+  - name: output
+    data_type: TYPE_INT64
+    dims: [ -1, 512, 512 ]
+  parameters:
+    infer_config_path: config_nvinfer.txt

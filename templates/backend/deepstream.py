@@ -31,7 +31,7 @@ class TensorInput(BufferProvider):
 class TensorOutput(BatchMetadataOperator):
     def __init__(self):
         super().__init__()
-        self._queue = Queue(maxsize=1)
+        self._queue = Queue()
 
     def handle_metadata(self, batch_meta):
         result = dict()
@@ -49,6 +49,7 @@ class DeepstreamBackend(ModelBackend):
     """Deepstream backend using pyservicemaker"""
     def __init__(self, model_config:Dict, device_id: int=0):
         super().__init__(model_config)
+        self._max_batch_size = model_config["max_batch_size"]
         self._model_name = model_config["name"]
         self._output_names = [o['name'] for o in model_config['output']]
         self._device_id = device_id
@@ -70,8 +71,8 @@ class DeepstreamBackend(ModelBackend):
         # build the inference flow
         flow = Flow(self._pipeline)
         probe = Probe('tensor_retriver', self._tensor_out)
-        flow = flow.inject(self._tensor_inputs).decode().batch(batched_push_timeout=1000, live_source=False)
-        flow = flow.infer(infer_config_path, with_triton).attach(probe).render(RenderMode.DISCARD, enable_osd=False)
+        flow = flow.inject(self._tensor_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=1000, live_source=False)
+        flow = flow.infer(infer_config_path, with_triton, batch_size=self._max_batch_size).attach(probe).render(RenderMode.DISCARD, enable_osd=False)
         self._pipeline.start()
         logger.debug(f"DeepstreamBackend created for {self._model_name} to generate {self._output_names}")
 

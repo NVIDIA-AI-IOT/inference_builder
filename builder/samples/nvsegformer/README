@@ -1,0 +1,18 @@
+Prepare the onnx file:
+
+mkdir ~/.cache/nim/model-repo/nv_segformer -p
+cp SegFormer_NVDINOv2_ViT-L_ISBI_iter_900_op17.onnx ~/.cache/nim/model-repo/nv_segformer
+
+Build the NIM inference flow:
+
+cd builder
+python main.py samples/nvsegformer/ds_nvsegformer.yaml --server-type fastapi -a samples/nvsegformer/openapi.yaml -o samples
+
+Build and run the docker image:
+
+docker compose up --build nim-nvsegformer
+
+Test the NIM with a client:
+
+cd builder/samples/nvsegformer
+python nim_client.py --host 127.0.0.1 --port 8800 --file test.jpg

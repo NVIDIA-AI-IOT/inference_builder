@@ -3,8 +3,25 @@ import requests, base64
 import time
 import numpy as np
 import os
+from PIL import Image
 
 API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC="shfklsjlfjsljgl"
+
+palette = [
+  {
+    "seg_class": "foreground",
+    "rgb": [0, 0, 0],
+    "label_id": 0,
+    "mapping_class": "foreground"
+  },
+  {
+    "seg_class": "background",
+    "rgb": [255, 255, 255],
+    "label_id": 1,
+    "mapping_class": "background"
+  }
+]
+
 
 def main(host , port, file, out_format):
   if not file:
@@ -12,7 +29,7 @@ def main(host , port, file, out_format):
     return
 
   # invoke_url = "http://localhost:8001/inference"
-  invoke_url = "http://" + host + ":" + port + "/v1/embeddings"
+  invoke_url = "http://" + host + ":" + port + "/v1/masks"
 
   file_extension = os.path.splitext(file)[1][1:]
 
@@ -45,15 +62,25 @@ def main(host , port, file, out_format):
     output = response.json()
     print(f"Usage: num_images= {output['usage']['num_images']}")
     print("Output:")
-    for embedding in output["data"]:
-      if out_format == 'float':
-        output_embedding = embedding["embedding"]
+    id_color_map = {}
+    for p in palette:
+        id_color_map[p['label_id']] = p['rgb']
+    for mask in output["data"]:
+      if out_format == 'integer':
+        output_mask = np.array(mask["mask"])
+        output = Image.fromarray(output_mask.astype(np.uint8)).convert('P')
+        output_palette = np.zeros((len(palette), 3), dtype=np.uint8)
+        for c_id, color in id_color_map.items():
+            output_palette[c_id] = color
+        output.putpalette(output_palette)
+        output = output.convert("RGB")
+        output.show()
+        output.save("mask.png")
       else:
-        embedding_string = embedding["embedding"]
-        output_embedding = np.frombuffer(base64.b64decode(embedding_string), dtype="float32").tolist()
+        output_mask = np.frombuffer(base64.b64decode(mask["mask"]), dtype="uint8").tolist()
 
-      print(f"index = {embedding['index']}")
-      print(f"output_embedding = {output_embedding}")
+      print(f"index = {mask['index']}")
+      print(f"output_mask = {output_mask}")
 
   #print(response.json())
 
@@ -67,8 +94,8 @@ if __name__ == '__main__':
                     help="Server port", default="8000")
   parser.add_argument("--file", type=str, help="File to send for inference",
                       default=None)
-  parser.add_argument("--format", type=str, help="Output embedding format, float or base64",
-                      default="float")
+  parser.add_argument("--format", type=str, help="Output embedding format, integer or base64",
+                      default="integer")
 
   args = parser.parse_args()
   main(args.host, args.port, args.file, args.format)
