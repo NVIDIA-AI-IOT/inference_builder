@@ -60,7 +60,7 @@ def build_args(parser):
         "-x",
         "--exclude-lib",
         action='store_true',
-        help="Include common lib to the generated code."
+        help="Don't include common lib to the generated code."
     )
     parser.add_argument(
         "-t",
