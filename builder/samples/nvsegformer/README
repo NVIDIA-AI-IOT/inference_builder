@@ -1,3 +1,5 @@
+Download the deepstream SDK here https://drive.google.com/file/d/1UPJAKLrXSQOF8fM4Abu-FzqyqSnaLiWV/view?usp=sharing, and copy it to builder/samples/nvsegformer
+
 Prepare the onnx file:
 
 mkdir ~/.cache/nim/model-repo/nv_segformer -p
@@ -16,3 +18,6 @@ Test the NIM with a client:
 
 cd builder/samples/nvsegformer
 python nim_client.py --host 127.0.0.1 --port 8800 --file test.jpg
+
+Know Issues:
+- There needs a warm-up for each decoder(PNG/JPG) requiring one test jpg and one test png file being feeded to the NIM respectively
