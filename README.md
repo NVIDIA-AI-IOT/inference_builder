@@ -14,8 +14,18 @@ git submodule update --init
 ```bash
 sudo apt update
 sudo apt install protobuf-compiler
-cd nim-templates
-pip3 install -r requirements.txt
+```
+
+Create python virtual env (Optional) and install dependent packages
+
+```bash
+$ python -m venv /path/to/new/virtual/environment
+# Activate the venc
+$ source /path/to/new/virtual/environment/bin/activate
+# Install the dependent packages
+$ cd nim-templates
+$ pip3 install -r requirements.txt
+
 ```
 
 ## NIM Dependencies
@@ -33,14 +43,8 @@ Ensure nvidia runtime added to `/etc/docker/daemon.json`
 }
 ```
 
-Create python virtual env
-```bash
-$ python -m venv /path/to/new/virtual/environment
-#Activate the venc
-
-$ source /path/to/new/virtual/environment/bin/activate
-```
 Install Nim Tools
+
 ```bash
 $ pip install nimtools==0.4.0 --index-url https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple 
 
