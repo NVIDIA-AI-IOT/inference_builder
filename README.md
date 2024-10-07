@@ -42,11 +42,11 @@ $ source /path/to/new/virtual/environment/bin/activate
 ```
 Install Nim Tools
 ```bash
-$ pip install nimtools==0.3.1rc8 --index-url https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple 
+$ pip install nimtools==0.4.0 --index-url https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple 
 
 #Check installation
 $ nim_builder --version 
-nim_builder 0.3.1rc8 nimlib 0.1.37 nim-compliance 2.0.0rc5 
+nim_builder 0.4.0 nimlib 0.1.47 nim-compliance 2.0.0
 ```
 
 ## Usage
