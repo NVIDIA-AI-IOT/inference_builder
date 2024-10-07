@@ -136,4 +136,16 @@ class GenericInference(InferenceBase):
             # update as processed
             for key, value in zip(processor.output, output):
                 processed[key] = value
+                # correct data type
+                data_type = self._output_config["data_type"]
+                if isinstance(value, np.ndarray):
+                    data_type = np_datatype_mapping[data_type]
+                    if value.dtype != data_type:
+                        processed[key]  = value.astype(data_type)
+                elif isinstance(value, torch.Tensor):
+                    data_type = torch_datatype_mapping[data_type]
+                    if value.dtype != data_type:
+                        processed[key]  = value.to(data_type)
+                else:
+                    processed[key] = value
         return processed

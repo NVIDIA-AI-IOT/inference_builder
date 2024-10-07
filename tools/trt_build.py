@@ -8,6 +8,7 @@ import onnx
 def build_engine(onnx_file_path, max_batch_size=1):
     # Create a TensorRT logger and builder
     TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+    trt.init_libnvinfer_plugins(TRT_LOGGER, namespace="")
     builder = trt.Builder(TRT_LOGGER)
     network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
     parser = trt.OnnxParser(network, TRT_LOGGER)
