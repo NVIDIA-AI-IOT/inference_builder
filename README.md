@@ -18,6 +18,37 @@ cd nim-templates
 pip3 install -r requirements.txt
 ```
 
+## NIM Dependencies
+
+Ensure nvidia runtime added to `/etc/docker/daemon.json`
+
+```bash
+{
+    "runtimes": {
+        "nvidia": {
+            "args": [],
+            "path": "nvidia-container-runtime"
+        }
+    }
+}
+```
+
+Create python virtual env
+```bash
+$ python -m venv /path/to/new/virtual/environment
+#Activate the venc
+
+$ source /path/to/new/virtual/environment/bin/activate
+```
+Install Nim Tools
+```bash
+$ pip install nimtools==0.3.1rc8 --index-url https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple 
+
+#Check installation
+$ nim_builder --version 
+nim_builder 0.3.1rc8 nimlib 0.1.37 nim-compliance 2.0.0rc5 
+```
+
 ## Usage
 The project provides developers an easy-to-use command line tool to generate inference codes for various VLM/CV NIMs. Before running the tool, developers need to create a comprehensive inference configuration file and the API spec. For some NIMs, custom code snippet would also be needed.
 
@@ -25,7 +56,7 @@ Under the tests/configs we provides a sample configuration for creating vila NIM
 
 ```bash
 pyton builder/main.py
-usage: Inference Builder [-h] [--server-type [{triton}]] [-o [OUTPUT_DIR]] [-a [API_SPEC]] [-c [CUSTOM_MODULE ...]] config
+usage: Inference Builder [-h] [--server-type [{triton}]] [-o [OUTPUT_DIR]] [-a [API_SPEC]] [-c [CUSTOM_MODULE ...]] [-x] [-t] config
 ```
 
 There're two builtin samples under _samples_ folder for generating vila NIMs and nvclip NIMs respectively.
