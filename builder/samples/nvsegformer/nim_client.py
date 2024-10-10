@@ -23,18 +23,20 @@ palette = [
 ]
 
 
-def main(host , port, file, out_format):
-  if not file:
+def main(host , port, files, out_format):
+  if not files:
     print("Need the file path for inference")
     return
 
   # invoke_url = "http://localhost:8001/inference"
   invoke_url = "http://" + host + ":" + port + "/v1/masks"
 
-  file_extension = os.path.splitext(file)[1][1:]
-
-  with open(file, "rb") as f:
-    image_b64 = base64.b64encode(f.read()).decode()
+  file_exts = []
+  b64_images = []
+  for file in files:
+    file_exts.append(os.path.splitext(file)[1][1:])
+    with open(file, "rb") as f:
+      b64_images.append(base64.b64encode(f.read()).decode())
 
 # assert len(image_b64) < 180_000, \
 #   "To upload larger images, use the assets API (see docs)"
@@ -47,8 +49,7 @@ def main(host , port, file, out_format):
   }
 
   payload = {
-    "input": [f"data:image/{file_extension};base64,{image_b64}"
-    ],
+    "input": [f"data:image/{e};base64,{i}" for e, i in zip(file_exts, b64_images)],
     "encoding_format": out_format,
     "model": "nvidia/nvdinov2-vit-g"
   }
@@ -92,8 +93,7 @@ if __name__ == '__main__':
                     help= "Server IP Address", default="0.0.0.0")
   parser.add_argument("--port", type=str,
                     help="Server port", default="8000")
-  parser.add_argument("--file", type=str, help="File to send for inference",
-                      default=None)
+  parser.add_argument("--file", type=str, help="File to send for inference", nargs='*', default=None)
   parser.add_argument("--format", type=str, help="Output embedding format, integer or base64",
                       default="integer")
 

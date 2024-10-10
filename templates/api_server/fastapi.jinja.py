@@ -11,7 +11,7 @@ from omegaconf import OmegaConf
 import numpy as np
 import torch
 from typing import Dict
-from lib.utils import create_jinja2_env
+from lib.utils import create_jinja2_env, stack_tensors_in_dict
 
 jinja2_env = create_jinja2_env()
 
@@ -106,10 +106,12 @@ class Interface(HttpNIMApiInterface):
         in_data = self.process_request(body)
         self.logger.debug(f"request processed as {in_data}")
         #TODO how to appropriately handle streaming responses
+        results = []
         async for data in self._inference.execute(in_data):
-            response = self.process_response(request, data)
-            self.logger.debug(f"response generated as {response}")
-            return response
+            results.append(data)
+        response = self.process_response(request, stack_tensors_in_dict(results))
+        self.logger.debug(f"response generated as {response}")
+        return response
 
 def main():
     interface = Interface()

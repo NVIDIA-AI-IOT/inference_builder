@@ -1,5 +1,5 @@
 from pyservicemaker import Pipeline, Flow, BufferProvider, Buffer, RenderMode, BatchMetadataOperator, Probe
-from typing import Dict
+from typing import Dict, List
 from queue import Queue, Empty
 
 class TensorInput(BufferProvider):
@@ -11,10 +11,10 @@ class TensorInput(BufferProvider):
         self.format = format
         self.framerate = 1
         self.device = 'cpu'
-        self._queue = Queue()
+        self.queue = Queue(maxsize=1)
 
     def generate(self, size):
-        tensor = self._queue.get()
+        tensor = self.queue.get()
         if isinstance(tensor, np.ndarray):
             return Buffer(tensor.tolist())
         elif isinstance(tensor, Stop):
@@ -24,26 +24,56 @@ class TensorInput(BufferProvider):
             logger.exception("Unexpected input tensor data")
             return Buffer()
 
-
     def send(self, data):
-        self._queue.put(data)
+        self.queue.put(data)
+
+class TensorInputPool:
+
+    def __init__(self, height, width, formats, batch_size):
+        self._inputs = [TensorInput(width, height, format) for _ in range(batch_size) for format in formats]
+
+    @property
+    def instances(self):
+        return self._inputs
+
+    def submit(self, data: List):
+        indices = []
+        for item in data:
+            format = item.pop('format', None).upper()
+            if format == 'JPG':
+                format = 'JPEG'
+            for key in item:
+                tensor = item[key]
+            # try find the free for the specific format
+            i, tensor_input = next(((i, x) for i,x in enumerate(self._inputs) if x.format == format and x.queue.empty()), (-1, None))
+            if tensor_input is None:
+                i, tensor_input = next(((i, x) for i,x in enumerate(self._inputs) if x.format == format), (-1, None))
+            indices.append(i)
+            if tensor_input is not None:
+                tensor_input.send(tensor)
+            else:
+                logger.error(f"Format {format} is not supported")
+        return indices
 
 class TensorOutput(BatchMetadataOperator):
-    def __init__(self):
+    def __init__(self, n_outputs):
         super().__init__()
-        self._queue = Queue()
+        self._queues = [Queue() for _ in range(n_outputs)]
 
     def handle_metadata(self, batch_meta):
         result = dict()
         for frame_meta in batch_meta.frame_items:
+            queue = self._queues[frame_meta.pad_index]
             for user_meta in frame_meta.tensor_items:
                 for n, tensor in user_meta.as_tensor_output().get_layers().items():
                     torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
+                    print(torch_tensor.shape)
                     result[n] = torch_tensor
-        self._queue.put(result)
+            queue.put(result)
 
-    def get(self):
-        return self._queue.get()
+
+    def get(self, indices: List):
+        return [self._queues[i].get() if i >= 0 else None for i in indices]
 
 class DeepstreamBackend(ModelBackend):
     """Deepstream backend using pyservicemaker"""
@@ -61,17 +91,15 @@ class DeepstreamBackend(ModelBackend):
         infer_config_path = model_config["parameters"]['infer_config_path']
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
-        self._tensor_out = TensorOutput()
-        self._tensor_inputs = [
-            TensorInput(d[0], d[1], 'JPEG'),
-            TensorInput(d[0], d[1], 'PNG')
-        ]
+        self._formats = ['JPEG', 'PNG']
+        self._in_pool = TensorInputPool(d[0], d[1], self._formats, self._max_batch_size)
+        self._tensor_out = TensorOutput(self._max_batch_size * len(self._formats))
         self._pipeline = Pipeline(f"deepstream-{self._model_name}")
 
         # build the inference flow
         flow = Flow(self._pipeline)
         probe = Probe('tensor_retriver', self._tensor_out)
-        flow = flow.inject(self._tensor_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=1000, live_source=False)
+        flow = flow.inject(self._in_pool.instances).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=1000, live_source=False)
         flow = flow.infer(infer_config_path, with_triton, batch_size=self._max_batch_size).attach(probe).render(RenderMode.DISCARD, enable_osd=False)
         self._pipeline.start()
         logger.debug(f"DeepstreamBackend created for {self._model_name} to generate {self._output_names}")
@@ -80,26 +108,9 @@ class DeepstreamBackend(ModelBackend):
     def __call__(self, *args, **kwargs):
         logger.debug(f"DeepstreamBackend {self._model_name} triggerred with  {args if args else kwargs}")
         in_data_list = args if args else [kwargs]
-        for item in in_data_list:
-            format = item.pop('format', None)
-            if format is None:
-                yield Error("Format unknown for deepstream pipeline")
-            for key in item:
-                tensor = item[key]
-            format = format.lower()
-            tensor_input = None
-            if format == 'jpg' or format == 'jpeg':
-                tensor_input = next((i for i in self._tensor_inputs if i.format == 'JPEG'), None)
-            elif format == 'png':
-                tensor_input = next((i for i in self._tensor_inputs if i.format == 'PNG'), None)
-            if tensor_input is None:
-                yield Error(f"{format} not supported by deepstream pipline")
-            tensor_input.send(tensor)
-            result = self._tensor_out.get()
-            if not all([key in result for key in self._output_names]):
-                logger.error(f"Not all the expected output in {self._output_names} are not found in the result")
-                continue
-            yield { o: result[o] for o in self._output_names}
+        indices = self._in_pool.submit(in_data_list)
+        for result in self._tensor_out.get(indices):
+            yield { o: result[o] for o in self._output_names } if result else Error("Error")
 
     def stop(self):
         self._tensor_input.send(Stop())

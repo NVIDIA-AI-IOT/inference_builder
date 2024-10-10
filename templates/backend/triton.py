@@ -74,5 +74,4 @@ class TritonBackend(ModelBackend):
                 logger.debug(f"TritonBackend saved inference results to: {expected}")
                 if all([expected[k] is not None for k in expected]):
                     yield expected
-        yield Stop(finish_reason)
         logger.info(f"Infernece with TritonBackend {self._model_name} accomplished")
