@@ -7,21 +7,6 @@ from PIL import Image
 
 API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC="shfklsjlfjsljgl"
 
-palette = [
-  {
-    "seg_class": "foreground",
-    "rgb": [0, 0, 0],
-    "label_id": 0,
-    "mapping_class": "foreground"
-  },
-  {
-    "seg_class": "background",
-    "rgb": [255, 255, 255],
-    "label_id": 1,
-    "mapping_class": "background"
-  }
-]
-
 
 def main(host , port, files, out_format):
   if not files:
@@ -29,7 +14,7 @@ def main(host , port, files, out_format):
     return
 
   # invoke_url = "http://localhost:8001/inference"
-  invoke_url = "http://" + host + ":" + port + "/v1/masks"
+  invoke_url = "http://" + host + ":" + port + "/v1/infer"
 
   file_exts = []
   b64_images = []
@@ -50,9 +35,9 @@ def main(host , port, files, out_format):
 
   payload = {
     "input": [f"data:image/{e};base64,{i}" for e, i in zip(file_exts, b64_images)],
-    "encoding_format": out_format,
-    "model": "nvidia/nvsegformer"
+    "model": "nvidia/rtdetr"
   }
+
   start_time = time.time()
   response = requests.post(invoke_url, headers=headers, json=payload)
   infer_time = time.time() - start_time
@@ -63,25 +48,12 @@ def main(host , port, files, out_format):
     output = response.json()
     print(f"Usage: num_images= {output['usage']['num_images']}")
     print("Output:")
-    id_color_map = {}
-    for p in palette:
-        id_color_map[p['label_id']] = p['rgb']
-    for mask in output["data"]:
-      if out_format == 'integer':
-        output_mask = np.array(mask["mask"])
-        output = Image.fromarray(output_mask.astype(np.uint8)).convert('P')
-        output_palette = np.zeros((len(palette), 3), dtype=np.uint8)
-        for c_id, color in id_color_map.items():
-            output_palette[c_id] = color
-        output.putpalette(output_palette)
-        output = output.convert("RGB")
-        output.show()
-        output.save("mask.png")
-      else:
-        output_mask = np.frombuffer(base64.b64decode(mask["mask"]), dtype="uint8").tolist()
-
-      print(f"index = {mask['index']}")
-      print(f"output_mask = {output_mask}")
+    for data in output["data"]:
+      bboxes = data["bboxes"]
+      probs = data["probs"]
+      print(f"index = {data['index']}")
+      print(f"bboxes = {bboxes}")
+      print(f"probs = {probs}")
 
   #print(response.json())
 

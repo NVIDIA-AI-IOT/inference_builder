@@ -1,0 +1,23 @@
+################################################################################
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+#
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+################################################################################
+[property]
+gpu-id=0
+gie-unique-id=5
+process-mode=1
+net-scale-factor=0.0078431372549
+onnx-file=/opt/nim/.cache/model-repo/rtdetr/rtdetr_model_latest.quant.onnx
+model-engine-file=/opt/nim/.cache/model-repo/rtdetr/rtdetr_model_latest.quant.onnx_b1_gpu0_fp16.engine
+network-mode=2
+network-type=100
+offsets=127.5;127.5;127.5
+output-tensor-meta=1
+infer-dims=3;544;960

@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: NVIDIA NIM API for nvidia/nvsegformer
+  title: NVIDIA NIM API for nvidia/rtdetr
   description: The NVIDIA NIM REST API. Please see https://docs.api.nvidia.com/nim for more details.
   version: 1.0.0
   termsOfService: https://nvidia.com/legal/terms-of-use
@@ -104,11 +104,11 @@ paths:
                   maxLength: 20480
                   pattern: ^.*$
                   description: Manifest file contents.
-  "/v1/masks":
+  "/v1/infer":
     post:
       tags:
-        - "NVIDIA NV-SEGFORMER API"
-      summary: Creates an mask vector representing the input text or image.
+        - "NVIDIA RTDETR API"
+      summary: Ooject detection from images or video.
       description: "Invokes inference for the input images.
         The input image can be Base64 encoded string in the request or it can be
         specified using the file identifier of an uploaded file. If uploading
@@ -136,7 +136,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MasksRequest'
+              $ref: '#/components/schemas/DetectionRequest'
         required: true
       responses:
         "200":
@@ -144,7 +144,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MasksResponse'
+                $ref: '#/components/schemas/DetectionResponse'
         "202":
           description: Result is pending. Client should poll using the requestId.
           content:
@@ -363,7 +363,7 @@ components:
       - shortName
       - modelUrl
       title: NIMModelInfoResponse
-    MasksRequest:
+    DetectionRequest:
       additionalProperties: false
       properties:
         input:
@@ -379,7 +379,7 @@ components:
               maxLength: 4294967296
             maxItems: 64
           title: Input
-          description: 'The list of images that you want to generate masks
+          description: 'The list of images that you want to detect objects
             for. Images should be in form of `data:image/{format};base64,{base64encodedimage}`.
             For NVCF deployment, if the size of an image is more than 200KB, it needs to be uploaded to
             a presigned S3 bucket using NVCF Asset APIs. Once uploaded you can refer
@@ -387,28 +387,20 @@ components:
             />`. Accepted formats are `jpg`, `png` and `jpeg`.'
           examples:
             - data:image/jpeg;base64,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 sj7RlhX8BlAl+hGYuI/4nR41QVRUtFiy5c//2Q==
-        encoding_format:
-          type: string
-          enum:
-          - integer
-          - base64
-          title: Encoding Format
-          description: "The format to return the masks in. Can be either `float` or `base64`."
-          default: float
         model:
           type: string
-          enum: [nvidia/nvsegformer]
+          enum: [nvidia/rtdetr]
           title: Model
           description: ID of the mask model.
           examples:
-            - nvidia/nvsegformer
+            - nvidia/rtdetr
       type: object
       required:
         - input
         - model
-      title: MasksRequest
+      title: DetectionRequest
       description: List of input images for the inference request.
-    MasksResponse:
+    DetectionResponse:
       type: object
       properties:
         object:
@@ -419,30 +411,17 @@ components:
           type: string
         data:
           items:
-            $ref: '#/components/schemas/Mask'
+            $ref: '#/components/schemas/DetectionResult'
           type: array
           title: Data
           description: The list of mask generated by the model.
           maxItems: 10
-          examples:
-          - - mask:
-              - 1
-              - 1
-              - 1
-              index: 0
-              object: mask
-            - mask:
-              - 1
-              - 1
-              - 1
-              index: 1
-              object: mask
         model:
           type: string
           description: Model used to generate masks.
-          example: nvidia/nvsegformer
+          example: nvidia/rtdetr
           title: Model
-          const: nvidia/nvsegformer
+          const: nvidia/rtdetr
         usage:
           $ref: '#/components/schemas/Usage'
           description: Usage statistics for the masks request.
@@ -454,18 +433,12 @@ components:
         - data
         - usage
         - model
-      title: MasksResponse
+      title: DetectionResponse
       description: Response schema for the inference request.
-    Mask:
+    DetectionResult:
       type: object
       description: Represents a mask matrix returned by mask endpoint.
       properties:
-        object:
-          description: 'The object type, which is always `mask`.'
-          enum:
-           - mask
-          title: Object
-          type: string
         index:
           type: integer
           format: int32
@@ -473,29 +446,31 @@ components:
           description: The index of the mask in the list of masks.
           minimum: 0
           maximum: 127
-        mask:
-          oneOf:
-            - type: array
-              description: |
-                The mask as a list of bytes, The dimention of the vector depends on the model.
-              items:
-                type: array
-                items:
-                  type: integer
-                  format: uint8
-                maxItems: 512
-              maxItems: 512
-            - type: string
-              maxLength: 10240
-              description: |
-                The mask vector as base64 string. The length of the vector depends on the model.
-              format: ^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)$
-          title: Mask
+        bboxes:
+          type: array
+          description: The bboxes gives a list of bboxes
+          items:
+            type: array
+            items:
+              type: number
+              format: float
+            maxItems: 4
+          maxItems: 512
+        probs:
+          type: array
+          description: The bboxes gives a list of probabilities
+          items:
+            type: array
+            items:
+              type: number
+              format: float
+          maxItems: 512
+          title: DetectionResult
       required:
         - index
         - object
         - mask
-      title: Mask
+      title: DetectionResult
     Usage:
       properties:
         num_images:

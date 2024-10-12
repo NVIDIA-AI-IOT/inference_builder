@@ -1,4 +1,4 @@
-name: "nvsegformer"
+name: "rtdetr"
 
 input:
 - name: images
@@ -12,18 +12,21 @@ input:
   optional: false
 
 output:
-- name: output
-  data_type: TYPE_UINT8
-  dims: [ -1, 512, 512 ]
+  - name: pred_logits
+    data_type: TYPE_FLOAT32
+    dims: [ -1, -1 ]
+  - name: pred_boxes
+    data_type: TYPE_FLOAT32
+    dims: [ -1, -1 ]
 
 server:
   endpoints:
     health:
       path: /health/live
     infer:
-      path: /v1/masks
+      path: /v1/infer
       requests:
-        MasksRequest: >
+        DetectionRequest: >
           {
             {% set image_items = request.input if request.input is iterable else [request.input] %}
             "images": [
@@ -38,29 +41,32 @@ server:
             ]
           }
       responses:
-        MasksResponse: >
+        DetectionResponse: >
           {
-            "data": [{% for item in response.output %}{"index": {{loop.index0}}, "mask": {{item[0]}}, "object": "mask"}{% if not loop.last %}, {% endif %}{% endfor %}],
+            "data": [{% for i1, i2 in response.pred_boxes | zip(response.pred_logits) %}{"index": {{loop.index0}}, "bboxes": {{ i1 }}, "probs": {{ i2 }} }{% if not loop.last %}, {% endif %}{% endfor %}],
             "usage": { "num_images": 1},
-            "model": "nvidia/nvsegformer",
+            "model": "nvidia/rtdetr",
             "object": "list"
           }
 
 models:
-- name: nv-segformer
+- name: rtdetr
   backend: deepstream/nvinfer
   max_batch_size: 1
   input:
-  - name: images
+  - name: inputs
     data_type: TYPE_UINT8
-    dims: [512, 512, 3]
+    dims: [544, 960, 3]
   - name: format
     data_type: TYPE_STRING
     dims: [ -1 ]
     optional: false
   output:
-  - name: output
-    data_type: TYPE_INT64
-    dims: [ -1, 512, 512 ]
+  - name: pred_logits
+    data_type: TYPE_FLOAT32
+    dims: [ -1, -1, -1 ]
+  - name: pred_boxes
+    data_type: TYPE_FLOAT32
+    dims: [ -1, -1, -1 ]
   parameters:
     infer_config_path: config_nvinfer.txt

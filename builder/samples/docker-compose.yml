@@ -109,3 +109,28 @@ services:
     environment:
       DEBUG: 1
 #      GST_DEBUG: "*:3"
+  nim-rtdetr:
+    user: nvs:1000
+    build:
+      context: rtdetr
+      target: nim_final
+      dockerfile: Dockerfile
+    image: nim-nrtdetr
+    volumes:
+      - '~/.cache/nim:/opt/nim/.cache'
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              #count: 1
+              device_ids: ['0']
+              capabilities: [gpu]
+    environment:
+      DEBUG: 1
+#      GST_DEBUG: "*:3"
+
