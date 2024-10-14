@@ -1,12 +1,47 @@
 import argparse
 import requests, base64
 import time
-import numpy as np
 import os
-from PIL import Image
+from pyservicemaker import Probe, Pipeline, Flow, BatchMetadataOperator, osd
+from pyservicemaker.flow import _parse_stream_info
+from typing import List
 
 API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC="shfklsjlfjsljgl"
+NETWORK_WIDTH = 960
+NETWORK_HEIGHT = 544
 
+class BBoxMarker(BatchMetadataOperator):
+    def __init__(self, bboxes: List):
+       super().__init__()
+       self._bboxes = bboxes
+
+    def handle_metadata(self, batch_meta):
+        for frame_meta in batch_meta.frame_items:
+            bboxes = self._bboxes[frame_meta.pad_index]
+            display_meta = batch_meta.acquire_display_meta()
+            for b in bboxes:
+              x = b[0] * NETWORK_WIDTH
+              y = b[1] * NETWORK_HEIGHT
+              w = b[2] * NETWORK_WIDTH
+              h = b[3] * NETWORK_HEIGHT
+              bbox = osd.Rect()
+              bbox.left = x - w/2
+              bbox.top = y - h/2
+              bbox.width = w
+              bbox.height = h
+              bbox.border_width = 1
+              bbox.border_color = osd.Color(1.0, 1.0, 1.0, 1.0)
+              display_meta.add_rect(bbox)
+            frame_meta.append(display_meta)
+
+def freeze(flow):
+  flow._pipeline.add("imagefreeze", "freezer")
+  for stream in flow._streams:
+      stream_info = _parse_stream_info(stream)
+      flow._pipeline.link(stream_info.originator, "freezer")
+  return Flow(flow._pipeline, streams=['freezer/src'], parent=flow)
+
+Flow.freeze = freeze
 
 def main(host , port, files, out_format):
   if not files:
@@ -44,6 +79,7 @@ def main(host , port, files, out_format):
   print(response)
   print(infer_time)
 
+  bboxes_list = []
   if response.status_code == 200:
     output = response.json()
     print(f"Usage: num_images= {output['usage']['num_images']}")
@@ -54,8 +90,12 @@ def main(host , port, files, out_format):
       print(f"index = {data['index']}")
       print(f"bboxes = {bboxes}")
       print(f"probs = {probs}")
+      bboxes_list.append(bboxes)
 
-  #print(response.json())
+  pipeline = Pipeline('renderer')
+  bbox_marker = BBoxMarker(bboxes_list)
+  Flow(pipeline).batch_capture(files, width=NETWORK_WIDTH, height=NETWORK_HEIGHT).attach(what=Probe("bboxes", bbox_marker)).freeze().render()
+  pipeline.start().wait()
 
 
 if __name__ == '__main__':

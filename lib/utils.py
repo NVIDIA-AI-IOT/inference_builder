@@ -73,6 +73,7 @@ def create_jinja2_env():
     jinja2_env.tests["startswith"] = start_with
     jinja2_env.filters["replace"] = replace
     jinja2_env.filters["extract"] = extract
+    jinja2_env.filters["zip"] = zip
 
     return jinja2_env
 
