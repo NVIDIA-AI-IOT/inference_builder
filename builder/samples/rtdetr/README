@@ -1,4 +1,5 @@
 Download the deepstream SDK here https://drive.google.com/file/d/1UPJAKLrXSQOF8fM4Abu-FzqyqSnaLiWV/view?usp=sharing, and copy it to builder/samples/nvsegformer
+Install Deepstream SDK to the client environment: \\devrel\share\Deepstream\7.x_ER\20241004_24.10.2_build1\deepstream-7.1_7.1.0-1_amd64.deb
 
 Prepare the onnx file:
 
