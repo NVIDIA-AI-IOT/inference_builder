@@ -1,0 +1,478 @@
+openapi: 3.1.0
+info:
+  title: NVIDIA NIM API for nvidia/changenet
+  description: The NVIDIA NIM REST API. Please see https://docs.api.nvidia.com/nim for more details.
+  version: 1.0.0
+  termsOfService: https://nvidia.com/legal/terms-of-use
+  contact:
+    name: NVIDIA Support
+    url: https://help.nvidia.com/
+  license:
+    name: NVIDIA AI Foundation Models Community License
+    url: https://docs.nvidia.com/ai-foundation-models-community-license.pdf
+tags:
+  - name: "NVIDIA CHANGENET API"
+    description: Get a segmentation representation for the difference between two pictures.
+paths:
+  /v1/health/ready:
+    get:
+      summary: Service ready check
+      description: This endpoint will return a 200 status when the service is ready
+        to receive inference requests.
+      operationId: health_v1_health_ready_get
+      responses:
+        '200':
+          description: Successful Response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NIMHealthSuccessResponse'
+        '503':
+          description: Service is not ready to receive requests.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors'
+  /v1/health/live:
+    get:
+      summary: Service liveness check
+      description: This endpoint will return a 200 status as soon as the service is
+        able to accept traffic, but it does not mean the service is ready to accept
+        inference requests.
+      operationId: health_ready_v1_health_live_get
+      responses:
+        '200':
+          description: Successful Response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NIMHealthSuccessResponse'
+  /v1/metrics:
+    get:
+      summary: Metrics
+      description: Handler for metrics endpoint.
+      operationId: metrics_v1_metrics_get
+      responses:
+        '200':
+          description: Successful Response.
+          content:
+            application/json:
+              schema:
+                type: string
+                title: Response Metrics V1 Metrics Get
+                maxLength: 2048
+                pattern: ^.*$
+  /v1/license:
+    get:
+      summary: Provide NIM LICENSE
+      description: This endpoint will return the NIM Container license information.
+      operationId: show_license_v1_license_get
+      responses:
+        '200':
+          description: Successful Response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NIMLicenseInfoResponse'
+  /v1/metadata:
+    get:
+      summary: Provide NIM Metadata
+      description: This endpoint will return the NIM Container Version, associated
+        models, assets and license information.
+      operationId: show_metadata_v1_metadata_get
+      responses:
+        '200':
+          description: Successful Response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NIMMetadataResponse'
+  /v1/manifest:
+    get:
+      summary: Provide NIM Manifest file
+      description: This endpoint will return the NIM manifest file content.
+      operationId: manifest_v1_manifest_get
+      responses:
+        '200':
+          description: Successful Response.
+          content:
+            application/json:
+              schema:
+                manifest_file:
+                  type: string
+                  title: ManifestFile
+                  maxLength: 20480
+                  pattern: ^.*$
+                  description: Manifest file contents.
+  "/v1/infer":
+    post:
+      tags:
+        - "NVIDIA ChangeNet API"
+      summary: Change detection on images.
+      description: "Invokes inference for the input images.
+        The input image can be Base64 encoded string in the request or it can be
+        specified using the file identifier of an uploaded file. If uploading
+        large images in NVCF deployment, this POST should be used in conjunction with the NVCF API which
+        allows for the upload of large assets. \nYou can find details on how to use
+        NVCF Asset APIs here: https://docs.api.nvidia.com/cloud-functions/reference/createasset."
+      parameters:
+      - in: header
+        name: NVCF-INPUT-ASSET-REFERENCES
+        schema:
+          type: string
+          maxLength: 4864
+          format: uuid
+        required: false
+        description: 'String of asset IDs separated by commas. Data is uploaded to
+          AWS S3 using NVCF Asset APIs and associated with these asset IDs.If the
+          size of an image is more than 200KB, it needs to be uploaded to a presigned
+          S3 URL bucket. The presigned URL allows for secure and temporary access
+          to the S3 bucket for uploading the image. Once the asset is requested, an
+          asset ID is generated for it. Please include this asset ID in this header
+          and to use the uploaded image in a prompt, you need to refer to it using
+          the following format: `<img src="data:image/png;asset_id,{asset_id}" />`.'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetectionRequest'
+        required: true
+      responses:
+        "200":
+          description: Invocation is fulfilled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetectionResponse'
+        "202":
+          description: Result is pending. Client should poll using the requestId.
+          content:
+            application/json:
+              example: {}
+              schema: {}
+          headers:
+            NVCF-REQID:
+              description: requestId required for pooling.
+              schema:
+                type: string
+                format: uuid
+                maxLength: 36
+            NVCF-STATUS:
+              description: Invocation status.
+              schema:
+                type: string
+                format: ^[a-zA-Z-]{1,64}$
+                maxLength: 64
+        "402":
+          description: Payment Required.
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    type: string
+                    maxLength: 256
+                    format: ^[a-zA-Z-]{1,64}$
+                    description: Contains specific information related to the error and why it occurred.
+                    example: You have reached your limit of credits.
+                type: object
+                title: PaymentRequiredError
+        "422":
+          description: Validation failed, provided entity could not be processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors'
+              example:
+                type: urn:nvcf-worker-service:problem-details:unprocessable-entity
+                title: Unprocessable Entity
+                status: 422
+                detail: string
+                instance: /v2/nvcf/pexec/functions/9446dad0-ff4f-46d1-89f4-726e113cfca0
+                requestId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        "500":
+          description: The invocation ended with an error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors'
+              example:
+                type: urn:nvcf-worker-service:problem-details:internal-server-error
+                title: Internal Server Error
+                status: 500
+                detail: string
+                instance: /v2/nvcf/pexec/functions/9446dad0-ff4f-46d1-89f4-726e113cfca0
+                requestId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+security:
+  - Token: []
+components:
+  securitySchemes:
+    Token:
+      type: http
+      scheme: bearer
+  schemas:
+    NIMAssetInfoResponse:
+      properties:
+        assetName:
+          type: string
+          title: Assetname
+          description: The name of the asset used by NIMs.
+          maxLength: 1024
+          pattern: ^[A-Za-z0-9_.\-]*$
+        url:
+          type: string
+          title: Url
+          description: The url of the asset being used.
+          maxLength: 1024
+          pattern: ^.*$
+        checksum:
+          type: string
+          title: Checksum
+          description: The unique identifier for asset.
+          maxLength: 1024
+          pattern: ^.*$
+      type: object
+      required:
+      - assetName
+      - url
+      - checksum
+      title: NIMAssetInfoResponse
+    NIMHealthSuccessResponse:
+      properties:
+        object:
+          type: string
+          title: Object
+          default: health.response
+          maxLength: 1024
+          pattern: ^.*$
+        message:
+          type: string
+          title: Message
+          maxLength: 1024
+          pattern: ^.*$
+      type: object
+      required:
+      - message
+      title: NIMHealthSuccessResponse
+    NIMLicenseInfoResponse:
+      properties:
+        name:
+          type: string
+          title: Name
+          description: The name of the NIMs license.
+          maxLength: 1024
+          pattern: ^.*$
+        path:
+          type: string
+          title: Path
+          description: The path of the NIMs license file inside the container.
+          maxLength: 1024
+          pattern: ^.*$
+        sha:
+          type: string
+          title: Sha
+          description: The unique identifier of the license.
+          maxLength: 1024
+          pattern: ^.*$
+        size:
+          type: integer
+          title: Size
+          format: int32
+          minimum: 0
+          maximum: 20971520
+          description: The size of the license file in bytes.
+        url:
+          type: string
+          title: Url
+          description: The url of the NIMs license.
+          maxLength: 1024
+          pattern: ^.*$
+        type:
+          type: string
+          title: Type
+          description: The content type of the license.
+          maxLength: 1024
+          pattern: ^.*$
+        content:
+          type: string
+          title: Content
+          description: The content inside the NIMs license file.
+          maxLength: 20971520
+          pattern: ^.*$
+      type: object
+      required:
+      - name
+      - path
+      - sha
+      - size
+      - url
+      - type
+      - content
+      title: NIMLicenseInfoResponse
+    NIMMetadataResponse:
+      properties:
+        version:
+          type: string
+          title: version
+          description: The version of the NIM service.
+          maxLength: 256
+          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$
+        modelInfo:
+          items:
+            $ref: '#/components/schemas/NIMModelInfoResponse'
+          type: array
+          title: Modelinfo
+          maxItems: 24
+          description: The list of information of models being served inside NIMs
+            container
+          default: []
+        assetInfo:
+          items:
+            $ref: '#/components/schemas/NIMAssetInfoResponse'
+          type: array
+          title: Assetinfo
+          maxItems: 48
+          description: The list of different assets used by the NIMs
+          default: []
+        licenseInfo:
+          allOf:
+          - $ref: '#/components/schemas/NIMLicenseInfoResponse'
+          description: The information of the license of released NIMs
+      type: object
+      required:
+      - version
+      - licenseInfo
+      title: NIMMetadataResponse
+    NIMModelInfoResponse:
+      properties:
+        shortName:
+          type: string
+          title: Shortname
+          description: The name of the model served by NIMs
+          maxLength: 2048
+          pattern: ^.*$
+        modelUrl:
+          type: string
+          title: Modelurl
+          maxLength: 1024
+          pattern: ^.*$
+          description: The URL from which the model is downloaded.
+      type: object
+      required:
+      - shortName
+      - modelUrl
+      title: NIMModelInfoResponse
+    DetectionRequest:
+      additionalProperties: false
+      properties:
+        input:
+          type: array
+          items:
+            type: string
+            pattern: ^.*$
+            maxLength: 4294967296
+          maxItems: 2
+          minItems: 2
+          title: Input
+          description: 'The two of images that you want to detect change
+            for. Images should be in form of `data:image/{format};base64,{base64encodedimage}`.
+            For NVCF deployment, if the size of an image is more than 200KB, it needs to be uploaded to
+            a presigned S3 bucket using NVCF Asset APIs. Once uploaded you can refer
+            to it using the following format: `<img src="data:image/png;asset_id,{asset_id}"
+            />`. Accepted formats are `jpg`, `png` and `jpeg`.'
+        model:
+          type: string
+          enum: [nvidia/changenet]
+          title: Model
+          description: ID of the mask model.
+          examples:
+            - nvidia/changenet
+      type: object
+      required:
+        - input
+        - model
+      title: DetectionRequest
+      description: Input images for the inference request.
+    DetectionResponse:
+      type: object
+      properties:
+        data:
+          type: string
+          description: base64 encoded image for change representation
+          pattern: ^.*$
+          maxLength: 4294967296
+        model:
+          type: string
+          description: Model used to generate masks.
+          example: nvidia/changenet
+          title: Model
+          const: nvidia/changenet
+        usage:
+          $ref: '#/components/schemas/Usage'
+          description: Usage statistics for the masks request.
+          examples:
+          - num_images: 1
+      additionalProperties: false
+      required:
+        - data
+        - usage
+        - model
+      title: DetectionResponse
+      description: Response schema for the inference request.
+    Usage:
+      properties:
+        num_images:
+          type: integer
+          format: int32
+          title: Num Images
+          minimum: 0
+          maximum: 64
+          description: Number of images processed.
+      additionalProperties: false
+      type: object
+      required:
+        - num_images
+      title: Usage
+      description: Usage information for the inference request.
+    Errors:
+      properties:
+        type:
+          type: string
+          format: "^.{1, 128}$"
+          maxLength: 128
+          description: Error type
+        title:
+          type: string
+          format: "^.{1, 128}$"
+          maxLength: 128
+          description: Error title
+        status:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 999
+          description: Error status code
+        detail:
+          type: string
+          format: "^.{1, 1024}$"
+          maxLength: 1024
+          description: Detailed information about the error
+        instance:
+          type: string
+          format: "^.{1, 256}$"
+          maxLength: 256
+          description: Function instance used to invoke the request
+        requestId:
+          type: string
+          format: uuid
+          maxLength: 36
+          description: UUID of the request
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
+        - requestId
+      title: InvokeError

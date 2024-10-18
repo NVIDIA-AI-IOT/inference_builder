@@ -13,7 +13,7 @@ input:
 
 output:
 - name: probs
-  data_type: TYPE_FLOAT32
+  data_type: TYPE_FP32
   dims: [ -1 ]
 
 server:
@@ -60,7 +60,7 @@ models:
     optional: false
   output:
   - name: probs
-    data_type: TYPE_FLOAT32
+    data_type: TYPE_FP32
     dims: [ -1 ]
   parameters:
     infer_config_path: config_inferserver_nvdinov2.txt

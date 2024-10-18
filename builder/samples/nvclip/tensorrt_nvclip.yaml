@@ -82,9 +82,10 @@ models:
     preprocessors:
       - kind: "custom"
         name: "openclip-tokenizer"
-        model_path: "nvclip_clipa_vit_h14_700M_text/1"
         input: ["text"]
         output: ["TEXT"]
+        config:
+          model_path: "nvclip_clipa_vit_h14_700M_text/1"
   - name: nvclip_clipa_vit_h14_700M_vision
     backend: "triton/python/polygraphy"
     max_batch_size: 64
@@ -103,7 +104,7 @@ models:
         name: "nvclip-vision-preprocessor"
         input: ["image"]
         output: ["IMAGE"]
-post_processors:
+postprocessors:
   - kind: "custom"
     name: "nvclip-postprocessor"
     input: ["LOGITS_PER_TEXT", "LOGITS_PER_IMAGE", "indices"]
@@ -120,12 +121,3 @@ routes: {
   'nvclip_clipa_vit_h14_700M_text:["LOGITS_PER_TEXT"]': ':',
   'nvclip_clipa_vit_h14_700M_vision:["LOGITS_PER_IMAGE"]': ':'
 }
-
-# endpoint specification for server
-endpoints:
-  infer: "/v1/embeddings"
-  health: "/health/live"
-
-# environment specification
-environment:
-  tensorrt: 9.3.0

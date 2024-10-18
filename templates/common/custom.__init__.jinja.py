@@ -25,6 +25,6 @@ def create_instance(name:str, config):
 
         # Instantiate and return the class object
         return cls(config)
-    except (ModuleNotFoundError, AttributeError) as e:
+    except Exception as e:
         print(f"Error creating class '{class_name}' from module '{module_name}': {e}")
         return None

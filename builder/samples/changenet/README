@@ -1,0 +1,21 @@
+Download the deepstream SDK here https://drive.google.com/file/d/1UPJAKLrXSQOF8fM4Abu-FzqyqSnaLiWV/view?usp=sharing, and copy it to builder/samples/nvsegformer
+
+Prepare the TRT engine file following instruction from https://gitlab-master.nvidia.com/dl/JoC/ai_foundation_models/-/blob/main/tao/visual-changenet/README.md?ref_type=heads
+(Be sure to use tensorrt with the same version of that from the container image: 10.5)
+
+Build the NIM inference flow:
+
+cd builder
+python main.py samples/changenet/trt_changenet.yaml -a samples/changenet/openapi.yaml -c samples/changenet/processors.py -o samples
+
+Build and run the docker image:
+
+docker compose up --build nim-changenet
+
+Test the NIM with a client:
+
+cd builder/samples/changenet
+python nim_client.py --host 127.0.0.1 --port 8800 --file test1.jpg test2.jpg
+
+Know Issues:
+- There needs a warm-up for each decoder(PNG/JPG) requiring one test jpg and one test png file being feeded to the NIM respectively

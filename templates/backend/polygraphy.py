@@ -4,10 +4,10 @@ from polygraphy.backend.trt import EngineFromBytes, TrtRunner
 class PolygraphBackend(ModelBackend):
     """Python TensorRT Backend from polygraph"""
     def __init__(self, model_config:Dict, device_id: int=0):
-        super().__init__(model_config)
+        super().__init__(model_config, device_id)
         self._model_name = model_config["name"]
         self._output_names = [o['name'] for o in model_config['output']]
-        self._device_id = device_id
+
         logger.debug(f"PolygraphBackend created for {self._model_name} to generate {self._output_names}")
         if "tensorrt_engine" not in model_config:
             raise("PolygraphBackend requires a path to tensorrt_engine")

@@ -167,9 +167,10 @@ models:
     preprocessors:
       - kind: "custom"
         name: "vila-preprocessor"
-        model_path: "vila1.5-13b"
         input: ["images"]
         output: ["images"]
+        config:
+          model_path: "vila1.5-13b"
     # only required if backend is tensorrt
     tensorrt_engine: "vila1.5-13b/fp16/1-gpu/visual_engines/visual_encoder.engine"
 

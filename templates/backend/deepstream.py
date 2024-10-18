@@ -78,11 +78,10 @@ class TensorOutput(BatchMetadataOperator):
 class DeepstreamBackend(ModelBackend):
     """Deepstream backend using pyservicemaker"""
     def __init__(self, model_config:Dict, device_id: int=0):
-        super().__init__(model_config)
+        super().__init__(model_config, device_id)
         self._max_batch_size = model_config["max_batch_size"]
         self._model_name = model_config["name"]
         self._output_names = [o['name'] for o in model_config['output']]
-        self._device_id = device_id
 
         dims = model_config['input'][0]['dims']
         d = (dims[1], dims[2]) if dims[0] == 3 else (dims[0], dims[1])

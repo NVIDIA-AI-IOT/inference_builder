@@ -42,8 +42,8 @@ class GenericInference(InferenceBase):
             self._submit(operator, backend_instance)
         # post processing:
         self._processors = []
-        if hasattr(global_config, "post_processors"):
-            configs = OmegaConf.to_container(global_config.post_processors)
+        if hasattr(global_config, "postprocessors"):
+            configs = OmegaConf.to_container(global_config.postprocessors)
             for config in configs:
                 if config["kind"] == "custom":
                     self._processors.append(

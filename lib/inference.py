@@ -89,7 +89,6 @@ class DataFlow:
         image_list = []
         with tempfile.TemporaryDirectory() as temp_dir:
             for image in images:
-                print(f"{type(images), type(image)}")
                 image_id = str(uuid.uuid4())
                 asset_path = os.path.join(temp_dir, image_id)
                 # Shouldn't we decode the bytes directly?
@@ -171,8 +170,13 @@ class DataFlow:
 
 class ModelBackend(ABC):
     """Interface for standardizing the model backend """
-    def __init__(self, model_config: Dict):
+    def __init__(self, model_config: Dict, device_id=0):
         self._model_config = model_config
+        self._device_id = device_id
+
+    @property
+    def device_id(self):
+        return self._device_id
 
     @abstractmethod
     def __call__(self, *args, **kwargs):
@@ -209,10 +213,20 @@ class Tokenizer:
 
 class Processor(ABC):
     def __init__(self, config: Dict):
+        self._name = config['name']
         self._kind = config['kind'] if 'kind' in config else 'auto'
         self._input = config['input'] if 'input' in config else []
         self._output = config['output'] if 'output' in config else []
-        self._preprocessor = None
+        self._config = { 'device_id': 0 }
+        if 'config' in config:
+            self._config.update(config['config'])
+        self._params = config['kwargs'] if 'kwargs' in config else dict()
+        self._name = config['name']
+        self._processor = None
+
+    @property
+    def name(self):
+        return self._name
 
     @property
     def input(self):
@@ -225,6 +239,14 @@ class Processor(ABC):
     @property
     def kind(self):
         return self._kind
+
+    @property
+    def config(self):
+        return self._config
+
+    @property
+    def params(self):
+        return self._params.copy()
 
     @abstractmethod
     def __call__(self, *args, **kwargs):
@@ -240,9 +262,9 @@ class AutoProcessor(Processor):
         if self._processor is None:
             logger.error(f"Failed to load AutoProcessor from {model_path}")
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         # TODO value parser should be configurable
-        return self._processor(*args, **kwargs)
+        return self._processor(*args)
 
 class CustomProcessor(Processor):
     """CustomProcessor loads the processor from custom module"""
@@ -253,12 +275,14 @@ class CustomProcessor(Processor):
         if "model_path" not in config:
             config["model_path"] = model_path
         config["model_path"] = os.path.join(check_point_dir, config["model_path"])
-        self._processor = custom.create_instance(name, config)
-        if self._processor is None:
+        self._processor = custom.create_instance(name, self.config)
+        if self._processor is not None:
+            logger.info(f"Custom processor {self._processor.name} created")
+        else:
             logger.error(f"Failed to create processor {name}")
 
-    def __call__(self, *args, **kwargs):
-        ret = self._processor(*args, **kwargs)
+    def __call__(self, *args):
+        ret = self._processor(*args, **self.params)
         if not isinstance(ret, tuple):
             ret = ret,
         return ret
@@ -272,30 +296,8 @@ class ModelOperator:
         self._out: List[DataFlow] = []
         self._running = False
         self._tokenizer = None
-        self._processors = []
-        if "tokenizer" in model_config:
-            self._tokenizer = Tokenizer(
-                config=model_config["tokenizer"],
-                check_point_dir=self._check_point_dir,
-                model_path=self._model_name
-            )
-        if "preprocessors" in model_config:
-            for config in model_config["preprocessors"]:
-                ProcessorClass = None
-                if config["kind"] == "auto":
-                    ProcessorClass = AutoProcessor
-                elif config["kind"] == "custom":
-                    ProcessorClass = CustomProcessor
-                if ProcessorClass is not None:
-                    self._processors.append(
-                        ProcessorClass(
-                            config=config,
-                            check_point_dir=check_point_dir,
-                            model_path=self._model_name
-                        )
-                    )
-                else:
-                    raise Exception("Invalid Preprocessor")
+        self._preprocessors = []
+        self._postprocessors = []
         self._model_config = model_config
         self._backend = None
 
@@ -335,6 +337,33 @@ class ModelOperator:
 
     def run(self, model_backend: ModelBackend):
         logger.debug(f"Model operator for {self._model_name} started")
+
+        # create preprocessors
+        if "tokenizer" in self._model_config:
+            self._tokenizer = Tokenizer(
+                config=self._model_config["tokenizer"],
+                check_point_dir=self._check_point_dir,
+                model_path=self._model_name
+            )
+        for kind, processors in [("preprocessors", self._preprocessors), ("postprocessors", self._postprocessors)]:
+            if kind in self._model_config:
+                for config in self._model_config[kind]:
+                    ProcessorClass = None
+                    if config["kind"] == "auto":
+                        ProcessorClass = AutoProcessor
+                    elif config["kind"] == "custom":
+                        ProcessorClass = CustomProcessor
+                    if ProcessorClass is not None:
+                        processors.append(
+                            ProcessorClass(
+                                config=config,
+                                check_point_dir=self._check_point_dir,
+                                model_path=self._model_name
+                            )
+                        )
+                    else:
+                        raise Exception("Invalid Processor")
+        # backend loop
         self._backend = model_backend
         while True:
             try:
@@ -389,6 +418,8 @@ class ModelOperator:
                                 expected_result[expected_key] = np.array([text], np.string_)
                             else:
                                 logger.error("Format not supported by tokenizer")
+                    # call postprocess() before depositing the results
+                    expected_result = self._postprocess(expected_result)
                     logger.debug(f"Deposit result: {expected_result}")
                     out.put(expected_result)
                 # mark the stop of this inference batch
@@ -402,7 +433,7 @@ class ModelOperator:
 
         # go through the preprocess chain
         outcome = args
-        for preprocessor in self._processors:
+        for preprocessor in self._preprocessors:
             result = []
             for data in outcome:
                 # initialize the processed as the original values
@@ -445,6 +476,24 @@ class ModelOperator:
                         if value.dtype != data_type:
                             data[key] = value.to(data_type)
         return outcome
+
+    def _postprocess(self, data: Dict):
+        processed = {k: v for k, v in data.items()}
+        for processor in self._postprocessors:
+            if not all([i in data for i in processor.input]):
+                logger.warning(f"Input settings invalid for the processor: {processor}")
+                continue
+            input = [processed.pop(i) for i in processor.input]
+            logger.debug(f"Post-processor {processor.name} invoked with given input {input}")
+            output = processor(*input)
+            logger.debug(f"Post-processor generated output {output}")
+            if len(output) != len(processor.output):
+                logger.warning(f"Number of postprocessing output doesn't match the configuration, expecting {len(processor.output)}, while getting {len(output)}")
+                continue
+            # update as processed
+            for key, value in zip(processor.output, output):
+                processed[key] = value
+        return processed
 
 class InferenceBase:
     """The base model that drives the inference flow"""

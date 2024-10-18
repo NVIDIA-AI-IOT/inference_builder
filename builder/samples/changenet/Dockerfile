@@ -106,17 +106,20 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     nim_dependency_handler
 
-
+RUN wget https://github.com/CVCUDA/CV-CUDA/releases/download/v0.7.0-beta/cvcuda-lib-0.7.0_beta-cuda12-x86_64-linux.deb \
+         https://github.com/CVCUDA/CV-CUDA/releases/download/v0.7.0-beta/cvcuda-dev-0.7.0_beta-cuda12-x86_64-linux.deb \
+         https://github.com/CVCUDA/CV-CUDA/releases/download/v0.7.0-beta/cvcuda_cu12-0.7.0b0-cp310-cp310-linux_x86_64.whl && dpkg -i *.deb && pip install ./cvcuda_cu12-0.7.0b0-cp310-cp310-linux_x86_64.whl
 
 WORKDIR $NIM_DIR_PATH
 
-
-# This should be downloaded by nimlib
-COPY NVCLIP_224_700M_ViTH14.json $NIM_DIR_PATH/model_repo/nvclip_clipa_vit_h14_700M_text/1/NVCLIP_224_700M_ViTH14.json
-COPY nvclip_clipa_vit_h14_700M_text.plan $NIM_DIR_PATH/model_repo/nvclip_clipa_vit_h14_700M_text/1/model.plan
-COPY nvclip_clipa_vit_h14_700M_vision.plan $NIM_DIR_PATH/model_repo/nvclip_clipa_vit_h14_700M_vision/1/model.plan
-# Copy data models.
-ADD nvclip.tgz $NIM_DIR_PATH
+COPY inference.py $NIM_DIR_PATH
+COPY data_model.py $NIM_DIR_PATH
+COPY config.py $NIM_DIR_PATH
+COPY processors.py $NIM_DIR_PATH
+ADD model_repo $NIM_DIR_PATH/model_repo
+ADD lib $NIM_DIR_PATH/lib
+ADD custom $NIM_DIR_PATH/custom
+COPY model.plan $NIM_DIR_PATH/model_repo/trt_changenet/1
 
 RUN groupadd --gid 1000 --non-unique nvs && \
     useradd --create-home --shell /usr/sbin/nologin --uid 1000 --non-unique --gid 1000 nvs && \

@@ -69,11 +69,15 @@ def create_jinja2_env():
         match = re.search(pattern, value)
         return match.group(1) if match else ''
 
+    def raise_helper(message):
+        raise Exception(message)
+
     jinja2_env = jinja2.Environment()
     jinja2_env.tests["startswith"] = start_with
     jinja2_env.filters["replace"] = replace
     jinja2_env.filters["extract"] = extract
     jinja2_env.filters["zip"] = zip
+    jinja2_env.globals["raise"] = raise_helper
 
     return jinja2_env
 
