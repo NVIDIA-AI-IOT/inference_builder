@@ -125,64 +125,55 @@ def build_custom_modules(custom_modules: List, tree):
 def build_inference(server_type, config, output_dir: Path):
     tpl_dir = get_resource_path("templates")
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
+    triton_model_repo_dir = output_dir/'model_repo'
+    triton_tpl = jinja_env.get_template("triton/model.jinja.py")
+    generic_tpl = jinja_env.get_template("generic/model.jinja.py")
 
-    if server_type == "triton":
-        model_repo_dir = output_dir/'model_repo'
-        # first build the top level model
-        triton_tpl = jinja_env.get_template("triton/model.jinja.py")
-        t_backends = []
-        for model in config.models:
-            backend_spec = model.backend.split('/')
-            if backend_spec[0] == "triton":
-                (model_repo_dir/f"{model.name}/1").mkdir(parents=True)
-                if len(backend_spec) < 2:
-                    raise Exception("Triton backend needs a triton backend type")
-                if backend_spec[1] == "python":
-                    if len(backend_spec) < 3:
-                        raise Exception("Triton python backend needs an implementation type")
-                    # generating triton model for triton backend
-                    target_dir = model_repo_dir/f"{model.name}/1"
-                    model_file = target_dir/"model.py"
-                        # Triton python backend needs a model.py
-                    backend_tpl = get_resource_path(f"templates/backend/{backend_spec[2]}.py")
-                    with open(backend_tpl, 'r') as f:
-                        output = triton_tpl.render(backends=[f.read()], top_level=False)
-                        with open (model_file, 'w') as o:
-                            o.write(output)
-                    if "triton" not in t_backends:
-                        t_backends.append("triton")
-                # write the pbtxt
-                pbtxt_str = generate_pbtxt(OmegaConf.to_container(model), backend_spec[1] )
-                pbtxt_path = model_repo_dir/model.name/"config.pbtxt"
-                with open(pbtxt_path, 'w') as f:
-                    f.write(pbtxt_str)
-            else:
-                bare_backend = backend_spec[0]
-                if bare_backend not in t_backends:
-                    t_backends.append(bare_backend)
-        # add top level backend
-        backends = []
-        model_file = model_repo_dir/f"{config.name}"/"1/model.py"
-        for backend in t_backends:
-            backend_tpl = get_resource_path(f"templates/backend/{backend}.py")
-            with open(backend_tpl, 'r') as f:
-                backends.append(f.read())
+    # collect the backend: build model.py and pbtxt if the backend is triton
+    t_backends = []
+    for model in config.models:
+        backend_spec = model.backend.split('/')
+        if backend_spec[0] == "triton":
+            os.makedirs(triton_model_repo_dir/f"{model.name}/1", exist_ok=True)
+            if len(backend_spec) < 2:
+                raise Exception("Triton backend needs a triton backend type")
+            if backend_spec[1] == "python":
+                if len(backend_spec) < 3:
+                    raise Exception("Triton python backend needs an implementation type")
+                # generating triton model for triton backend
+                target_dir = triton_model_repo_dir/f"{model.name}/1"
+                    # Triton python backend needs a model.py
+                backend_tpl = get_resource_path(f"templates/backend/{backend_spec[2]}.py")
+                with open(backend_tpl, 'r') as f:
+                    output = triton_tpl.render(backends=[f.read()], top_level=False)
+                    with open (target_dir/"model.py", 'w') as o:
+                        o.write(output)
+                if "triton" not in t_backends:
+                    t_backends.append("triton")
+            # write the pbtxt
+            pbtxt_str = generate_pbtxt(OmegaConf.to_container(model), backend_spec[1] )
+            pbtxt_path = triton_model_repo_dir/model.name/"config.pbtxt"
+            with open(pbtxt_path, 'w') as f:
+                f.write(pbtxt_str)
+        else:
+            bare_backend = backend_spec[0]
+            if bare_backend not in t_backends:
+                t_backends.append(bare_backend)
+
+    # create backends and model.py
+    backends = []
+    target_dir = triton_model_repo_dir/f"{config.name}"/"1/" if server_type == "triton" else output_dir
+    for backend in t_backends:
+        backend_tpl = get_resource_path(f"templates/backend/{backend}.py")
+        with open(backend_tpl, 'r') as f:
+            backends.append(f.read())
+        if server_type == "triton":
+            # render top level triton backend
             output = triton_tpl.render(backends=backends, top_level=True)
-            with open (model_file, 'w') as o:
-                o.write(output)
-    else:
-        # use generic inference flow
-        backends = []
-        for backend in [m.backend for m in config.models]:
-            backend_spec = backend.split('/')
-            backend_name = backend_spec[0]
-            backend_tpl = get_resource_path(f"templates/backend/{backend_name}.py")
-            with open(backend_tpl, 'r') as f:
-                backends.append(f.read())
-        generic_tpl = jinja_env.get_template("generic/model.jinja.py")
-        output = generic_tpl.render(backends=backends)
-        model_file = output_dir/"model.py"
-        with open (model_file, 'w') as o:
+        else:
+            # render generic model.y
+            output = generic_tpl.render(backends=backends)
+        with open (target_dir/"model.py", 'w') as o:
             o.write(output)
 
 

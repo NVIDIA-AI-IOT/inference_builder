@@ -15,7 +15,7 @@ docker compose up --build nim-changenet
 Test the NIM with a client:
 
 cd builder/samples/changenet
-python nim_client.py --host 127.0.0.1 --port 8800 --file test1.jpg test2.jpg
+python nim_client.py --host 127.0.0.1 --port 8803 --file test1.jpg test2.jpg
 
 Know Issues:
 - There needs a warm-up for each decoder(PNG/JPG) requiring one test jpg and one test png file being feeded to the NIM respectively

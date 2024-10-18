@@ -1,4 +1,6 @@
 
+import triton_python_backend_utils as pb_utils
+
 class TritonBackend(ModelBackend):
     """Triton Python Backend"""
     def __init__(self, model_config: Dict):

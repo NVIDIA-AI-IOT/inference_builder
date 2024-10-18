@@ -40,7 +40,7 @@ server:
       responses:
         EmbeddingsResponse: >
           {
-            "data": [{"index": 0, "embedding": [{% for item in response.probs %} {{item}} {% if not loop.last %}, {% endif %}{% endfor %}], "object": "embedding"}],
+            "data": [{% for item in response.probs %} {"index": {{ loop.index }}, "embedding": {{item|tojson}} , "object": "embedding"} {% if not loop.last %}, {% endif %}{% endfor %}],
             "usage": { "num_images": 1},
             "model": "nvidia/nvdinov2-vit-g",
             "object": "list"

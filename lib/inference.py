@@ -270,16 +270,14 @@ class CustomProcessor(Processor):
     """CustomProcessor loads the processor from custom module"""
     def __init__(self, config: Dict, check_point_dir: str, model_path: str):
         super().__init__(config)
-        name = config["name"]
-        config = {k: v for k, v in config.items()}
-        if "model_path" not in config:
-            config["model_path"] = model_path
-        config["model_path"] = os.path.join(check_point_dir, config["model_path"])
-        self._processor = custom.create_instance(name, self.config)
+        if "model_path" not in self.config:
+            self.config["model_path"] = model_path
+        self.config["model_path"] = os.path.join(check_point_dir, self.config["model_path"])
+        self._processor = custom.create_instance(self.name, self.config)
         if self._processor is not None:
             logger.info(f"Custom processor {self._processor.name} created")
         else:
-            logger.error(f"Failed to create processor {name}")
+            logger.error(f"Failed to create processor {self.name}")
 
     def __call__(self, *args):
         ret = self._processor(*args, **self.params)

@@ -115,7 +115,7 @@ WORKDIR $NIM_DIR_PATH
 COPY inference.py $NIM_DIR_PATH
 COPY data_model.py $NIM_DIR_PATH
 COPY config.py $NIM_DIR_PATH
-COPY processors.py $NIM_DIR_PATH
+COPY model.py $NIM_DIR_PATH
 ADD model_repo $NIM_DIR_PATH/model_repo
 ADD lib $NIM_DIR_PATH/lib
 ADD custom $NIM_DIR_PATH/custom
