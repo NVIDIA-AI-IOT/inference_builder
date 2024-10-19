@@ -55,7 +55,8 @@ ENV BASE_IMAGE="nvcr.io/nvidia/tritonserver-pb24h1:24.03.04-py3"
 ENV NIMTOOLS_VERSION=0.3.1rc7
 ENV BACKEND_TYPE="triton"
 ENV NIM_NSPECT_ID=NSPECT-Z39R-IVVG
-ENV NIM_MODEL_NAME="nvidia/nvdinov2-vit-g"
+ENV NIM_MODEL_NAME="nvidia/rtdetr"
+ENV NIM_LOG_LEVEL="DEBUG"
 
 # COPY ./model_manifest.yaml /opt/nim/etc/default/model_manifest.yaml
 COPY ./dependencies.yaml /etc/nim/config/dependencies.yaml

@@ -3,17 +3,31 @@ import re
 import sys
 import logging
 import time
-from typing import Optional
+from typing import Callable, Optional, List, Dict
 import importlib
 import numpy as np
 import torch
 import jinja2
-from typing import List, Dict
 
 kDebug = int(os.getenv("DEBUG", "0"))
 PACKAGE_NAME = "NIM"
 
-def stack_tensors_in_dict(list_of_tensor_dicts: List):
+
+def concat_tensors_in_dict(list_of_tensor_dicts: List) -> Dict:
+    result = {}
+
+    # Iterate over each dictionary in the list
+    for d in list_of_tensor_dicts:
+        for key, value in d.items():
+            if isinstance(value, np.ndarray):
+                result[key] = np.concatenate(result[key], value) if key in result else value
+            elif isinstance(value, torch.Tensor):
+                result[key] = torch.cat((result[key], value)) if key in result else value
+            else:
+                result[key] = result[key] + value if key in result else value
+    return result
+
+def stack_tensors_in_dict(list_of_tensor_dicts: List) -> Dict:
     """
     [{'k1': 'v1', 'k2': 'v2'}, {'k1': 'v3', 'k2': 'v4'}] ->
     {'k1': ['v1', 'v2'], 'k2': ['v3', 'v4']}
@@ -36,7 +50,7 @@ def stack_tensors_in_dict(list_of_tensor_dicts: List):
 
     return result
 
-def split_tensor_in_dict(dict_of_tensor_list):
+def split_tensor_in_dict(dict_of_tensor_list: Dict) -> List:
     """
     {'k1': ['v1', 'v2'], 'k2': ['v3', 'v4']} ->
     [{'k1': 'v1', 'k2': 'v2'}, {'k1': 'v3', 'k2': 'v4'}]
@@ -48,6 +62,13 @@ def split_tensor_in_dict(dict_of_tensor_list):
         result.append({ k: v[i] for k, v in dict_of_tensor_list.items()})
 
     return result
+
+def convert_list(i: List, f: Callable):
+    # If the item is a list, apply the function recursively
+    if isinstance(i, list):
+        return [convert_list(item, f) for item in i]
+    else:
+        return f(i)
 
 def import_class(module_name, class_name):
     # Import the module using importlib

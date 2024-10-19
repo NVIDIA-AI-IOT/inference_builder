@@ -11,7 +11,7 @@ from omegaconf import OmegaConf
 import numpy as np
 import torch
 from typing import Dict
-from lib.utils import create_jinja2_env, stack_tensors_in_dict
+from lib.utils import create_jinja2_env, stack_tensors_in_dict, convert_list
 
 jinja2_env = create_jinja2_env()
 
@@ -83,16 +83,15 @@ class Interface(HttpNIMApiInterface):
                 self.logger.error(f"Unexpected output: {name}")
                 continue
             expected_type = type_map[name]
-            if isinstance(response[name], np.ndarray) or isinstance(response[name], torch.Tensor):
-                data_type = response[name].dtype
-                l = response[name].tolist()
-                if  data_type != np.string_ and expected_type == "TYPE_STRING":
-                    response[name] = ' '.join([i.decode("utf-8", "ignore") for i in l])
+            value = response[name]
+            if isinstance(value, np.ndarray) or isinstance(value, torch.Tensor):
+                l = value.tolist()
+                if expected_type == "TYPE_STRING" and value.dtype != np.string_:
+                    response[name] = convert_list(l, lambda i: i.decode("utf-8", "ignore"))
                 elif len(response[name].shape) == 1 and len(l) == 1:
                     response[name] = l[0]
                 else:
                     response[name] = l
-
         json_string = jinja2_env.from_string(tpl).render(request=request, response=response)
         return data_model.{{ response_class }}(**json.loads(json_string))
 
@@ -105,11 +104,8 @@ class Interface(HttpNIMApiInterface):
         self.logger.info("infer called")
         in_data = self.process_request(body)
         self.logger.debug(f"request processed as {in_data}")
-        #TODO how to appropriately handle streaming responses
-        results = []
-        async for data in self._inference.execute(in_data):
-            results.append(data)
-        response = self.process_response(request, stack_tensors_in_dict(results))
+        result =  await self._inference.execute(in_data)
+        response = self.process_response(request, result)
         self.logger.debug(f"response generated as {response}")
         return response
 

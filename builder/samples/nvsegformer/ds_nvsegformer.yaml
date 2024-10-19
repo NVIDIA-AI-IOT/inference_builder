@@ -40,7 +40,7 @@ server:
       responses:
         MasksResponse: >
           {
-            "data": [{% for item in response.output %}{"index": {{loop.index0}}, "mask": {{item[0]}}, "object": "mask"}{% if not loop.last %}, {% endif %}{% endfor %}],
+            "data": [{% for item in response.output %}{"index": {{loop.index0}}, "mask": {{item}}, "object": "mask"}{% if not loop.last %}, {% endif %}{% endfor %}],
             "usage": { "num_images": 1},
             "model": "nvidia/nvsegformer",
             "object": "list"
@@ -61,6 +61,6 @@ models:
   output:
   - name: output
     data_type: TYPE_INT64
-    dims: [ -1, 512, 512 ]
+    dims: [ 512, 512 ]
   parameters:
     infer_config_path: config_nvinfer.txt

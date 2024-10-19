@@ -14,10 +14,10 @@ input:
 output:
   - name: pred_logits
     data_type: TYPE_FP32
-    dims: [ -1, -1 ]
+    dims: [ -1, -1, -1 ]
   - name: pred_boxes
     data_type: TYPE_FP32
-    dims: [ -1, -1 ]
+    dims: [ -1, -1, -1 ]
 
 server:
   endpoints:
@@ -64,9 +64,9 @@ models:
   output:
   - name: pred_logits
     data_type: TYPE_FP32
-    dims: [ -1, -1, -1 ]
+    dims: [ -1, -1 ]
   - name: pred_boxes
     data_type: TYPE_FP32
-    dims: [ -1, -1, -1 ]
+    dims: [ -1, -1 ]
   parameters:
     infer_config_path: config_nvinfer.txt

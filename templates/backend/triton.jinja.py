@@ -1,5 +1,4 @@
-
-import triton_python_backend_utils as pb_utils
+{% if server_type == "triton" %}
 
 class TritonBackend(ModelBackend):
     """Triton Python Backend"""
@@ -77,3 +76,71 @@ class TritonBackend(ModelBackend):
                 if all([expected[k] is not None for k in expected]):
                     yield expected
         logger.info(f"Infernece with TritonBackend {self._model_name} accomplished")
+
+{% else %}
+
+import tritonclient.http as httpclient
+from tritonclient.utils import *
+
+class TritonBackend(ModelBackend):
+    """Triton Python Backend"""
+    def __init__(self, model_config: Dict):
+        logger.debug(f"model_config: {model_config}")
+        super().__init__(model_config)
+        self._model_name = model_config["name"]
+        self._input_names = [i['name'] for i in model_config['input']]
+        self._output_names = [o['name'] for o in model_config['output']]
+        logger.debug(f"TritonBackend created for {self._model_name} with inputs {self._input_names} and outputs {self._output_names}")
+
+    def __call__(self, *args, **kwargs):
+        logger.debug(f"TritonBackend {self._model_name} triggered with {args if args else kwargs}")
+        in_data_list = args if args else [kwargs]
+        input_config = self._model_config["input"]
+        # to determine if we need to stack the input, TODO: below logic needs be more generic
+        need_stack = False
+        for in_data in in_data_list:
+            for key, value in in_data.items():
+                input_config = next((i for i in self._model_config["input"] if i['name'] == key), None)
+                if input_config is None:
+                    logger.error(f"Unexpected input: {key}")
+                    continue
+                expected_dims = len(input_config["dims"])
+                if expected_dims == len(value.shape) + 1:
+                    need_stack = True
+                    break
+        if need_stack:
+            in_data_list = [stack_tensors_in_dict(in_data_list)]
+        for in_data in in_data_list:
+            inputs = []
+            for k in in_data:
+                tensor = in_data[k]
+                batched = "max_batch_size" in self._model_config and self._model_config["max_batch_size"] > 0
+                if isinstance(tensor, torch.Tensor):
+                    tensor = tensor.cpu().numpy()
+                    if batched:
+                        tensor = np.expand_dims(tensor, 0)
+                elif not isinstance(tensor, np.ndarray):
+                    yield Error(message="Unsupported input tensor format")
+                    return
+                input = httpclient.InferInput(k, tensor.shape, np_to_triton_dtype(tensor.dtype))
+                input.set_data_from_numpy(tensor)
+                inputs.append(input)
+            outputs = [httpclient.InferRequestedOutput(n) for n in self._output_names]
+            with httpclient.InferenceServerClient("localhost:8000") as client:
+                response = client.infer(self._model_name, inputs, request_id=str(1), outputs=outputs)
+
+            result = response.get_response()
+            expected = {n: None for n in self._output_names}
+#            if response.has_error():
+#                yield Error(message=f"{response.error().message()}, stream_id={idx}")
+            for name in expected:
+                config = next((c for c in self._model_config['output'] if c['name'] == name), None)
+                dims = config['dims']
+                output = response.as_numpy(name)
+                expected[name] = np.squeeze(output, 0) if len(output.shape) == (len(dims)+1) else output
+            logger.debug(f"TritonBackend saved inference results to: {expected}")
+            if all([expected[k] is not None for k in expected]):
+                yield expected
+        logger.info(f"Inference with TritonBackend {self._model_name} accomplished")
+
+{% endif %}

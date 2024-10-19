@@ -143,11 +143,11 @@ def build_inference(server_type, config, output_dir: Path):
                 # generating triton model for triton backend
                 target_dir = triton_model_repo_dir/f"{model.name}/1"
                     # Triton python backend needs a model.py
-                backend_tpl = get_resource_path(f"templates/backend/{backend_spec[2]}.py")
-                with open(backend_tpl, 'r') as f:
-                    output = triton_tpl.render(backends=[f.read()], top_level=False)
-                    with open (target_dir/"model.py", 'w') as o:
-                        o.write(output)
+                backend_tpl = jinja_env.get_template(f"backend/{backend_spec[2]}.jinja.py")
+                backend = backend_tpl.render(server_type=server_type)
+                output = triton_tpl.render(backends=[backend], top_level=False)
+                with open (target_dir/"model.py", 'w') as o:
+                    o.write(output)
                 if "triton" not in t_backends:
                     t_backends.append("triton")
             # write the pbtxt
@@ -164,9 +164,8 @@ def build_inference(server_type, config, output_dir: Path):
     backends = []
     target_dir = triton_model_repo_dir/f"{config.name}"/"1/" if server_type == "triton" else output_dir
     for backend in t_backends:
-        backend_tpl = get_resource_path(f"templates/backend/{backend}.py")
-        with open(backend_tpl, 'r') as f:
-            backends.append(f.read())
+        backend_tpl = jinja_env.get_template(f"backend/{backend}.jinja.py")
+        backends.append(backend_tpl.render(server_type=server_type))
         if server_type == "triton":
             # render top level triton backend
             output = triton_tpl.render(backends=backends, top_level=True)

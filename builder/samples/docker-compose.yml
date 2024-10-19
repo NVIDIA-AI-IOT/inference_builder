@@ -107,7 +107,7 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
-      DEBUG: 1
+      DEBUG: 0
 #      GST_DEBUG: "*:3"
   nim-rtdetr:
     user: nvs:1000

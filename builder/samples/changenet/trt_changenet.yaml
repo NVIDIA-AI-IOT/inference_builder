@@ -31,7 +31,7 @@ server:
       responses:
         DetectionResponse: >
           {
-            "data": {{ response.output|tojson }},
+            "data": {{ response.output[0]|tojson }},
             "usage": { "num_images": 1},
             "model": "nvidia/changenet"
           }

@@ -4,7 +4,7 @@ from typing import Dict, Optional, List, Union
 import numpy as np
 from inferencemodeltoolkit.interfaces.fastapi import FastApiTritonInterface
 import data_model
-from lib.utils import get_logger, create_jinja2_env
+from lib.utils import get_logger, create_jinja2_env, convert_list
 from config import global_config
 from omegaconf.errors import ConfigKeyError
 from jinja2 import Environment
@@ -84,7 +84,7 @@ class Interface(FastApiTritonInterface):
                     logger.error(f"{name} in response is None")
                     continue
                 expected_type = type_map[name]
-                if isinstance(value, np.ndarray):
+                if isinstance(value, np.ndarray) or isinstance(value, torch.Tensor):
                     l = value.tolist()
                     if expected_type == "TYPE_STRING" and value.dtype != np.string_:
                         l = [i.decode("utf-8", "ignore") for i in l]
@@ -116,7 +116,7 @@ class Interface(FastApiTritonInterface):
             if isinstance(acc[name], np.ndarray):
                 l = acc[name].tolist()
                 if acc[name].dtype != np.string_ and expected_type == "TYPE_STRING":
-                    acc[name] = ' '.join([i.decode("utf-8", "ignore") for i in l])
+                    acc[name] = convert_list(l, lambda i: i.decode("utf-8", "ignore"))
                 elif len(acc[name].shape) == 1 and len(l) == 1:
                     acc[name] = l[0]
                 else:

@@ -67,7 +67,6 @@ class TensorOutput(BatchMetadataOperator):
             for user_meta in frame_meta.tensor_items:
                 for n, tensor in user_meta.as_tensor_output().get_layers().items():
                     torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
-                    print(torch_tensor.shape)
                     result[n] = torch_tensor
             queue.put(result)
 
