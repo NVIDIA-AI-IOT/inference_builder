@@ -115,7 +115,7 @@ services:
       context: rtdetr
       target: nim_final
       dockerfile: Dockerfile
-    image: nim-nrtdetr
+    image: nim-rtdetr
     volumes:
       - '~/.cache/nim:/opt/nim/.cache'
     ipc: host

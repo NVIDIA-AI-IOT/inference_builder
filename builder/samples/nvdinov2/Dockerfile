@@ -36,7 +36,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     #&& apt-get purge -y --auto-remove curl
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install nimlib[triton,ngcsdk]==0.1.36
+    pip install nimlib[triton,ngcsdk]==0.1.47
 
 LABEL com.nvidia.nim.base_image="nvcr.io/nvidia/tritonserver-pb24h1:24.03.04-py3"
 LABEL com.nvidia.nim.name=nv-dinov2

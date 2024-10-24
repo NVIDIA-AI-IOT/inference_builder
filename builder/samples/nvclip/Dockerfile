@@ -68,7 +68,7 @@ RUN apt update && apt install -y libyaml-cpp-dev libjson-glib-1.0-0 \
 RUN --mount=type=cache,target=/root/.cache/pip \
     python3 -m venv $NIM_DIR_PATH/.venv \
     && . $NIM_DIR_PATH/.venv/bin/activate \
-    && pip install nimlib==0.1.30 \
+    && pip install nimlib==0.1.47 \
     && pip install /opt/nvidia/deepstream/deepstream/service-maker/python/pyservicemaker-0.0.1-py3-none-linux_x86_64.whl
 # FROM "nvcr.io/nvidia/tritonserver:24.08-py3" AS nim_final
 
