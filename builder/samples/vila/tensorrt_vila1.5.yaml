@@ -43,7 +43,7 @@ server:
             "request_output_len": {{ request.max_tokens }},
             "temperature": {{ request.temperature }},
             "images": [],
-            "streaming": true
+            "streaming": false
           }
       # optional filters for filtering each field with regex
         prompt: ['(?P<src_base64_tag><img\ssrc=\"data:image\/(?P<extension>[^;]*);base64,(?P<base64str>[^\"]*)\".*?\/>)', '-', '', 'images']
@@ -55,7 +55,7 @@ server:
               [
                 {
                   "index": 0,
-                  "message": { "role": "assistant", "content": {{ response.text|tojson }} },
+                  "message": { "role": "assistant", "content": {{ response.text|join('')|tojson }} },
                   "finish_reason": "stop"
                 }
               ],
