@@ -5,6 +5,7 @@ python main.py samples/nvdinov2/ds_nvdinov2.yaml --server-type fastapi -a sample
 
 Build and run the docker image:
 
+cd samples
 docker compose up --build nim-nvdinov2
 
 Test the NIM with a client:

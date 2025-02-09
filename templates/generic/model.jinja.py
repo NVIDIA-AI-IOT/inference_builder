@@ -124,11 +124,13 @@ class GenericInference(InferenceBase):
                 if config is None:
                     logger.warning(f"Invalid output parsed: {k}")
                     continue
-                dims = config['dims']
-                if len(dims) == len(v.shape) + 1:
-                    need_stack.append(True)
-                else:
-                    need_stack.append(False)
+                if isinstance(v, np.ndarray) or isinstance(v, torch.Tensor):
+                    # if the output is tensor, need to check if they need to be stacked
+                    dims = config['dims']
+                    if len(dims) == len(v.shape) + 1:
+                        need_stack.append(True)
+                    else:
+                        need_stack.append(False)
             # combine multiple inference result based on dimensions
             if all(need_stack):
                 results = stack_tensors_in_dict(results)

@@ -156,4 +156,27 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 1
+  nim-tao:
+    user: nvs:1000
+    build:
+      context: tao
+      target: nim_final
+      dockerfile: Dockerfile
+    image: nim-tao
+    volumes:
+      - '~/.cache/nim:/opt/nim/.cache'
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              #count: 1
+              device_ids: ['0']
+              capabilities: [gpu]
+    environment:
+      DEBUG: 0
 

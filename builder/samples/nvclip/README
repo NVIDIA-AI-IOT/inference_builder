@@ -14,6 +14,7 @@ cp nvclip_clipa_vit_h14_700M_vision.plan samples/nvclip
 
 Build and run the docker image:
 
+cd samples
 docker compose up --build nim-nvclip
 
 Test the NIM with a client:

@@ -1,6 +1,7 @@
 from pyservicemaker import Pipeline, Flow, BufferProvider, Buffer, RenderMode, BatchMetadataOperator, Probe
 from typing import Dict, List
 from queue import Queue, Empty
+from dataclasses import dataclass, field
 
 class TensorInput(BufferProvider):
 
@@ -61,18 +62,52 @@ class TensorOutput(BatchMetadataOperator):
         self._queues = [Queue() for _ in range(n_outputs)]
 
     def handle_metadata(self, batch_meta):
-        result = dict()
         for frame_meta in batch_meta.frame_items:
-            queue = self._queues[frame_meta.pad_index]
+            result = dict()
+            q = self._queues[frame_meta.pad_index]
             for user_meta in frame_meta.tensor_items:
                 for n, tensor in user_meta.as_tensor_output().get_layers().items():
                     torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
                     result[n] = torch_tensor
-            queue.put(result)
+            q.put(result)
 
 
     def get(self, indices: List):
         return [self._queues[i].get() if i >= 0 else None for i in indices]
+
+@dataclass
+class DeepstreamMetadata:
+    shape: list[int] = field(default_factory=lambda: [0, 0])
+    bboxes: list[list[int]] = field(default_factory=list)
+    probs: list[float] = field(default_factory=list)
+    labels: list[str] = field(default_factory=list)
+    seg_map: list[int] = field(default_factory=list)
+
+class MetadataOutput(BatchMetadataOperator):
+    def __init__(self, n_outputs, output_name, d):
+        super().__init__()
+        self._queues = [Queue() for _ in range(n_outputs)]
+        self._output_name = output_name
+        self._shape = d
+
+    def handle_metadata(self, batch_meta):
+        for frame_meta in batch_meta.frame_items:
+            r = {"data": DeepstreamMetadata()}
+            q = self._queues[frame_meta.pad_index]
+            for object_meta in frame_meta.object_items:
+                left = int(object_meta.rect_params.left)
+                top = int(object_meta.rect_params.top)
+                width = int(object_meta.rect_params.width)
+                height = int(object_meta.rect_params.height)
+                metadata = r['data']
+                metadata.shape = [self._shape[0], self._shape[1]]
+                metadata.bboxes.append([left, top, left + width, top + height])
+                metadata.probs.append(object_meta.confidence)
+                metadata.labels.append(object_meta.label)
+            q.put(r)
+
+    def get(self, indices: List):
+        return [{self._output_name: self._queues[i].get()} if i >= 0 else None for i in indices]
 
 class DeepstreamBackend(ModelBackend):
     """Deepstream backend using pyservicemaker"""
@@ -81,7 +116,11 @@ class DeepstreamBackend(ModelBackend):
         self._max_batch_size = model_config["max_batch_size"]
         self._model_name = model_config["name"]
         self._output_names = [o['name'] for o in model_config['output']]
+        self._output_types = [o['data_type'] for o in model_config['output']]
 
+        if len(self._output_names) > 1 and self._output_types[0] == "TYPE_CUSTOM_DS_METADATA":
+            raise Exception(f"No more than one output is allowed for DS metadata!")
+        tensor_output = False if self._output_types[0] == "TYPE_CUSTOM_DS_METADATA" else True
         dims = model_config['input'][0]['dims']
         d = (dims[1], dims[2]) if dims[0] == 3 else (dims[0], dims[1])
         if "parameters" not in model_config or "infer_config_path" not in model_config["parameters"]:
@@ -91,23 +130,24 @@ class DeepstreamBackend(ModelBackend):
         with_triton = infer_element == 'nvinferserver'
         self._formats = ['JPEG', 'PNG']
         self._in_pool = TensorInputPool(d[0], d[1], self._formats, self._max_batch_size)
-        self._tensor_out = TensorOutput(self._max_batch_size * len(self._formats))
+        n_output = self._max_batch_size * len(self._formats)
+        self._out = TensorOutput(n_output) if tensor_output else MetadataOutput(n_output, self._output_names[0], d)
         self._pipeline = Pipeline(f"deepstream-{self._model_name}")
 
         # build the inference flow
         flow = Flow(self._pipeline)
-        probe = Probe('tensor_retriver', self._tensor_out)
-        flow = flow.inject(self._in_pool.instances).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=1000, live_source=False)
+        probe = Probe('tensor_retriver', self._out)
+        flow = flow.inject(self._in_pool.instances).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=1000, live_source=False, width=d[1], height=d[0])
         flow = flow.infer(infer_config_path, with_triton, batch_size=self._max_batch_size).attach(probe).render(RenderMode.DISCARD, enable_osd=False)
         self._pipeline.start()
-        logger.debug(f"DeepstreamBackend created for {self._model_name} to generate {self._output_names}")
+        logger.info(f"DeepstreamBackend created for {self._model_name} to generate {self._output_names}, output tensor: {tensor_output}")
 
 
     def __call__(self, *args, **kwargs):
         logger.debug(f"DeepstreamBackend {self._model_name} triggerred with  {args if args else kwargs}")
         in_data_list = args if args else [kwargs]
         indices = self._in_pool.submit(in_data_list)
-        for result in self._tensor_out.get(indices):
+        for result in self._out.get(indices):
             yield { o: result[o] for o in self._output_names } if result else Error("Error")
 
     def stop(self):
