@@ -70,6 +70,49 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Build DeepStream server app
 FROM nim_builder_base AS build-image
 
+# Build TRT customized plugins
+ARG TRT_VERSION_MAJOR=10
+ARG TRT_VERSION_MINOR=8
+ARG TRT_VERSION_PATCH=0
+ARG TRT_VERSION_BUILD=43
+
+ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
+ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
+ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
+
+ARG CUDA_VERSION_MAJOR=12
+ARG CUDA_VERSION_MINOR=4
+ARG CUDA_VERSION_PATCH=127
+ARG CUDA_VERSION_BUILD=001
+ARG CUDA_VERSION_MAJOR_MINOR=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR
+ARG CUDA_VERSION_FULL=$CUDA_VERSION_MAJOR_MINOR.$CUDA_VERSION_PATCH.$CUDA_VERSION_BUILD
+ARG CUDNN_VERSION=9.0.0.312
+
+ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
+
+WORKDIR /opt
+ENV TRT_TAG="release/$TRT_VERSION_MAJOR_MINOR"
+RUN mkdir trt_oss_src && \
+   cd trt_oss_src && \
+   echo "$PWD Building TRT OSS..." && \
+   git clone -b $TRT_TAG https://github.com/nvidia/TensorRT TensorRT && \
+   cd TensorRT && \
+   git submodule update --init --recursive && \
+   mkdir -p build && cd build && \
+   cmake .. \
+    -DGPU_ARCHS="53;60;61;70;75;80;86;90" \
+    -DTRT_LIB_DIR=/usr/lib/x86_64-linux-gnu \
+    -DTRT_OUT_DIR=`pwd`/out \
+    -DCUDA_VERSION=$CUDA_VERSION_MAJOR_MINOR \
+    -DCUDNN_VERSION=$CUDNN_VERSION && \
+   make -j32 && \
+   cp out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+   cp out/libnvinfer_plugin_static.a /usr/lib/x86_64-linux-gnu/libnvinfer_plugin_static.a && \
+   cp out/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+   cp out/trtexec /usr/local/bin/ && \
+   cd ../../../ && \
+   rm -rf trt_oss_src
+
 ## Copy and untar the DS SDK
 COPY ./deepstream_sdk_v7.1.0_x86_64.tbz2 /tmp/${DS_PKG}
 RUN tar -xvf /tmp/${DS_PKG} -C / && rm /tmp/${DS_PKG}
@@ -146,9 +189,6 @@ RUN dpkg --remove --force-depends libcdparanoia0 libvorbis0a  libvorbisenc2 libv
 
 RUN dpkg --purge \
     fonts-droid-fallback fonts-noto-mono fonts-urw-base35 gsfonts imagemagick-6-common libpaper1:amd64 poppler-data
-
-
-
 
 RUN rm -f /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstaudioparsers.so \
        /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstx264.so \

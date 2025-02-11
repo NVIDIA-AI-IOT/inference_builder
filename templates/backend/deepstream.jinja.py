@@ -66,9 +66,11 @@ class TensorOutput(BatchMetadataOperator):
             result = dict()
             q = self._queues[frame_meta.pad_index]
             for user_meta in frame_meta.tensor_items:
-                for n, tensor in user_meta.as_tensor_output().get_layers().items():
-                    torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
-                    result[n] = torch_tensor
+                tensor_output = user_meta.as_tensor_output()
+                if tensor_output :
+                    for n, tensor in tensor_output.get_layers().items():
+                        torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
+                        result[n] = torch_tensor
             q.put(result)
 
 
@@ -92,19 +94,26 @@ class MetadataOutput(BatchMetadataOperator):
 
     def handle_metadata(self, batch_meta):
         for frame_meta in batch_meta.frame_items:
-            r = {"data": DeepstreamMetadata()}
+            metadata = DeepstreamMetadata()
             q = self._queues[frame_meta.pad_index]
             for object_meta in frame_meta.object_items:
                 left = int(object_meta.rect_params.left)
                 top = int(object_meta.rect_params.top)
                 width = int(object_meta.rect_params.width)
                 height = int(object_meta.rect_params.height)
-                metadata = r['data']
                 metadata.shape = [self._shape[0], self._shape[1]]
                 metadata.bboxes.append([left, top, left + width, top + height])
                 metadata.probs.append(object_meta.confidence)
                 metadata.labels.append(object_meta.label)
-            q.put(r)
+            for user_meta in frame_meta.tensor_items:
+                seg_meta = user_meta.as_tensor_output()
+                if seg_meta:
+                    metadata.shape = [seg_meta.heigh, seg_meta.width]
+                    metadata.seg_map = seg_meta.class_map
+                    metadata.probs = seg_meta.class_probabilities_map
+                # only one seg meta is expected on one frame
+                break
+            q.put({"data": metadata})
 
     def get(self, indices: List):
         return [{self._output_name: self._queues[i].get()} if i >= 0 else None for i in indices]

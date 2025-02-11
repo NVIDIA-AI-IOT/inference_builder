@@ -48,3 +48,4 @@ dependencies:
     - name: "libx11-6"
     - name: "libmagic1"
     - name: "libnvinfer-bin"
+    - name: "cmake"
