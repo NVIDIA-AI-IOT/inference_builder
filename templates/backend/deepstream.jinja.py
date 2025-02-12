@@ -108,7 +108,7 @@ class MetadataOutput(BatchMetadataOperator):
             for user_meta in frame_meta.tensor_items:
                 seg_meta = user_meta.as_tensor_output()
                 if seg_meta:
-                    metadata.shape = [seg_meta.heigh, seg_meta.width]
+                    metadata.shape = [seg_meta.height, seg_meta.width]
                     metadata.seg_map = seg_meta.class_map
                     metadata.probs = seg_meta.class_probabilities_map
                 # only one seg meta is expected on one frame

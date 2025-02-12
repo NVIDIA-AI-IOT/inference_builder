@@ -11,7 +11,7 @@
 
 FROM "nvcr.io/nvidia/tritonserver-pb24h1:24.03.04-py3" AS nim_builder_base
 
-ARG DS_PKG=deepstream_sdk_v7.1.0_x86_64.tbz2
+ARG DS_PKG=deepstream_sdk_v8.0.0_x86_64.tbz2
 
 ENV NIM_DIR_PATH="/opt/nim" \
     PIP_INDEX_URL=https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple \
@@ -113,9 +113,6 @@ RUN mkdir trt_oss_src && \
    cd ../../../ && \
    rm -rf trt_oss_src
 
-## Copy and untar the DS SDK
-COPY ./deepstream_sdk_v7.1.0_x86_64.tbz2 /tmp/${DS_PKG}
-RUN tar -xvf /tmp/${DS_PKG} -C / && rm /tmp/${DS_PKG}
 
 RUN apt-get update && \
         DEBIAN_FRONTEND=noninteractive  apt-get install -y --no-install-recommends \
@@ -131,7 +128,7 @@ FROM nim_builder_base AS nim_final
 
 ## Copy and untar the DS SDK
 #RUN wget --content-disposition 'https://api.ngc.nvidia.com/v2/resources/org/nvidia/deepstream/7.0/files?redirect=true&path=deepstream_sdk_v7.0.0_x86_64.tbz2' -O /tmp/${DS_PKG} && tar -xvf /tmp/${DS_PKG} -C / && rm /tmp/${DS_PKG}
-COPY ./deepstream_sdk_v7.1.0_x86_64.tbz2 /tmp/${DS_PKG}
+COPY ${DS_PKG} /tmp/${DS_PKG}
 RUN tar -xvf /tmp/${DS_PKG} -C / && rm /tmp/${DS_PKG}
 
 
@@ -146,7 +143,7 @@ RUN if [ -e "/usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstnvcodec.so" ]; then \
 RUN rm -rf /root/.cache/gstreamer-1.0/
 
 ## Remove sample, source and install DS
-RUN pushd "/opt/nvidia/deepstream/deepstream-7.1" && \
+RUN pushd "/opt/nvidia/deepstream/deepstream-8.0" && \
     cp samples/streams/yoga.jpg $NIM_DIR_PATH && \
     popd && \
     /opt/nvidia/deepstream/deepstream/install.sh && \
