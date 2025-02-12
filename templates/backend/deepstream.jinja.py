@@ -106,7 +106,7 @@ class MetadataOutput(BatchMetadataOperator):
                 metadata.probs.append(object_meta.confidence)
                 metadata.labels.append(object_meta.label)
             for user_meta in frame_meta.tensor_items:
-                seg_meta = user_meta.as_tensor_output()
+                seg_meta = user_meta.as_segmentation()
                 if seg_meta:
                     metadata.shape = [seg_meta.height, seg_meta.width]
                     metadata.seg_map = seg_meta.class_map
