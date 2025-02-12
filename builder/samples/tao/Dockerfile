@@ -120,6 +120,7 @@ RUN apt-get update && \
         libgstrtspserver-1.0-dev \
         libjson-glib-dev \
         libyaml-cpp-dev \
+        libgstreamer1.0-dev \
         && \
         rm -rf /var/lib/apt/lists/* && \
         apt autoremove
@@ -148,6 +149,22 @@ RUN pushd "/opt/nvidia/deepstream/deepstream-8.0" && \
     popd && \
     /opt/nvidia/deepstream/deepstream/install.sh && \
     rm -rf /tmp/${DS_PKG}
+
+# Build DS TAO app post processors
+# need to be after DS SDK installation
+ENV DS_TAO_APPS_REPO=https://github.com/NVIDIA-AI-IOT/deepstream_tao_apps.git
+ENV DS_TAO_APPS_TAG="master"
+RUN mkdir ds_tao_apps_src && \
+   cd ds_tao_apps_src && \
+   echo "$PWD Pulling DS TAO apps repo..." && \
+   git clone -b $DS_TAO_APPS_TAG $DS_TAO_APPS_REPO ds_tao_apps && \
+   cd ds_tao_apps/post_processor && \
+   echo "$PWD Building DS TAO apps post processing..." && \
+   CUDA_MODULE_LOADING=LAZY CUDA_VER=12.4 make && \
+   [ -f libnvds_infercustomparser_tao.so ] && echo "$PWD post processing build successful" || echo "$PWD post processing build falied" && \
+   cp libnvds_infercustomparser_tao.so /opt/nvidia/deepstream/deepstream/lib && \
+   cd ../../../ && \
+   rm -rf ds_tao_apps_src
 
 # DALI backend is not used, CVE-2024-5535
 RUN rm -rf /opt/tritonserver/backends/dali
