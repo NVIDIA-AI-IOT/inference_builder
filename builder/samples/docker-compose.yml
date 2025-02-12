@@ -179,4 +179,5 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 0
+      NIM_MODEL_NAME: nvdinov2
 

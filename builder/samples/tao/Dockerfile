@@ -55,7 +55,7 @@ ENV BASE_IMAGE="nvcr.io/nvidia/tritonserver-pb24h1:24.03.04-py3"
 ENV NIMTOOLS_VERSION=0.3.1rc7
 ENV BACKEND_TYPE="triton"
 ENV NIM_NSPECT_ID=NSPECT-Z39R-IVVG
-ENV NIM_MODEL_NAME={{MODEL_NAME}}
+#ENV NIM_MODEL_NAME={{MODEL_NAME}}
 ENV NIM_LOG_LEVEL="DEBUG"
 
 # COPY ./model_manifest.yaml /opt/nim/etc/default/model_manifest.yaml
@@ -246,6 +246,7 @@ RUN touch $NIM_DIR_PATH/start_server.sh && \
 
 	# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 	# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+    ln -s \${NIM_CACHE_PATH}/model-repo/\${NIM_MODEL_NAME} \${NIM_CACHE_PATH}/model-repo/tao
     python3 inference.py
 #    while true; do sleep 5; done
 EOF
