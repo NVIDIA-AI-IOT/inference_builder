@@ -68,4 +68,5 @@ models:
     data_type: TYPE_CUSTOM_DS_METADATA
     dims: [ -1 ]
   parameters:
-    infer_config_path: /opt/nim/.cache/model-repo/tao/config_nvinfer.txt
+    infer_config_path: /opt/nim/.cache/model-repo/tao/detector/frcnn/config_nvinfer.yml
+    # host ~/.cache/nim/model-repo/tao/
