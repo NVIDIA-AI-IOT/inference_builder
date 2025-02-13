@@ -263,7 +263,14 @@ RUN touch $NIM_DIR_PATH/start_server.sh && \
 
 	# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 	# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
-    ln -s \${NIM_CACHE_PATH}/model-repo/\${NIM_MODEL_NAME} \${NIM_CACHE_PATH}/model-repo/tao
+    # Check if the symlink exists
+    SYMLINK="\${NIM_CACHE_PATH}/model-repo/tao"
+    if [ -L "\$SYMLINK" ]; then
+        # If it exists, delete the symlink
+        rm "\$SYMLINK"
+        echo "Symlink deleted: \$SYMLINK"
+    fi
+    ln -s \${NIM_CACHE_PATH}/model-repo/\${NIM_MODEL_NAME} "\$SYMLINK"
     python3 inference.py
 #    while true; do sleep 5; done
 EOF
