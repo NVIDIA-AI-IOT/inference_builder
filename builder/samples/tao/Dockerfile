@@ -152,7 +152,8 @@ RUN pushd "/opt/nvidia/deepstream/deepstream-8.0" && \
 
 # Build DS TAO app post processors
 # need to be after DS SDK installation
-ENV DS_TAO_APPS_REPO=https://github.com/NVIDIA-AI-IOT/deepstream_tao_apps.git
+ARG GITLAB_TOKEN
+ENV DS_TAO_APPS_REPO=https://oauth2:${GITLAB_TOKEN}@gitlab-master.nvidia.com/chunlinl/deepstream_tao_apps.git
 ENV DS_TAO_APPS_TAG="master"
 RUN mkdir ds_tao_apps_src && \
    cd ds_tao_apps_src && \
