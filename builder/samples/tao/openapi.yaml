@@ -149,7 +149,10 @@ components:
           type: array
           description: The labels of each bounding box
           items:
-            type: string
+            type: array
+            items:
+              type: string
+            maxItems: 10
           maxItems: 512
           title: Labels
         mask:

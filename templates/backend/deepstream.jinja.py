@@ -109,6 +109,7 @@ class MetadataOutput(BatchMetadataOperator):
             metadata = DeepstreamMetadata()
             q = self._queues[frame_meta.pad_index]
             for object_meta in frame_meta.object_items:
+                labels = [object_meta.label] if object_meta.label else []
                 left = int(object_meta.rect_params.left)
                 top = int(object_meta.rect_params.top)
                 width = int(object_meta.rect_params.width)
@@ -116,7 +117,11 @@ class MetadataOutput(BatchMetadataOperator):
                 metadata.shape = [self._shape[0], self._shape[1]]
                 metadata.bboxes.append([left, top, left + width, top + height])
                 metadata.probs.append(object_meta.confidence)
-                metadata.labels.append(object_meta.label)
+                for classifier in object_meta.classifier_items:
+                    logger.info(f"classifier: {classifier.n_labels}")
+                    for i in range(classifier.n_labels):
+                        labels.append(classifier.get_n_label(i))
+                metadata.labels.append(labels)
             for user_meta in frame_meta.tensor_items:
                 seg_meta = user_meta.as_segmentation()
                 if seg_meta:
