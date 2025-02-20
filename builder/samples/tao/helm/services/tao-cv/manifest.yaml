@@ -1,0 +1,103 @@
+# Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
+#
+# NVIDIA CORPORATION and its licensors retain all intellectual property
+# and proprietary rights in and to this software, related documentation
+# and any modifications thereto.  Any use, reproduction, disclosure or
+# distribution of this software and related documentation without an express
+# license agreement from NVIDIA CORPORATION is strictly prohibited.
+
+type: msapplication
+specVersion: 2.5.0
+name: ucf.svc.tao-cv
+chartName: tao-cv
+description: TAO CV MS
+version: 0.0.1
+displayName: ""
+category:
+  functional: ""
+  industry: ""
+tags: []
+keywords: []
+nSpectId: NSPECT-0000-0000
+
+publish: false
+
+ingress-endpoints:
+  - name: http-api
+    description: http inference endpoint
+    scheme: http
+    data-flow: in-out # Or in or out
+
+params:
+  modelName: rtdetr
+  #> type: string
+  #> enum_values: dino, classifier, segformer, rtdetr 
+  #> description: Use TaskHead model name to categorize the models that have the same output layout
+
+---
+spec:
+  - name: tao-cv-deployment
+    type: ucf.k8s.app.deployment
+    parameters:
+      apptype: stateless
+
+  - name: "tao-cv-container"
+    type: ucf.k8s.container
+    parameters:
+      image:
+        # TODO(byin): update image to that from remote registry
+        repository: nim-tao
+        tag: "latest"
+      # command: ["sleep", "(($params.timeToSleep))"]
+      env:
+      - name: NIM_MODEL_NAME
+        value: $params.modelName
+      ports:
+      - containerPort: 8000 # <PORT>
+        name: http
+      volumeMounts:
+        - name: localvol
+          mountPath: /opt/nim/.cache/model-repo
+      startupProbe:
+        httpGet:
+          path: /v1/health/ready
+          port: http
+        failureThreshold: 30
+        periodSeconds: 10
+      livenessProbe:
+        httpGet:
+          path: /v1/health/live
+          port: http
+        initialDelaySeconds: 10
+        periodSeconds: 30
+        timeoutSeconds: 20
+        failureThreshold: 3
+
+
+  - name: podSecurityContext
+    type: ucf.k8s.podSecurityContext
+    parameters:
+      runAsGroup: 1000
+      runAsUser: 1000
+
+  - name: tao-cv-service
+    type: ucf.k8s.service
+    parameters:
+      type: NodePort
+      ports:
+      - port: 30080 # <OUT_PORT>
+        name: http-api
+        targetPort: 8000
+      externalTrafficPolicy: Local # Cluster / Local. Allowed when service type is NodePort or LoadBalancer
+
+  - name: localvol
+    type: ucf.k8s.volume
+    parameters:
+      persistentVolumeClaim:
+        claimName: local-path-pvc  # PVC created before install the helm chart
+
+  - name: ngc-image-pull-secret
+    type: ucf.k8s.imagepullsecret
+    parameters:
+      name: ngc-docker-reg-secret
+      

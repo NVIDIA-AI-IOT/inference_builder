@@ -1,0 +1,8 @@
+tao-cv:
+  applicationSpecs:
+    tao-cv-deployment:
+      containers:
+        tao-cv-container:
+          env:
+          - name: NIM_MODEL_NAME
+            value: rtdetr
