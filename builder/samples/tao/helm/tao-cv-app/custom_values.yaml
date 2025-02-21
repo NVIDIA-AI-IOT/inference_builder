@@ -1,0 +1,11 @@
+tao-cv:
+  applicationSpecs:
+    tao-cv-deployment:
+      containers:
+        tao-cv-container:
+          image:
+            repository: nvcr.io/eevaigoeixww/staging/tao_cv_nim
+            tag: 0.0.1
+          env:
+          - name: NIM_MODEL_NAME
+            value: rtdetr
