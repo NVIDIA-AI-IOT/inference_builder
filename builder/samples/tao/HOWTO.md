@@ -160,7 +160,7 @@ Eg:
 │   ├── model.onnx
 │   └── config_nvinfer.yml
 └── segformer/
-    ├── model.pt
+    ├── model.onnx
     └── config_nvinfer.yml
 
 ## What containers can see at /opt/nim/.cache/model-repo/
