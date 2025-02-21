@@ -1,4 +1,14 @@
-# nim-templates
+# Inference Builder
+
+## Overview
+
+Inference Builder is a tool that allows developers to generate inference code from various code templates for different VLM/CV NIMs. It takes a comprehensive inference configuration file and the corresponding OpenAPI spec. For some NIMs, custom code snippet would also be needed.
+
+There are three main components in the Inference Builder:
+
+- Inference code templates: The code templates provides reusable code snippets for different inference backends and frameworks, including Triton Inference Server, TensorRT, Deepstream and so on. These templates are optimized and tested, so to be used by any models with instantiated input/output and configuration.
+- Python library for common inference utilities: This library provides common utilities for inference, including data loading, media processing, and configuration management.
+- Command line tool for generating inference code: This application takes the inference configuration file and the OpenAPI spec as input, and generates the inference code for the corresponding NIM by piecing together the code templates and the common utilities.
 
 ## Getting started
 
@@ -46,43 +56,89 @@ Ensure nvidia runtime added to `/etc/docker/daemon.json`
 Install Nim Tools
 
 ```bash
-$ pip install nimtools==0.4.0 --index-url https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple 
+$ pip install nimtools --index-url https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple
 
 #Check installation
-$ nim_builder --version 
-nim_builder 0.4.0 nimlib 0.1.47 nim-compliance 2.0.0
+$ nim_builder --version
 ```
 
 ## Usage
-The project provides developers an easy-to-use command line tool to generate inference codes for various VLM/CV NIMs. Before running the tool, developers need to create a comprehensive inference configuration file and the API spec. For some NIMs, custom code snippet would also be needed.
+The project provides developers an easy-to-use command line tool to generate inference codes for various VLM/CV NIMs. Before running the tool, developers need to prepare a comprehensive configuration file to define the inference flow of the NIM, in addition, there needs an OpenAPI spec to define the NIM endpoints and parameters. For some NIMs, custom code snippet would also be needed.
 
-Under the tests/configs we provides a sample configuration for creating vila NIM, the inference code can be generate from the following command:
+For generating the inference code with the corresponding server implementation, developers can run the following command:
 
 ```bash
 pyton builder/main.py
 usage: Inference Builder [-h] [--server-type [{triton}]] [-o [OUTPUT_DIR]] [-a [API_SPEC]] [-c [CUSTOM_MODULE ...]] [-x] [-t] config
 ```
 
-There're two builtin samples under _samples_ folder for generating vila NIMs and nvclip NIMs respectively.
+There're several builtin samples under _samples_ folder for generating various CV NIMs and VLM NIMs.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+## Configuration File
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+A configuration file is a YAML file that defines the inference flow of the NIM. It contains the following sections:
+
+- name: The name of the NIM. It will be used as the name of the folder to save the generated inference code (or the name of the tarball if '-t' is specified).
+- models: List of model definitions. A inference flow can contain multiple models, each might be implemented by different backends to achieve better performance.
+- input: Defines the top level input parameters of the NIM, and each input is extracted from the server request.
+- output: Defines the top level output parameters of the NIM, and each output is wrapped into the server response.
+- server: Defines the server endpoints and the corresponding request and response types.
+
+### Model Definition
+
+The model definition is derived from the Triton model configration and extended to fit all the other backend requirements:
+
+- name: The name of the model.
+- backend: The backend implementation of the model. The definition is hierarchical and the backend type can be specified at multiple levels. e.g. `backend: deepstream/nvinfer` means the model will be implemented by Deepstream with nvinfer backend; and `backend: triton/python/tensorrtllm` means the model will be implemented by Triton with python backend and tensorrtllm plugin.
+- max_batch_size: The maximum batch size of the model.
+- input: The input parameters of the model.
+- output: The output parameters of the model.
+- parameters (optional): The parameters of the model. This part is a custom section and is backend dependent.
+- tokenizer (optional): The tokenizer used by the model:
+  - type: The type of the tokenizer.
+  - encoder: defines the input and output names of the encoder
+  - decoder: defines the input and output names of the decoder
+- preprocessors (optional): list of the preprocessors used by the model.
+  - kind: The kind of the preprocessor. A 'custom' preprocessor is a user defined preprocessor and the code snippet conforming to the subsequent definition is required.
+  - name: The name of the preprocessor.
+  - input: The input names of the preprocessor.
+  - output: The output names of the preprocessor.
+  - config: The configuration map of the preprocessor. This part is a custom section and is implementation dependent.
+- tensorrt_engine (optional): The path to the tensorrt engine file. Only required if backend is tensorrt.
+
+When triton is used as the backend, all the standard triton model parameters are supported.
+
+
+### Input and Output Definition
+
+Input and Output definitions are required both in top level and model level.Each input and output definition contains the following sections:
+
+- name: The name of the input or output.
+- data_type: The data type of the input or output. In addition to the basic data types defined by Triton, the project also supports following custom data types:
+  - TYPE_CUSTOM_IMAGE_BASE64: The input or output is a base64 encoded image and will be decoded to a image tensor.
+  - TYPE_CUSTOM_BINARY_BASE64: The input or output is a base64 encoded string and will be decoded to a binary tensor.
+- dims: The dimensions of the input or output in the form of a list. Each item in the list specifies the maximum length of the dimension and -1 means it is dynamic.
+- optional: Whether the input or output is optional.
+- force_cpu: Whether to force the input or output to be on CPU.
+
+### Server Definition
+
+The server definition is required in top level. It defines the server inference endpoint and the corresponding request and response templates for it. Both request and response templates are Jinja2 templates and are used to extract required input and output data from the server request and response.
+
+### Routing
+
+The routing section is optional and only used in rather complex inference flows. It defines the routing rules for the inference flow when multiple models are involved and multiple data flows are possible. Definition of 'routes' is a map and the key is the input and the value is the output. Both input and output are defined with the name of the model and the list of its tensors.
+
 
 ## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Contributions are welcome! Please feel free to submit a PR.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+## Project status and roadmap
 
-## License
-For open source projects, say how it is licensed.
+The project is under active development and the following features are expected to be supported in the near future:
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+- Support for video and streaming.
+- Support for more backend frameworks.
+- Support for more server implementations.
