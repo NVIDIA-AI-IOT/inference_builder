@@ -1,5 +1,7 @@
 **/__pycache__
 *.swp
 *.vscode
+.vscode/**
 dist
 .venv
+output
