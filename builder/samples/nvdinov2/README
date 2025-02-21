@@ -1,3 +1,5 @@
+Download the deepstream SDK here https://drive.google.com/file/d/1UPJAKLrXSQOF8fM4Abu-FzqyqSnaLiWV/view?usp=sharing, and copy it to builder/samples/nvdinov2
+
 Build the NIM inference flow:
 
 cd builder
