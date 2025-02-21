@@ -20,17 +20,19 @@ NOTE:
 ## 2. Create PVC with name "local-path-pvc", resolving to the created storageClass "mdx-local-path"
 ```
 $ curl https://raw.githubusercontent.com/rancher/local-path-provisioner/master/examples/pvc/pvc.yaml | \
-      sed 's/storageClassName: local-path$/storageClassName: mdx-local-path/g' | microk8s kubectl apply -f -
+    sed -e 's/storageClassName: local-path$/storageClassName: mdx-local-path/g' \
+        -e 's/storage: 128Mi$/storage: 10Gi/g' | \
+    microk8s kubectl apply -f -
 ```
 
 NOTE: 
 1. This helm chart defines volume resolving to PVC "local-path-pvc"
 
-2. A sub directory will be created at /opt/local-path-provisioner/pvc-xxx_default_chartname
+2. A sub directory will be created as /opt/local-path-provisioner/pvc-*_default_local-path-pvc
 
-## 3. Copy model files including model, configs to /opt/local-path-provisioner/pvc-xxx_default_chartname, following below structure. Make sure the each model sub directory name matches the model name in the custom_values.yaml
+## 3. Copy model files including model, configs to /opt/local-path-provisioner/pvc-*_default_local-path-pvc, following below structure. Make sure the each model sub directory name matches the model name in the custom_values.yaml
 ```
-# On host at /opt/local-path-provisioner/pvc-xxx_default_chartname/
+# On host at /opt/local-path-provisioner/pvc-*_default_local-path-pvc
 ├── rtdetr/
 │   ├── model.onnx
 │   └── config_nvinfer.yml

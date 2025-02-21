@@ -45,9 +45,9 @@ spec:
     type: ucf.k8s.container
     parameters:
       image:
-        # TODO(byin): update image to that from remote registry
-        repository: nim-tao
-        tag: "latest"
+        # repository: gitlab-master.nvidia.com:5005/chunlinl/nim-templates/tao_cv_nim
+        repository: nvcr.io/eevaigoeixww/staging/tao_cv_nim
+        tag: "0.0.1"
       # command: ["sleep", "(($params.timeToSleep))"]
       env:
       - name: NIM_MODEL_NAME
@@ -85,9 +85,10 @@ spec:
     parameters:
       type: NodePort
       ports:
-      - port: 30080 # <OUT_PORT>
+      - port: 8000 # <OUT_PORT>
         name: http-api
         targetPort: 8000
+        nodePort: 30080
       externalTrafficPolicy: Local # Cluster / Local. Allowed when service type is NodePort or LoadBalancer
 
   - name: localvol
