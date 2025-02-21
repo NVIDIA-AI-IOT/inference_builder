@@ -22,6 +22,13 @@ python builder/main.py builder/samples/tao/ds_tao.yaml --server-type fastapi -a 
 
 ```
 
+A model-repo folder needs to be created for model drop-in:
+
+```bash
+mkdir -p ~/.cache/nim/model-repo
+chmod 777 ~/.cache/nim/model-repo
+```
+
 
 ## Build the microservice
 
@@ -34,6 +41,8 @@ export GITLAB_TOKEN=<your_gitlab_token>
 To build the microservice, run the following command:
 
 ```bash
+cd ..
+docker compose build nim-tao
 
 ```
 
