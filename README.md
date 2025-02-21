@@ -84,6 +84,78 @@ A configuration file is a YAML file that defines the inference flow of the NIM. 
 - output: Defines the top level output parameters of the NIM, and each output is wrapped into the server response.
 - server: Defines the server endpoints and the corresponding request and response types.
 
+A configuration file can be as simple as the following example:
+
+```yaml
+
+name: "segformer"
+
+input:
+- name: images
+  data_type: TYPE_CUSTOM_BINARY_BASE64
+  dims: [ -1 ]
+  optional: false
+
+- name: format
+  data_type: TYPE_STRING
+  dims: [ -1 ]
+  optional: false
+
+output:
+  - name: output
+    data_type: TYPE_CUSTOM_DS_METADATA
+    dims: [ -1 ]
+
+server:
+  endpoints:
+    infer:
+      path: /v1/inference
+      requests:
+        InferenceRequest: >
+          {
+            {% set image_items = request.input if request.input is iterable else [request.input] %}
+            "images": [
+              {% for item in image_items %}
+                {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            ],
+            "format": [
+              {% for item in image_items %}
+                {{ item|extract('data:image\/(\w+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            ]
+          }
+      responses:
+        InferenceResponse: >
+          {
+            "data": [
+              {% for item in response.output %} {
+                "mask": {{item.data.seg_map}}
+              } {% if not loop.last %}, {% endif %} {% endfor %} ],
+          }
+
+models:
+- name: segformer
+  backend: deepstream/nvinfer
+  max_batch_size: 1
+  input:
+  - name: images
+    data_type: TYPE_UINT8
+    dims: [544, 960, 3]
+  - name: format
+    data_type: TYPE_STRING
+    dims: [ -1 ]
+    optional: false
+  output:
+  - name: output
+    data_type: TYPE_CUSTOM_DS_METADATA
+    dims: [ -1 ]
+  parameters:
+    infer_config_path: /opt/nim/.cache/model-repo/tao/config_nvinfer.yaml
+```
+
+With the above configuration file, it is sufficient to generate the inference code for the segformer NIM with Deepstream backend which takes images as input and generates segmentation masks as output.
+
 ### Model Definition
 
 The model definition is derived from the Triton model configration and extended to fit all the other backend requirements:
