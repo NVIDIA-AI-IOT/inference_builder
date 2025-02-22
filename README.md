@@ -68,7 +68,7 @@ The project provides developers an easy-to-use command line tool to generate inf
 For generating the inference code with the corresponding server implementation, developers can run the following command:
 
 ```bash
-pyton builder/main.py
+python builder/main.py
 usage: Inference Builder [-h] [--server-type [{triton}]] [-o [OUTPUT_DIR]] [-a [API_SPEC]] [-c [CUSTOM_MODULE ...]] [-x] [-t] config
 ```
 
