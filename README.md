@@ -151,7 +151,7 @@ models:
     data_type: TYPE_CUSTOM_DS_METADATA
     dims: [ -1 ]
   parameters:
-    infer_config_path: /opt/nim/.cache/model-repo/tao/config_nvinfer.yaml
+    infer_config_path: /opt/nim/.cache/model-repo/segformer/config_nvinfer.yaml
 ```
 
 With the above configuration file, it is sufficient to generate the inference code for the segformer NIM with Deepstream backend which takes images as input and generates segmentation masks as output.
