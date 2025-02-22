@@ -183,7 +183,9 @@ When triton is used as the backend, all the standard triton model parameters are
 
 ### Input and Output Definition
 
-Input and Output definitions are required both in top level and model level.Each input and output definition contains the following sections:
+Input and Output definitions are required both in top level and model level. The model level of input and output are specified by the definition of  tensors, while the top level of input and output have a wider range of data types including image, url, string, etc..
+
+Each input and output definition contains the following sections:
 
 - name: The name of the input or output.
 - data_type: The data type of the input or output. In addition to the basic data types defined by Triton, the project also supports following custom data types:
