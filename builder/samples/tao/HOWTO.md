@@ -190,7 +190,11 @@ Eg:
 ```
 Make sure the each model sub directory name {NIM_MODEL_NAME} matches that in the custom_values.yaml
 
-
+## Create image pull secret, if not yet created
+```bash
+# create secret docker-registry ngc-docker-reg-secret for pulling containers from nvcr.io
+microk8s kubectl create secret docker-registry ngc-docker-reg-secret --docker-server=nvcr.io --docker-username='$oauthtoken' --docker-password=$NGC_CLI_API_KEY
+```
 
 
 ## Run the TAO CV App helm chart in k8s
@@ -205,18 +209,67 @@ microk8s helm3 install tao-cv-app output -f custom_values.yaml
 
 OR equivalently you can also run,
 ```bash
-microk8s helm3 install tao-cv-app output --set tao-cv.applicationSpecs.tao-cv-deployment.containers.tao-cv-container.env[0].value=model_dir_name
+microk8s helm3 install tao-cv-app output --set tao-cv.applicationSpecs.tao-cv-deployment.containers.tao-cv-container.env[0].value={NIM_MODEL_NAME}
 ```
 
 
 
 
 ## Stop the TAO CV App helm chart in k8s
-```
+```bash
 make -C tao-cv-app uninstall
 ```
 
 which executes the following command for you:
-```
+```bash
 microk8s helm3 delete tao-cv-app
+```
+
+
+
+## Push new version of helm chart to NGC
+### 0. Prerequisites. RUN ONCE ONLY.
+```bash
+$NGC_API_KEY needs to be present for ngc CLI to work.
+$ ngc registry chart create <org_id>/<team_name>/<helm_chart_ngc_page_name> --short-desc <description>
+```
+
+### 1. Update chart version
+update helm chart version field
+```bash
+$ vim helm/tao-cv-app/output/Chart.yaml
+```
+### 2. Package helm chart to .tgz file
+```bash
+$ cd helm/tao-cv-app/output
+$ helm package .
+```
+
+### 3. Push the .tgz file to NGC.
+```bash
+$NGC_API_KEY needs to be present for ngc CLI to work.
+$ ngc registry chart push <org_id>/<team_name>/<helm_chart_ngc_page_name>:<new_version>
+```
+
+Eg:
+```bash
+$ ngc registry chart push eevaigoeixww/staging/tao-cv-app:<new_version>
+```
+
+### 4. Fetch the helm chart from NGC
+```bash
+$ helm fetch https://helm.ngc.nvidia.com/eevaigoeixww/staging/charts/tao-cv-app-0.0.1.tgz --username='$oauthtoken' --password=<YOUR API KEY>
+```
+
+### 5. Install the helm chart pulled from NGC
+If you want to skip the build steps for container image and helm chart, you can install the helm chart pulled from NGC directly. However, you still need to prepare the k8s resources including PVC, secret, etc mention above.
+
+For running different TAO CV models, you can update the NIM_MODEL_NAME in helm/tao-cv-app/custom_values.yaml
+
+```bash
+$ microk8s helm3 install tao-cv-app tao-cv-app-0.0.1.tgz -f custom_values.yaml
+```
+OR if you don't want to use the values override file, you can run,
+```bash
+$ microk8s helm3 install tao-cv-app tao-cv-app-0.0.1.tgz --set tao-cv.applicationSpecs.tao-cv-deployment.containers.tao-cv-container.env[0].value={NIM_MODEL_NAME}
 ```

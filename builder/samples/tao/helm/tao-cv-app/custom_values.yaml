@@ -5,7 +5,7 @@ tao-cv:
         tao-cv-container:
           image:
             repository: nvcr.io/eevaigoeixww/staging/tao_cv_nim
-            tag: 0.0.1
+            tag: ds8.0-triton25.02.1_1
           env:
           - name: NIM_MODEL_NAME
             value: rtdetr
