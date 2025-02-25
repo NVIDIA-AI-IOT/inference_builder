@@ -66,11 +66,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     nim_dependency_handler
 
-
-# Build DeepStream server app
-FROM nim_builder_base AS build-image
-
-# Build TRT customized plugins
+    # Build TRT customized plugins
 ARG TRT_VERSION_MAJOR=10
 ARG TRT_VERSION_MINOR=8
 ARG TRT_VERSION_PATCH=0
@@ -90,7 +86,7 @@ ARG CUDNN_VERSION=9.0.0.312
 
 ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
 
-WORKDIR /opt
+WORKDIR /tmp
 ENV TRT_TAG="release/$TRT_VERSION_MAJOR_MINOR"
 RUN mkdir trt_oss_src && \
    cd trt_oss_src && \
@@ -102,14 +98,14 @@ RUN mkdir trt_oss_src && \
    cmake .. \
     -DGPU_ARCHS="53;60;61;70;75;80;86;90" \
     -DTRT_LIB_DIR=/usr/lib/x86_64-linux-gnu \
-    -DTRT_OUT_DIR=`pwd`/out \
+    -DTRT_OUT_DIR=/tmp/out \
     -DCUDA_VERSION=$CUDA_VERSION_MAJOR_MINOR \
-    -DCUDNN_VERSION=$CUDNN_VERSION && \
-   make -j32 && \
-   cp out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
-   cp out/libnvinfer_plugin_static.a /usr/lib/x86_64-linux-gnu/libnvinfer_plugin_static.a && \
-   cp out/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
-   cp out/trtexec /usr/local/bin/ && \
+    -DCUDNN_VERSION=$CUDNN_VERSION \
+    && for i in {1..50}; do make -j 12 && break; done
+RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+   cp /tmp/out/libnvinfer_plugin_static.a /usr/lib/x86_64-linux-gnu/libnvinfer_plugin_static.a && \
+   cp /tmp/out/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+   cp /tmp/out/trtexec /usr/local/bin/ && \
    cd ../../../ && \
    rm -rf trt_oss_src
 
