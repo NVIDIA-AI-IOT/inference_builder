@@ -209,7 +209,7 @@ microk8s helm3 install tao-cv-app output -f custom_values.yaml
 
 OR equivalently you can also run,
 ```bash
-microk8s helm3 install tao-cv-app output --set tao-cv.applicationSpecs.tao-cv-deployment.containers.tao-cv-container.env[0].value=model_dir_name
+microk8s helm3 install tao-cv-app output --set tao-cv.applicationSpecs.tao-cv-deployment.containers.tao-cv-container.env[0].value={NIM_MODEL_NAME}
 ```
 
 
@@ -268,4 +268,8 @@ For running different TAO CV models, you can update the NIM_MODEL_NAME in helm/t
 
 ```bash
 $ microk8s helm3 install tao-cv-app tao-cv-app-0.0.1.tgz -f custom_values.yaml
+```
+OR if you don't want to use the values override file, you can run,
+```bash
+$ microk8s helm3 install tao-cv-app tao-cv-app-0.0.1.tgz --set tao-cv.applicationSpecs.tao-cv-deployment.containers.tao-cv-container.env[0].value={NIM_MODEL_NAME}
 ```
