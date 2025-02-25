@@ -34,4 +34,3 @@ dependencies:
     - name: "libyaml-cpp0.7"
     - name: "pkg-config"
     - name: "cmake"
-    - name: "gdb"
