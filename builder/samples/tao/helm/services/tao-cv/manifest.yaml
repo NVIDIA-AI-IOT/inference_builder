@@ -47,7 +47,7 @@ spec:
       image:
         # repository: gitlab-master.nvidia.com:5005/chunlinl/nim-templates/tao_cv_nim
         repository: nvcr.io/eevaigoeixww/staging/tao_cv_nim
-        tag: "0.0.1"
+        tag: "ds8.0-triton25.02.1_1"
       # command: ["sleep", "(($params.timeToSleep))"]
       env:
       - name: NIM_MODEL_NAME
