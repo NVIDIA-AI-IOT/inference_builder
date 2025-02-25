@@ -9,9 +9,7 @@
 # its affiliates is strictly prohibited.
 
 
-FROM "nvcr.io/nvidia/tritonserver-pb24h1:24.03.04-py3" AS nim_builder_base
-
-ARG DS_PKG=deepstream_sdk_v8.0.0_x86_64.tbz2
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.02.1-ma" AS nim_builder_base
 
 ENV NIM_DIR_PATH="/opt/nim" \
     PIP_INDEX_URL=https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple \
@@ -68,21 +66,21 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
     # Build TRT customized plugins
 ARG TRT_VERSION_MAJOR=10
-ARG TRT_VERSION_MINOR=8
+ARG TRT_VERSION_MINOR=3
 ARG TRT_VERSION_PATCH=0
-ARG TRT_VERSION_BUILD=43
+ARG TRT_VERSION_BUILD=26
 
 ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
 ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
 ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
 
 ARG CUDA_VERSION_MAJOR=12
-ARG CUDA_VERSION_MINOR=4
-ARG CUDA_VERSION_PATCH=127
+ARG CUDA_VERSION_MINOR=6
+ARG CUDA_VERSION_PATCH=37
 ARG CUDA_VERSION_BUILD=001
 ARG CUDA_VERSION_MAJOR_MINOR=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR
 ARG CUDA_VERSION_FULL=$CUDA_VERSION_MAJOR_MINOR.$CUDA_VERSION_PATCH.$CUDA_VERSION_BUILD
-ARG CUDNN_VERSION=9.0.0.312
+ARG CUDNN_VERSION=9.3.0.75
 
 ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
 
@@ -96,7 +94,7 @@ RUN mkdir trt_oss_src && \
    git submodule update --init --recursive && \
    mkdir -p build && cd build && \
    cmake .. \
-    -DGPU_ARCHS="53;60;61;70;75;80;86;90" \
+    -DGPU_ARCHS="80;86;90" \
     -DTRT_LIB_DIR=/usr/lib/x86_64-linux-gnu \
     -DTRT_OUT_DIR=/tmp/out \
     -DCUDA_VERSION=$CUDA_VERSION_MAJOR_MINOR \
@@ -109,43 +107,6 @@ RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x
    cd ../../../ && \
    rm -rf trt_oss_src
 
-
-RUN apt-get update && \
-        DEBIAN_FRONTEND=noninteractive  apt-get install -y --no-install-recommends \
-        pkg-config \
-        libgstrtspserver-1.0-dev \
-        libjson-glib-dev \
-        libyaml-cpp-dev \
-        libgstreamer1.0-dev \
-        && \
-        rm -rf /var/lib/apt/lists/* && \
-        apt autoremove
-
-FROM nim_builder_base AS nim_final
-
-## Copy and untar the DS SDK
-#RUN wget --content-disposition 'https://api.ngc.nvidia.com/v2/resources/org/nvidia/deepstream/7.0/files?redirect=true&path=deepstream_sdk_v7.0.0_x86_64.tbz2' -O /tmp/${DS_PKG} && tar -xvf /tmp/${DS_PKG} -C / && rm /tmp/${DS_PKG}
-COPY ${DS_PKG} /tmp/${DS_PKG}
-RUN tar -xvf /tmp/${DS_PKG} -C / && rm /tmp/${DS_PKG}
-
-
-WORKDIR $NIM_DIR_PATH
-
-# Patch JPEG Decoder
-RUN if [ -e "/usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstnvcodec.so" ]; then \
-        mv /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstnvcodec.so /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstnvcodec.so_bkp; \
-    else \
-        echo "File 'libgstnvcodec.so' does not exist"; \
-    fi
-RUN rm -rf /root/.cache/gstreamer-1.0/
-
-## Remove sample, source and install DS
-RUN pushd "/opt/nvidia/deepstream/deepstream-8.0" && \
-    cp samples/streams/yoga.jpg $NIM_DIR_PATH && \
-    popd && \
-    /opt/nvidia/deepstream/deepstream/install.sh && \
-    rm -rf /tmp/${DS_PKG}
-
 # Build DS TAO app post processors
 # need to be after DS SDK installation
 ARG GITLAB_TOKEN
@@ -157,85 +118,23 @@ RUN mkdir ds_tao_apps_src && \
    git clone -b $DS_TAO_APPS_TAG $DS_TAO_APPS_REPO ds_tao_apps && \
    cd ds_tao_apps/post_processor && \
    echo "$PWD Building DS TAO apps post processing..." && \
-   CUDA_MODULE_LOADING=LAZY CUDA_VER=12.4 make && \
+   CUDA_MODULE_LOADING=LAZY CUDA_VER=$CUDA_VERSION_MAJOR_MINOR make && \
    [ -f libnvds_infercustomparser_tao.so ] && echo "$PWD post processing build successful" || echo "$PWD post processing build falied" && \
    cp libnvds_infercustomparser_tao.so /opt/nvidia/deepstream/deepstream/lib && \
    cd ../../../ && \
    rm -rf ds_tao_apps_src
 
-# DALI backend is not used, CVE-2024-5535
-RUN rm -rf /opt/tritonserver/backends/dali
+FROM nim_builder_base AS nim_final
 
-RUN \
- ln -s /usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1 /usr/lib/x86_64-linux-gnu/libnvidia-encode.so && \
- ln -s /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 /usr/lib/x86_64-linux-gnu/libnvidia-ml.so && \
- ln -s /usr/src/tensorrt/bin/trtexec /usr/bin/trtexec
+WORKDIR $NIM_DIR_PATH
 
-# IP requirement for removal
-RUN dpkg --remove --force-depends libcdparanoia0 libvorbis0a  libvorbisenc2 libvisual-0.4-0 libtwolame0  \
-    libtag1v5 libtag1v5-vanilla libspeex1   libvpx7 libjack-jackd2-0 libshout3 libsamplerate0  libopus0 libgl1  libgl1-mesa-dri \
-    libglapi-mesa libglvnd0 libglx-mesa0 libglx0 libdrm-amdgpu1 libdrm-common libdrm-intel1 libdrm-nouveau2 libdrm-radeon1  libdrm2 \
-    libjbig0 libslang2 libmpg123-0 libmp3lame0 libflac8 libigdgmm12 intel-media-va-driver  i965-va-driver libva-drm2 \
-    libavcodec-extra-53 libavcodec58 libavutil56  libchromaprint1 libva2 mesa-va-drivers va-driver-all \
-    libavcodec-dev libswresample3 libaom3 libasound2 libasound2-data \
-    libass9 libbs2b0 libcodec2-1.0 libdav1d5 libdc1394-25 libdca0 libde265-0 \
-    libdecor-0-0 libdvdnav4 libdvdread8 libfaad2 libflite1 libfluidsynth3 \
-    libfreeaptx0 libgme0   libgsm1 libgssdp-1.2-0 libgupnp-1.2-1 libgupnp-igd-1.0-4 \
-    libilmbase25 libinstpatch-1.0-2 libkate1 liblcms2-2 libldacbt-enc2 liblilv-0-0 libltc11 \
-    libmfx1 libmjpegutils-2.1-0 libmodplug1 libmpcdec6   libmpeg2encpp-2.1-0 libmplex2-2.1-0 \
-    libnice10 libopenal-data libopenal1 libopenexr25 libopenh264-6 libopenjp2-7 libopenmpt0 \
-    libopenni2-0 libqrencode4 librsvg2-2 libsbc1 libsdl2-2.0-0 libserd-0-0 libshine3   \
-    libsnappy1v5 libsndio7.0 libsord-0-0 libsoundtouch1 libsoxr0 libspandsp2 libsratom-0-0 \
-    libsrt1.4-gnutls libsrtp2-1 libusb-1.0-0 libva-x11-2 libvdpau1 libvo-aacenc0 libvo-amrwbenc0 \
-    libvorbisfile3   libwebpmux3 libwebrtc-audio-processing1 libwildmidi2 libx264-163 libx265-199 \
-    libxcursor1 libxi6 libxinerama1 libxkbcommon0 libxrandr2 libxss1 libxvidcore4 libzbar0 \
-    libzvbi-common libzvbi0 libzxingcore1   ocl-icd-libopencl1 timgm6mb-soundfont x11-common xkb-data \
-    gstreamer1.0-gl gstreamer1.0-x poppler-data vdpau-driver-all alsa-topology-conf \
-    alsa-ucm-conf fonts-droid-fallback fonts-noto-mono fonts-urw-base35 ghostscript gsfonts \
-    imagemagick-6-common libavahi-client3 libavahi-common-data libavahi-common3 libcups2 libdecor-0-plugin-1-cairo \
-    libdjvulibre-text libdjvulibre21 libfftw3-double3 libgdk-pixbuf2.0-bin libgl1-amber-dri libgraphene-1.0-0 \
-    libgs9 libgs9-common libheif1 libidn12 libijs-0.35 libjbig2dec0 libjxr-tools libjxr0 liblqr-1-0 libltdl7 \
-    libmagickcore-6.q16-6 libmagickcore-6.q16-6-extra libmagickwand-6.q16-6 libpaper-utils libpaper1 \
-    librsvg2-common libwebpdemux2 libwmflite-0.2-7 libxv1 mesa-vdpau-drivers
-
-RUN dpkg --purge \
-    fonts-droid-fallback fonts-noto-mono fonts-urw-base35 gsfonts imagemagick-6-common libpaper1:amd64 poppler-data
-
-RUN rm -f /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstaudioparsers.so \
-       /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstx264.so \
-       /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstfaad.so \
-       /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstvoaacenc.so
-
-RUN rm -f /usr/lib/x86_64-linux-gnu/libavresample* /usr/lib/x86_64-linux-gnu/libavutil* \
-    /usr/lib/x86_64-linux-gnu/libavcodec* /usr/lib/x86_64-linux-gnu/libavformat* \
-    /usr/lib/x86_64-linux-gnu/libavfilter*  /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstde265.so* \
-    /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstx265.so* /usr/lib/x86_64-linux-gnu/libde265.so* /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstvpx.so*
-
-RUN rm -f /usr/lib/x86_64-linux-gnu/libmpeg2.so* /usr/lib/x86_64-linux-gnu/libmpeg2encpp-2.1.so* /usr/lib/x86_64-linux-gnu/libmpg123.so*  \
-    /usr/lib/x86_64-linux-gnu/libx265.so* /usr/lib/x86_64-linux-gnu/libx264.so* /usr/lib/x86_64-linux-gnu/libvpx.so*  \
-    /usr/lib/x86_64-linux-gnu/libmpeg2convert.so* /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstopenh264.so \
-    /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstnvcodec.so
-
-RUN rm -f \
-    /usr/lib/x86_64-linux-gnu/libavresample* /usr/lib/x86_64-linux-gnu/libavutil* \
-    /usr/lib/x86_64-linux-gnu/libavcodec* /usr/lib/x86_64-linux-gnu/libavformat* \
-    /usr/lib/x86_64-linux-gnu/libavfilter* /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstde265.so* \
-    /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstx265.so* /usr/lib/x86_64-linux-gnu/libde265.so* \
-    /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstvpx.so* \
-    /usr/lib/x86_64-linux-gnu/libmpeg2.so.0* /usr/lib/x86_64-linux-gnu/libmpeg2encpp-2.1.so* /usr/lib/x86_64-linux-gnu/libmpg123.so* \
-    /usr/lib/x86_64-linux-gnu/libx265.so* /usr/lib/x86_64-linux-gnu/libx264.so* /usr/lib/x86_64-linux-gnu/libvpx.so*   \
-    /usr/lib/x86_64-linux-gnu/libmpeg2convert.so* /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstopenh264.so \
-    /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstnvcodec.so /usr/lib/x86_64-linux-gnu/gio/modules/libgiolibproxy.so \
-    /usr/lib/x86_64-linux-gnu/libdca.so* /usr/lib/x86_64-linux-gnu/libdvdnav.so* \
-    /usr/lib/x86_64-linux-gnu/libdvdread.so* /usr/lib/x86_64-linux-gnu/libfaad* \
-    /usr/lib/x86_64-linux-gnu/libFLAC.so* /usr/lib/x86_64-linux-gnu/libjbig.so* \
-    /usr/lib/x86_64-linux-gnu/libmjpegutils-2.1.so* /usr/lib/x86_64-linux-gnu/libmpeg2encpp-2.1.so* \
-    /usr/lib/x86_64-linux-gnu/libmplex2-2.1.so* /usr/lib/x86_64-linux-gnu/libslang.so* \
-    /usr/lib/x86_64-linux-gnu/libxvidcore.so* /usr/lib/x86_64-linux-gnu/libzvbi* \
-    /usr/lib/x86_64-linux-gnu/libvo-aacenc.so* /usr/lib/x86_64-linux-gnu/libjack* \
-    /usr/lib/x86_64-linux-gnu/libswresample.so.3*  && \
-    rm -rf /var/lib/apt/lists/*
-
+# Patch JPEG Decoder
+RUN if [ -e "/usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstnvcodec.so" ]; then \
+        mv /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstnvcodec.so /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstnvcodec.so_bkp; \
+    else \
+        echo "File 'libgstnvcodec.so' does not exist"; \
+    fi
+RUN rm -rf /root/.cache/gstreamer-1.0/
 RUN mkdir /tmp/assets && chmod -R 777 /tmp/assets
 
 ADD tao.tgz $NIM_DIR_PATH
