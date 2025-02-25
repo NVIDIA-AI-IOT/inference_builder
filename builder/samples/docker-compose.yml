@@ -181,4 +181,4 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 1
-      NIM_MODEL_NAME: nvdinov2
+      NIM_MODEL_NAME: rtdetr
