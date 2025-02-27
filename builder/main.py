@@ -234,6 +234,16 @@ def generate_configuration(config, tree):
     with open(tree/"config.py", 'w') as f:
         f.write(output)
 
+def build_validator(api_schema, output_dir: Path):
+    tpl_dir = get_resource_path("templates")
+    jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
+    validator_tpl = jinja_env.get_template("client/validator.jinja.py")
+
+    # Generate validator code using the API schema
+    output = validator_tpl.render(api_schema=api_schema)
+    with open(output_dir / "validator.py", 'w') as f:
+        f.write(output)
+
 def main(args):
     config = OmegaConf.load(args.config)
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -244,6 +254,7 @@ def main(args):
         build_server(args.server_type, config.name, api_schema, OmegaConf.to_container(config.server), tree)
         build_inference(args.server_type, config, tree)
         generate_configuration(config, tree)
+        build_validator(api_schema, tree)
         if not args.exclude_lib :
             copy_files(get_resource_path("lib"), tree/"lib")
         if args.custom_module:

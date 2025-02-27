@@ -2,6 +2,10 @@
 *.swp
 *.vscode
 .vscode/**
+.vscode
 dist
 .venv
 output
+generated_client
+*tmp*
+*.tgz
