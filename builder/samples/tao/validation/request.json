@@ -1,0 +1,4 @@
+{
+  "model": "nvidia/nvdino-v2",
+  "input": ["data:image/jpg;base64,<base64_image_placeholder>"]
+}

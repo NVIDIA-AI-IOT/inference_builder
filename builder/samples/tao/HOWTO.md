@@ -202,7 +202,7 @@ As a prerequisite to build the microservice, the inference package must be gener
 cd ../../..
 source .venv/bin/activate
 pip install -r requirements.txt
-python builder/main.py builder/samples/tao/ds_tao.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -t
+python builder/main.py builder/samples/tao/ds_tao.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -v builder/samples/tao/validation -o builder/samples/tao -t
 
 ```
 

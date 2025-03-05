@@ -18,6 +18,7 @@ from omegaconf.errors import ConfigKeyError
 from jinja2 import Environment, FileSystemLoader
 import ast
 import os
+import validate
 
 ALLOWED_SERVER = ["triton", "fastapi"]
 
@@ -69,6 +70,12 @@ def build_args(parser):
         help="Zip the output to a single file"
     )
     parser.add_argument("config", type=str, help="Path the the configuration")
+    parser.add_argument(
+        "-v",
+        "--validation-dir",
+        type=str,
+        help="valid validation directory path to build validator"
+    )
 
 def build_tree(server_type, config, temp_dir):
     cookiecutter.main.cookiecutter(
@@ -234,15 +241,6 @@ def generate_configuration(config, tree):
     with open(tree/"config.py", 'w') as f:
         f.write(output)
 
-def build_validator(api_schema, output_dir: Path):
-    tpl_dir = get_resource_path("templates")
-    jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
-    validator_tpl = jinja_env.get_template("client/validator.jinja.py")
-
-    # Generate validator code using the API schema
-    output = validator_tpl.render(api_schema=api_schema)
-    with open(output_dir / "validator.py", 'w') as f:
-        f.write(output)
 
 def main(args):
     config = OmegaConf.load(args.config)
@@ -254,7 +252,6 @@ def main(args):
         build_server(args.server_type, config.name, api_schema, OmegaConf.to_container(config.server), tree)
         build_inference(args.server_type, config, tree)
         generate_configuration(config, tree)
-        build_validator(api_schema, tree)
         if not args.exclude_lib :
             copy_files(get_resource_path("lib"), tree/"lib")
         if args.custom_module:
@@ -268,6 +265,19 @@ def main(args):
                 shutil.copytree(tree, target, dirs_exist_ok=True)
             except FileExistsError:
                 logging.error(f"{target} already exists in the output directory")
+        # Build validator if validation dir provided
+        if args.validation_dir:
+            try:
+                validation_dir = Path(args.validation_dir).resolve()
+                api_spec_path = Path(args.api_spec.name).resolve()
+                if validate.build_validation(api_spec_path, validation_dir):
+                    logger.info("✓ Successfully built validation")
+                else:
+                    logger.error("✗ Failed to build validation")
+            except Exception as e:
+                logger.error(f"validation build failed: {e}")
+                # Continue with other builds
+                # Continue to finish the build without validation
 
 
 

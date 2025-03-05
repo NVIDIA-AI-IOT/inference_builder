@@ -9,3 +9,4 @@ output
 generated_client
 *tmp*
 *.tgz
+.tmp
