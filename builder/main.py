@@ -18,6 +18,7 @@ from omegaconf.errors import ConfigKeyError
 from jinja2 import Environment, FileSystemLoader
 import ast
 import os
+import validate
 
 ALLOWED_SERVER = ["triton", "fastapi"]
 
@@ -69,6 +70,12 @@ def build_args(parser):
         help="Zip the output to a single file"
     )
     parser.add_argument("config", type=str, help="Path the the configuration")
+    parser.add_argument(
+        "-v",
+        "--validation-dir",
+        type=str,
+        help="valid validation directory path to build validator"
+    )
 
 def build_tree(server_type, config, temp_dir):
     cookiecutter.main.cookiecutter(
@@ -234,6 +241,7 @@ def generate_configuration(config, tree):
     with open(tree/"config.py", 'w') as f:
         f.write(output)
 
+
 def main(args):
     config = OmegaConf.load(args.config)
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -257,6 +265,19 @@ def main(args):
                 shutil.copytree(tree, target, dirs_exist_ok=True)
             except FileExistsError:
                 logging.error(f"{target} already exists in the output directory")
+        # Build validator if validation dir provided
+        if args.validation_dir:
+            try:
+                validation_dir = Path(args.validation_dir).resolve()
+                api_spec_path = Path(args.api_spec.name).resolve()
+                if validate.build_validation(api_spec_path, validation_dir):
+                    logger.info("✓ Successfully built validation")
+                else:
+                    logger.error("✗ Failed to build validation")
+            except Exception as e:
+                logger.error(f"validation build failed: {e}")
+                # Continue with other builds
+                # Continue to finish the build without validation
 
 
 
