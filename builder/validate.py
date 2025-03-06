@@ -14,9 +14,8 @@ import yaml
 
 # Common paths - single source of truth
 OUT_DIR = ".tmp"
-REQUEST_TEMPLATE = "request.json"
-CONFIG_FILE = "config.yaml"
 GENERATED_CLIENT_DIR = "generated_client"
+TEST_CASES_FILE = "test_cases.yaml"
 
 # Setup paths and generate OpenAPI client
 def check_client_exists() -> bool:
@@ -221,31 +220,123 @@ def prepare_image_input(image_path: Path) -> str:
     b64_image = base64.b64encode(image_data).decode()
     return f"data:image/{ext};base64,{b64_image}"
 
-def build_requests(validation_dir: Path, out_dir: Path) -> bool:
+
+def get_test_cases(validation_dir: Path) -> List[Dict[str, str]]:
+    """Discover test cases by scanning validation directory for images.
+
+    Args:
+        validation_dir: Path to validation directory
+
+    Returns:
+        List of test cases with image and expected response paths
+    """
+    test_cases = []
+    supported_formats = {'.jpg', '.jpeg', '.png'}
+
+    # Find all image files
+    for file_path in validation_dir.iterdir():
+        if file_path.suffix.lower() in supported_formats:
+            image_name = file_path.stem
+            expected_path = validation_dir / f"expected.{image_name}.json"
+
+            if expected_path.exists():
+                test_cases.append({
+                    "name": image_name,
+                    "input": file_path.name,
+                    "expected": expected_path.name
+                })
+            else:
+                print(f"Warning: Found image {file_path.name} but missing expected response: {expected_path.name}")
+
+    print(f"Discovered {len(test_cases)} test cases:")
+    for test in test_cases:
+        print(f"  • {test['name']}: {test['input']} → {test['expected']}")
+
+    return test_cases
+
+
+def get_request_template(client_dir: Path) -> Dict:
+    """Generate request template from OpenAPI client models.
+
+    Args:
+        client_dir: Path to generated OpenAPI client directory
+
+    Returns:
+        Dict containing request template
+    """
+    try:
+        # Temporarily add client to path
+        if str(client_dir) not in sys.path:
+            sys.path.insert(0, str(client_dir))
+
+        # Import the request model
+        from openapi_client.models.inference_request import InferenceRequest
+        from openapi_client.models.input import Input
+
+        # Create request using the model class
+        input_data = Input(["<image_placeholder>"])  # Create Input instance first
+        request = InferenceRequest(
+            model='nvidia/nvdino-v2',  # First allowed value from model_validate_enum
+            input=input_data
+        )
+
+        # Convert to dict for JSON serialization
+        template = request.to_dict()
+        print("Generated request template from OpenAPI client models")
+        return template
+
+    except ImportError as e:
+        print(f"Failed to import OpenAPI client models: {e}")
+        raise
+    except Exception as e:
+        print(f"Failed to generate request template: {e}")
+        raise
+    finally:
+        # Clean up sys.path
+        if str(client_dir) in sys.path:
+            sys.path.remove(str(client_dir))
+
+
+def build_requests(validation_dir: Path, out_dir: Path, client_dir: Path) -> bool:
     """Build request payloads from template and config."""
     try:
         print("\nBuilding request payloads...")
-        # Load template and config
-        template_path = validation_dir / REQUEST_TEMPLATE
-        config_path = validation_dir / CONFIG_FILE
+        # Get request template from OpenAPI client models
+        template = get_request_template(client_dir)
 
-        print(f"Using template: {template_path}")
-        with open(template_path) as f:
-            template = json.load(f)
+        # Get test cases from directory scan
+        test_cases = get_test_cases(validation_dir)
+        if not test_cases:
+            raise ValueError("No test cases found in validation directory")
 
-        print(f"Using config: {config_path}")
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
+        # Store request-response mapping
+        request_response_map = []
 
-        for test in config["test_cases"]:
+        # Generate request for each test case
+        for test in test_cases:
             request = template.copy()
             image_path = validation_dir / test["input"]
             request["input"] = [prepare_image_input(image_path)]
             
-            output_path = out_dir / f"request.{test['name']}.json"
-            with open(output_path, "w") as f:
+            # write request file
+            request_path = out_dir / f"request.{test['name']}.json"
+            with open(request_path, "w") as f:
                 json.dump(request, f, indent=2)
-            print(f"✓ Generated request for test '{test['name']}': {output_path}")
+            print(f"✓ Generated request for test '{test['name']}': {request_path}")
+
+            expected_path = validation_dir / test["expected"]
+            # Add to mapping
+            request_response_map.append({
+                "name": test["name"],
+                "request": str(request_path),
+                "expected": str(expected_path)
+            })
+
+        # Write request-response mapping
+        test_cases_file_path = out_dir / TEST_CASES_FILE
+        with open(test_cases_file_path, "w") as f:
+            yaml.safe_dump(request_response_map, f, default_flow_style=False)
+        print(f"✓ Generated test cases file: {test_cases_file_path}")
         print("✓ Successfully built all request payloads")
         return True
     except Exception as e:
@@ -290,7 +381,7 @@ def build_validation(openapi_spec_path: Path, validation_dir: Path) -> bool:
 
         # 2. Build request payloads
         print("\n2. Building request payloads...")
-        if not build_requests(validation_dir, out_dir):
+        if not build_requests(validation_dir, out_dir, client_dir):
             raise Exception("Failed to build requests")
 
         # 3. Generate test runner

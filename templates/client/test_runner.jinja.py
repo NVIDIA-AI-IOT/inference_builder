@@ -22,10 +22,8 @@ if str(VALIDATOR_DIR) not in sys.path:
 import validate
 
 # Common paths relative to test runner location
-VALIDATION_ROOT = Path(__file__).parent.parent
 GENERATED_CLIENT_DIR = Path(__file__).parent / validate.GENERATED_CLIENT_DIR
-CONFIG_FILE = VALIDATION_ROOT / validate.CONFIG_FILE
-TMP_DIR = Path(__file__).parent
+TEST_CASES_FILE = Path(__file__).parent / validate.TEST_CASES_FILE
 
 # Setup environment before imports
 if not validate.check_client_exists():
@@ -52,6 +50,10 @@ class TestInference(unittest.TestCase):
         logger.info("Setting up test environment")
         logger.info(f"Server host: {cls.host}")
         logger.info(f"Tolerance: {cls.tolerance}")
+
+        with open(TEST_CASES_FILE) as f:
+            cls.test_cases = yaml.safe_load(f)
+        logger.info(f"Loaded {len(cls.test_cases)} test cases from {TEST_CASES_FILE}")
 
         config = Configuration(host=cls.host)
         api_client = ApiClient(config)
@@ -83,26 +85,21 @@ class TestInference(unittest.TestCase):
 
     def test_inference(self):
         """Test inference with pre-built requests"""
-        # Load test config
-        with open(CONFIG_FILE) as f:
-            config = yaml.safe_load(f)
 
-        self.logger.info(f"Found {len(config['test_cases'])} test cases")
-
-        for test in config["test_cases"]:
+        for test in self.test_cases:
             with self.subTest(test=test["name"]):
                 test_logger = logging.getLogger(f"{__name__}.{self.id()}.{test['name']}")
                 test_logger.info(f"Starting test case: {test['name']}")
                 try:
                     # Load pre-built request
-                    request_path = TMP_DIR / f"request.{test['name']}.json"
+                    request_path = Path(test["request"])
                     test_logger.debug(f"Loading request from: {request_path}")
                     with open(request_path) as f:
                         request_data = json.load(f)
                     request = InferenceRequest.from_dict(request_data)
 
                     # Load expected output
-                    expected_path = VALIDATION_ROOT / test["expected"]
+                    expected_path = Path(test["expected"])
                     test_logger.debug(f"Loading expected output from: {expected_path}")
                     with open(expected_path) as f:
                         expected = json.load(f)

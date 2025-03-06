@@ -1,4 +1,0 @@
-test_cases:
-  - name: "sample_720p"
-    input: "sample_720p.jpg"
-    expected: "expected.sample_720p.json"
