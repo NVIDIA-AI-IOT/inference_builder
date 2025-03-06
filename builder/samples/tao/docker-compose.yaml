@@ -1,6 +1,6 @@
 services:
   tao-cv:
-    image: gitlab-master.nvidia.com:5005/chunlinl/nim-templates/tao_cv_nim
+    image: gitlab-master.nvidia.com:5005/chunlinl/nim-templates/tao_cv_nim:0.0.1
     volumes:
       - '~/.cache/nim:/opt/nim/.cache'
     ipc: host
