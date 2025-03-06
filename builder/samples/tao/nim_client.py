@@ -67,11 +67,13 @@ def main(host , port, model, files):
       bboxes = data["bboxes"]
       probs = data["probs"]
       labels = data["labels"]
+      mask = data["mask"]
       print(f"index = {data['index']}")
       print(f"shape = {shape}")
       print(f"bboxes = {bboxes}")
       print(f"probs = {probs}")
       print(f"labels = {labels}")
+      print(f"mask = {mask}")
       bboxes_list.append(bboxes)
 
     for file, bboxes in zip(files, bboxes_list):

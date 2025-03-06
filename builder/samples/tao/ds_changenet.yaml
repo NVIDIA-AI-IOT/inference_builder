@@ -54,7 +54,7 @@ server:
 models:
 - name: tao
   backend: deepstream/nvinfer
-  max_batch_size: 1
+  max_batch_size: 2
   input:
   - name: images
     data_type: TYPE_UINT8
@@ -70,4 +70,7 @@ models:
   parameters:
     infer_config_path:
       - /opt/nim/.cache/model-repo/tao/config_nvinfer.yaml
+    preprocess_config_path:
+      - /opt/nim/.cache/model-repo/tao/config_preprocess_0.txt
+      - /opt/nim/.cache/model-repo/tao/config_preprocess_1.txt
 

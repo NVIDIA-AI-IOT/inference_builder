@@ -4,16 +4,16 @@ from queue import Queue, Empty
 from dataclasses import dataclass, field
 import base64
 
-warmup_data = [
-    {
+warmup_data_0 = {
         "images": np.frombuffer(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGK6HcwNCAAA//8DTgE8HuxwEQAAAABJRU5ErkJggg=="), dtype=np.uint8),
         "format": "PNG"
-    },
-    {
+    }
+
+warmup_data_1 = {
         "images": np.frombuffer(base64.b64decode("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCgr/2wBDAQICAgICAgUDAwUKBwYHCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgr/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD+f+iiigAooooAKKKKACiiigD/2Q=="), dtype=np.uint8),
         "format": "JPG"
     }
-]
+
 
 class TensorInput(BufferProvider):
 
@@ -43,7 +43,7 @@ class TensorInput(BufferProvider):
 class TensorInputPool:
 
     def __init__(self, height, width, formats, batch_size):
-        self._inputs = [TensorInput(width, height, format) for _ in range(batch_size) for format in formats]
+        self._inputs = [TensorInput(width, height, format) for format in formats for _ in range(batch_size)]
 
     @property
     def instances(self):
@@ -57,7 +57,7 @@ class TensorInputPool:
                 format = 'JPEG'
             for key in item:
                 tensor = item[key]
-            # try find the free for the specific format
+            # try find the free slog for the specific format
             i, tensor_input = next(((i, x) for i,x in enumerate(self._inputs) if x.format == format and x.queue.empty()), (-1, None))
             if tensor_input is None:
                 i, tensor_input = next(((i, x) for i,x in enumerate(self._inputs) if x.format == format), (-1, None))
@@ -97,6 +97,32 @@ class DeepstreamMetadata:
     labels: list[str] = field(default_factory=list)
     seg_map: list[int] = field(default_factory=list)
 
+class PreprocessMetadataOutput(BatchMetadataOperator):
+    def __init__(self, n_outputs, output_name, d):
+        super().__init__()
+        self._queues = [Queue() for _ in range(n_outputs)]
+        self._output_name = output_name
+        self._shape = d
+
+    def handle_metadata(self, batch_meta):
+        for meta in batch_meta.preprocess_batch_items:
+            preprocess_batch = meta.as_preprocess_batch()
+            if not preprocess_batch:
+                continue
+            for roi in preprocess_batch.rois:
+                metadata = DeepstreamMetadata()
+                q = self._queues[roi.frame_meta.pad_index]
+                for u_meta in roi.segmentation_items:
+                    seg_meta = u_meta.as_segmentation()
+                    if seg_meta:
+                        metadata.shape = [seg_meta.height, seg_meta.width]
+                        metadata.seg_map = seg_meta.class_map
+                        break
+                q.put({"data": metadata})
+
+    def get(self, indices: List):
+        return [{self._output_name: self._queues[i].get()} if i >= 0 else None for i in indices]
+
 class MetadataOutput(BatchMetadataOperator):
     def __init__(self, n_outputs, output_name, d):
         super().__init__()
@@ -122,12 +148,11 @@ class MetadataOutput(BatchMetadataOperator):
                     for i in range(classifier.n_labels):
                         labels.append(classifier.get_n_label(i))
                 metadata.labels.append(labels)
-            for user_meta in frame_meta.tensor_items:
+            for user_meta in frame_meta.segmentation_items:
                 seg_meta = user_meta.as_segmentation()
                 if seg_meta:
                     metadata.shape = [seg_meta.height, seg_meta.width]
                     metadata.seg_map = seg_meta.class_map
-                    metadata.probs = seg_meta.class_probabilities_map
                 # only one seg meta is expected on one frame
                 break
             q.put({"data": metadata})
@@ -152,25 +177,39 @@ class DeepstreamBackend(ModelBackend):
         if "parameters" not in model_config or "infer_config_path" not in model_config["parameters"]:
             raise Exception("Deepstream pipeline requires infer_config_path")
         infer_config_path = model_config["parameters"]['infer_config_path']
+        preprocess_config_path = model_config["parameters"]['preprocess_config_path'] if "preprocess_config_path" in model_config["parameters"] else []
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
         self._formats = ['JPEG', 'PNG']
         self._in_pool = TensorInputPool(d[0], d[1], self._formats, self._max_batch_size)
         n_output = self._max_batch_size * len(self._formats)
-        self._out = TensorOutput(n_output) if tensor_output else MetadataOutput(n_output, self._output_names[0], d)
+        if tensor_output:
+            self._out = TensorOutput(n_output)
+        elif preprocess_config_path:
+            self._out = PreprocessMetadataOutput(n_output, self._output_names[0], d)
+        else:
+            self._out = MetadataOutput(n_output, self._output_names[0], d)
         self._pipeline = Pipeline(f"deepstream-{self._model_name}")
 
         # build the inference flow
         flow = Flow(self._pipeline)
         probe = Probe('tensor_retriver', self._out)
-        flow = flow.inject(self._in_pool.instances).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=1000, live_source=False, width=d[1], height=d[0])
-        flow = flow.infer(infer_config_path, with_triton, batch_size=self._max_batch_size).attach(probe).render(RenderMode.DISCARD, enable_osd=False)
+        flow = flow.inject(self._in_pool.instances).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=33000, live_source=False, width=d[1], height=d[0])
+        for config in preprocess_config_path:
+            flow = flow.preprocess(config)
+        for config in infer_config_path:
+            flow = flow.infer(config, with_triton, batch_size=self._max_batch_size)
+        flow = flow.attach(probe).render(RenderMode.DISCARD, enable_osd=False)
         self._pipeline.start()
         logger.info(f"DeepstreamBackend created for {self._model_name} to generate {self._output_names}, output tensor: {tensor_output}")
+
         # warm up
-        indices = self._in_pool.submit(warmup_data)
+        indices = self._in_pool.submit([warmup_data_0.copy() for _ in range(self._max_batch_size)])
         for result in self._out.get(indices):
-            logger.info(f"Warm up: {result}")
+            logger.info(f"Warm up 0: {result}")
+        indices = self._in_pool.submit([warmup_data_1.copy() for _ in range(self._max_batch_size)])
+        for result in self._out.get(indices):
+            logger.info(f"Warm up 1: {result}")
 
 
     def __call__(self, *args, **kwargs):
