@@ -18,7 +18,7 @@ Before running the microservice, users must set the name of the model can in the
 
 Following files are expected to be present in the directory:
 
-- Deepstream inference config file : `config_nvinfer.yaml`
+- Deepstream inference config file : `nvdsinfer_config.yaml`
 - ONNX model file
 - Label file (optional, used for post-processing)
 
@@ -270,7 +270,7 @@ $ ngc registry chart push eevaigoeixww/staging/tao-cv-app:<new_version>
 
 ### 4. Fetch the helm chart from NGC
 ```bash
-$ helm fetch https://helm.ngc.nvidia.com/eevaigoeixww/staging/charts/tao-cv-app-0.0.1.tgz --username='$oauthtoken' --password=<YOUR API KEY>
+$ helm fetch https://helm.ngc.nvidia.com/eevaigoeixww/staging/charts/tao-cv-app-0.0.2.tgz --username='$oauthtoken' --password=<YOUR API KEY>
 ```
 
 ### 5. Install the helm chart pulled from NGC
