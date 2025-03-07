@@ -164,7 +164,7 @@ class DeepstreamBackend(ModelBackend):
         flow = Flow(self._pipeline)
         probe = Probe('tensor_retriver', self._out)
         flow = flow.inject(self._in_pool.instances).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=1000, live_source=False, width=d[1], height=d[0])
-        flow = flow.infer(infer_config_path, with_triton, batch_size=self._max_batch_size).attach(probe).render(RenderMode.DISCARD, enable_osd=False)
+        flow = flow.infer(infer_config_path, with_triton, batch_size=self._max_batch_size, unique_id=1).attach(probe).render(RenderMode.DISCARD, enable_osd=False)
         self._pipeline.start()
         logger.info(f"DeepstreamBackend created for {self._model_name} to generate {self._output_names}, output tensor: {tensor_output}")
         # warm up

@@ -68,4 +68,4 @@ models:
     data_type: TYPE_CUSTOM_DS_METADATA
     dims: [ -1 ]
   parameters:
-    infer_config_path: /opt/nim/.cache/model-repo/tao/config_nvinfer.yaml
+    infer_config_path: /opt/nim/.cache/model-repo/tao/nvdsinfer_config.yaml
