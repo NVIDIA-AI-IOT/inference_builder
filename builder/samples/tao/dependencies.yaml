@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+#
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+dependencies:
+  python:
+    - name: "Requests"
+      version: "2.30.0"
+    - name: "python-multipart"
+      version: "0.0.9"
+    - name: "aiofiles"
+      version: "23.2.1"
+    - name: "aiohttp"
+      version: "3.8.5"
+    - name: "annotated-types"
+      version: "0.7.0"
+    - name: "python-magic"
+      version: "0.4.27"
+    - name: "torch"
+      version: "2.4.0"
+    - name: "numpy"
+      version: "1.26.4"
+    - name: omegaconf
+      version: "2.3.0"
+    - name: "transformers"
+      version: "4.36.2"
+  deb:
+    - name: "libyaml-cpp0.7"
+    - name: "pkg-config"
+    - name: "cmake"

@@ -93,6 +93,7 @@ class Interface(HttpNIMApiInterface):
                 else:
                     response[name] = l
         json_string = jinja2_env.from_string(tpl).render(request=request, response=response)
+        self.logger.debug(f"Sending json payload: {json_string}")
         return data_model.{{ response_class }}(**json.loads(json_string))
 
     @HttpNIMApiInterface.route("{{ endpoints.infer }}", methods=["post"])

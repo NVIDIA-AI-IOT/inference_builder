@@ -1,0 +1,20 @@
+services:
+  tao-cv:
+    image: gitlab-master.nvidia.com:5005/chunlinl/nim-templates/tao_cv_nim:ds8.0-triton25.02.1_2
+    volumes:
+      - '~/.cache/nim:/opt/nim/.cache'
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              #count: 1
+              device_ids: ['0']
+              capabilities: [gpu]
+    environment:
+      DEBUG: 1
+      NIM_MODEL_NAME: rtdetr

@@ -1,0 +1,21 @@
+FunctionName: ""  # NVCF function name
+InferenceUrl: ""  # NVCF function interface URL. Use '/grpc' for gRPC functions
+InferencePort: ""  # NVCF function port
+HelmChartServiceName: ""  # K8s service name exposed as function
+GpuType: ""  # Type of GPU
+Backend: ""  # Backend type
+MaxInstance: ""  # Maximum number of instances
+MinInstance: ""  # Minimum number of instances
+InstanceType: ""  # Type of instance
+DockerRegSecrets:
+ - Name: "ngc-docker-reg-secret"
+   Username: "NGC_CLI_API_KEY"
+   Password: ""
+#HTTPHealthUri: "" #Required for HTTP based function only, must be exposed on InferencePort.
+#AdditionalSecrets:
+# - Name: ""
+#   Key: ""
+#   Value: ""
+#StorageProvisioner:
+# - Name: ""
+#   Namespace: ""

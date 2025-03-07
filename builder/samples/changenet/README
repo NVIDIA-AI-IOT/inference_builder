@@ -10,6 +10,7 @@ python main.py samples/changenet/trt_changenet.yaml -a samples/changenet/openapi
 
 Build and run the docker image:
 
+cd samples
 docker compose up --build nim-changenet
 
 Test the NIM with a client:

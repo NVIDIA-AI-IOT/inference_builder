@@ -12,6 +12,7 @@ python main.py samples/rtdetr/ds_rtdetr.yaml --server-type fastapi -a samples/rt
 
 Build and run the docker image:
 
+cd samples
 docker compose up --build nim-rtdetr
 
 Test the NIM with a client:
@@ -22,4 +23,4 @@ cd builder/samples/nvsegformer
 python nim_client.py --host 127.0.0.1 --port 8800 --file test.jpg
 
 Know Issues:
-- There needs a warm-up for each decoder(PNG/JPG) requiring one test jpg and one test png file being feeded to the NIM respectively
+- There needs a warm-up for each decoder(PNG/JPG) requiring one test jpg and one test png file being fed to the NIM respectively

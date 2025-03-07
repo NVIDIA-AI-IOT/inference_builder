@@ -12,6 +12,7 @@ python main.py samples/nvsegformer/ds_nvsegformer.yaml --server-type fastapi -a 
 
 Build and run the docker image:
 
+cd samples
 docker compose up --build nim-nvsegformer
 
 Test the NIM with a client:

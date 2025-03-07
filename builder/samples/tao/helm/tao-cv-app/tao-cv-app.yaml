@@ -1,0 +1,18 @@
+specVersion: '2.5.0'
+
+version: 0.0.2
+
+doc: README.md
+
+name: tao-cv-app
+
+description: Description for tao-cv-app
+
+dependencies:
+- ucf.svc.tao-cv:0.0.1
+
+components:
+- name: tao-cv
+  type: ucf.svc.tao-cv
+  parameters:
+    modelName: rtdetr
