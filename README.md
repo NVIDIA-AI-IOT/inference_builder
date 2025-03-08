@@ -8,14 +8,14 @@ There are three main components in the Inference Builder:
 
 - Inference code templates: The code templates provides reusable code snippets for different inference backends and frameworks, including Triton Inference Server, TensorRT, Deepstream and so on. These templates are optimized and tested, so to be used by any models with instantiated input/output and configuration.
 - Python library for common inference utilities: This library provides common utilities for inference, including data loading, media processing, and configuration management.
-- Command line tool for generating inference code: This application takes the inference configuration file and the OpenAPI spec as input, and generates the inference code for the corresponding NIM by piecing together the code templates and the common utilities.
+- Command line tool for generating inference code: This application takes the inference configuration file and the OpenAPI spec as input and generates the inference code for the corresponding NIM by piecing together the code templates and the common utilities.
 
 ## Getting started
 
 ### Clone the repository
 
 ```bash
-git clone https://gitlab-master.nvidia.com/chunlinl/nim-templates.git
+git clone ssh://git@gitlab-master.nvidia.com:12051/DeepStreamSDK/inference-builder.git
 git submodule update --init
 ```
 
@@ -53,15 +53,6 @@ Ensure nvidia runtime added to `/etc/docker/daemon.json`
 }
 ```
 
-Install Nim Tools
-
-```bash
-$ pip install nimtools --index-url https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple
-
-#Check installation
-$ nim_builder --version
-```
-
 ## Usage
 The project provides developers an easy-to-use command line tool to generate inference codes for various VLM/CV NIMs. Before running the tool, developers need to prepare a comprehensive configuration file to define the inference flow of the NIM, in addition, there needs an OpenAPI spec to define the NIM endpoints and parameters. For some NIMs, custom code snippet would also be needed.
 
@@ -80,8 +71,8 @@ A configuration file is a YAML file that defines the inference flow of the NIM. 
 
 - name: The name of the NIM. It will be used as the name of the folder to save the generated inference code (or the name of the tarball if '-t' is specified).
 - models: List of model definitions. A inference flow can contain multiple models, each might be implemented by different backends to achieve better performance.
-- input: Defines the top level input parameters of the NIM, and each input is extracted from the server request.
-- output: Defines the top level output parameters of the NIM, and each output is wrapped into the server response.
+- input: Defines the top-level input parameters of the NIM, and each input is extracted from the server request.
+- output: Defines the top-level output parameters of the NIM, and each output is wrapped into the server response.
 - server: Defines the server endpoints and the corresponding request and response types.
 
 A configuration file can be as simple as the following example:
@@ -158,10 +149,10 @@ With the above configuration file, it is sufficient to generate the inference co
 
 ### Model Definition
 
-The model definition is derived from the Triton model configration and extended to fit all the other backend requirements:
+The model definition is derived from the Triton model configuration and extended to fit all the other backend requirements:
 
 - name: The name of the model.
-- backend: The backend implementation of the model. The definition is hierarchical and the backend type can be specified at multiple levels. e.g. `backend: deepstream/nvinfer` means the model will be implemented by Deepstream with nvinfer backend; and `backend: triton/python/tensorrtllm` means the model will be implemented by Triton with python backend and tensorrtllm plugin.
+- backend: The backend implementation of the model. The definition is hierarchical, and the backend type can be specified at multiple levels. e.g. `backend: deepstream/nvinfer` means the model will be implemented by Deepstream with nvinfer backend; and `backend: triton/python/tensorrtllm` means the model will be implemented by Triton with python backend and tensorrtllm plugin.
 - max_batch_size: The maximum batch size of the model.
 - input: The input parameters of the model.
 - output: The output parameters of the model.
@@ -183,7 +174,7 @@ When triton is used as the backend, all the standard triton model parameters are
 
 ### Input and Output Definition
 
-Input and Output definitions are required both in top level and model level. The model level of input and output are specified by the definition of  tensors, while the top level of input and output have a wider range of data types including image, url, string, etc.
+Input and Output definitions are required both at the top level and model level. The model level of input and output are specified by the definition of  tensors, while the top level of input and output have a wider range of data types including image, url, string, etc.
 
 Each input and output definition contains the following sections:
 
@@ -197,11 +188,11 @@ Each input and output definition contains the following sections:
 
 ### Server Definition
 
-The server definition is required in top level. It defines the server inference endpoint and the corresponding request and response templates for it. Both request and response templates are Jinja2 templates and are used to extract required input and output data from the server request and response.
+The server definition is required at the top level. It defines the server inference endpoint and the corresponding request and response templates for it. Both request and response templates are Jinja2 templates and are used to extract required input and output data from the server request and response.
 
 ### Routing
 
-The routing section is optional and only used in rather complex inference flows. It defines the routing rules for the inference flow when multiple models are involved and multiple data flows are possible. Definition of 'routes' is a map and the key is the input and the value is the output. Both input and output are defined with the name of the model and the list of its tensors.
+The routing section is optional and only used in rather complex inference flows. It defines the routing rules for the inference flow when multiple models are involved, and multiple data flows are possible. Definition of 'routes' is a map, and the key is the input, and the value is the output. Both input and output are defined with the name of the model and the list of its tensors.
 
 
 ## Contributing
