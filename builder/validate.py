@@ -110,12 +110,13 @@ def check_client_valid(client_dir: Path) -> bool:
         print(f"Error checking client: {e}")
         return False
 
-def generate_openapi_client(openapi_spec_path: Path, output_dir: Path) -> bool:
-    """Generate OpenAPI client using Docker.
+def generate_openapi_client(openapi_spec_path: Path, output_dir: Path, use_docker: bool = True) -> bool:
+    """Generate OpenAPI client using Docker or local OpenAPI Generator.
     
     Args:
         openapi_spec_path: Path to OpenAPI specification file
         output_dir: Target output directory for generated client
+        use_docker: Whether to use Docker for generation (default: True)
     """
     try:
         # Check if valid client already exists
@@ -131,27 +132,36 @@ def generate_openapi_client(openapi_spec_path: Path, output_dir: Path) -> bool:
         tmp_client = "tmp_generated_client"
         tmp_client_path = abs_spec_path.parent / tmp_client
         
-        # Construct docker command
-        # docker run --rm -v "${PWD}:/local" openapitools/openapi-generator-cli generate \
-        #     -i /local/openapi.yaml \
-        #     -g python \
-        #     -o /local/generated_client
-        docker_cmd = [
-            "docker", "run", "--rm",
-            "-v", f"{abs_spec_path.parent}:/local",
-            "--user", f"{os.getuid()}:{os.getgid()}",  # Use current user's UID/GID
-            "openapitools/openapi-generator-cli", "generate",
-            "-i", f"/local/{abs_spec_path.name}",
-            "-g", "python",
-            "-o", f"/local/{tmp_client}"
-        ]
-
-        print(f"Generating OpenAPI client using Docker...")
+        if use_docker:
+            # Construct docker command
+            # docker run --rm -v "${PWD}:/local" openapitools/openapi-generator-cli generate \
+            #     -i /local/openapi.yaml \
+            #     -g python \
+            #     -o /local/generated_client
+            generator_cmd = [
+                "docker", "run", "--rm",
+                "-v", f"{abs_spec_path.parent}:/local",
+                "--user", f"{os.getuid()}:{os.getgid()}",  # Use current user's UID/GID
+                "openapitools/openapi-generator-cli", "generate",
+                "-i", f"/local/{abs_spec_path.name}",
+                "-g", "python",
+                "-o", f"/local/{tmp_client}"
+            ]
+            print(f"Generating OpenAPI client using Docker...")
+        else:
+            # Use local OpenAPI Generator
+            generator_cmd = [
+                "openapi-generator-cli", "generate",
+                "-i", str(abs_spec_path),
+                "-g", "python",
+                "-o", str(tmp_client_path)
+            ]
+            print(f"Generating OpenAPI client using local OpenAPI Generator...")
         print(f"Using OpenAPI spec: {abs_spec_path}")
         print(f"Temporary directory: {tmp_client_path}")
         print(f"Final output directory: {output_dir.resolve()}")
 
-        result = subprocess.run(docker_cmd, 
+        result = subprocess.run(generator_cmd,
                               check=True,
                               capture_output=True,
                               text=True)
@@ -363,7 +373,7 @@ def build_test_runner(out_dir: Path) -> bool:
         print(f"✗ Failed to build test runner: {e}")
         return False
 
-def build_validation(openapi_spec_path: Path, validation_dir: Path) -> bool:
+def build_validation(openapi_spec_path: Path, validation_dir: Path, use_docker: bool = True) -> bool:
     """Generate validation components."""
     try:
         print("\n=== Building Validator ===")
@@ -376,7 +386,7 @@ def build_validation(openapi_spec_path: Path, validation_dir: Path) -> bool:
         # 1. Generate OpenAPI client
         print("\n1. Generating OpenAPI client...")
         client_dir = out_dir / GENERATED_CLIENT_DIR
-        if not generate_openapi_client(openapi_spec_path, client_dir):
+        if not generate_openapi_client(openapi_spec_path, client_dir, use_docker):
             raise Exception("Failed to generate OpenAPI client")
 
         # 2. Build request payloads
