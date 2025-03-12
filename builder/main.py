@@ -76,6 +76,10 @@ def build_args(parser):
         type=str,
         help="valid validation directory path to build validator"
     )
+    parser.add_argument(
+        "--no-docker",
+        action="store_true",
+        help="Use local OpenAPI Generator instead of Docker for OpenAPI client generation")
 
 def build_tree(server_type, config, temp_dir):
     cookiecutter.main.cookiecutter(
@@ -270,7 +274,7 @@ def main(args):
             try:
                 validation_dir = Path(args.validation_dir).resolve()
                 api_spec_path = Path(args.api_spec.name).resolve()
-                if validate.build_validation(api_spec_path, validation_dir):
+                if validate.build_validation(api_spec_path, validation_dir, not args.no_docker):
                     logger.info("✓ Successfully built validation")
                 else:
                     logger.error("✗ Failed to build validation")
