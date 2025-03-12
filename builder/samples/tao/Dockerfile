@@ -110,8 +110,8 @@ RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x
 # Build DS TAO app post processors
 # need to be after DS SDK installation
 ARG GITLAB_TOKEN
-ENV DS_TAO_APPS_REPO=https://oauth2:${GITLAB_TOKEN}@gitlab-master.nvidia.com/chunlinl/deepstream_tao_apps.git
-ENV DS_TAO_APPS_TAG="master"
+ENV DS_TAO_APPS_REPO=https://oauth2:${GITLAB_TOKEN}@gitlab-master.nvidia.com/DeepstreamSDK/deepstream_tao_apps.git
+ENV DS_TAO_APPS_TAG="main"
 RUN mkdir ds_tao_apps_src && \
    cd ds_tao_apps_src && \
    echo "$PWD Pulling DS TAO apps repo..." && \
