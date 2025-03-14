@@ -65,6 +65,7 @@ build_tao_inference:
         - builder/samples/tao/**/*
         - builder/main.py
         - templates/**/*
+        - .gitlab-ci.yml
 
 # Build and push the final NIM container
 build_tao_docker:
