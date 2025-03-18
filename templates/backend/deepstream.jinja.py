@@ -194,7 +194,7 @@ class DeepstreamBackend(ModelBackend):
         # build the inference flow
         flow = Flow(self._pipeline)
         probe = Probe('tensor_retriver', self._out)
-        flow = flow.inject(self._in_pool.instances).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=33000, live_source=False, width=d[1], height=d[0])
+        flow = flow.inject(self._in_pool.instances).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=1000, live_source=False, width=d[1], height=d[0])
         for config in preprocess_config_path:
             flow = flow.preprocess(config)
         for config in infer_config_path:

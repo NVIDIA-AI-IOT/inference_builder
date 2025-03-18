@@ -11,6 +11,20 @@ info:
     name: NVIDIA AI Foundation Models Community License
     url: https://docs.nvidia.com/ai-foundation-models-community-license.pdf
 paths:
+  /v1/health/ready:
+    get:
+      tags:
+        - "NVIDIA METROPOLIS INFERENCE API"
+      summary: Health Ready
+      description: Provide your implementation of readiness to know when container
+        ready to accept traffic
+      operationId: health_ready_v1_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
   /v1/inference:
     post:
       tags:
