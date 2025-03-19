@@ -10,6 +10,26 @@ NETWORK_WIDTH = 960
 NETWORK_HEIGHT = 544
 
 def draw_bboxes(image_path, bboxes, shape):
+    """
+    Draw bounding boxes on the input image
+      Bounding Box Format in nim-tao: [x1, y1, x2, y2]
+      - x1, y1: Top-left corner; x2, y2: Bottom-right corner
+      - Coordinates are relative to network input dimensions
+      - Values range from 0 to network_width/height
+      - To convert to image coordinates:
+        image_x = bbox_x * (image_width / network_width)
+        image_y = bbox_y * (image_height / network_height)
+
+    Example:
+      Original image 1920x1080
+      Network input 960x544 (shape = [544, 960])
+      Model detects a box at [240, 136, 720, 408] (in network coordinates)
+      The actual image coordinates would be:
+      x1 = 240 / 960 * 1920 = 480
+      y1 = 136 / 544 * 1080 = 270
+      x2 = 720 / 960 * 1920 = 1440
+      y2 = 408 / 544 * 1080 = 810
+    """
     image = cv2.imread(image_path)
     height, width, _ = image.shape
     for bbox in bboxes:
@@ -21,6 +41,52 @@ def draw_bboxes(image_path, bboxes, shape):
     cv2.imshow("Image with Bounding Boxes", image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+
+def coco_to_network_bbox(coco_bbox, orig_shape, network_shape):
+    """Convert COCO format bbox [x,y,w,h] to network relative [x1,y1,x2,y2] format
+    Args:
+        coco_bbox: List[float] - [x,y,w,h] in absolute image coordinates
+        orig_shape: List[int] - [height, width] of original image
+        network_shape: List[int] - [height, width] of network input
+    Returns:
+        List[float] - [x1,y1,x2,y2] normalized to network dimensions
+    """
+    # First convert COCO [x,y,w,h] to [x1,y1,x2,y2] in image coordinates
+    x1 = coco_bbox[0]
+    y1 = coco_bbox[1]
+    x2 = coco_bbox[0] + coco_bbox[2]
+    y2 = coco_bbox[1] + coco_bbox[3]
+    
+    # Then normalize to network dimensions
+    x1_norm = x1 / orig_shape[1] * network_shape[1]
+    y1_norm = y1 / orig_shape[0] * network_shape[0]
+    x2_norm = x2 / orig_shape[1] * network_shape[1]
+    y2_norm = y2 / orig_shape[0] * network_shape[0]
+    
+    return [x1_norm, y1_norm, x2_norm, y2_norm]
+
+def network_to_coco_bbox(network_bbox, orig_shape, network_shape):
+    """Convert network relative [x1,y1,x2,y2] to COCO format [x,y,w,h]
+    Args:
+        network_bbox: List[float] - [x1,y1,x2,y2] normalized to network dimensions
+        orig_shape: List[int] - [height, width] of original image
+        network_shape: List[int] - [height, width] of network input
+    Returns:
+        List[float] - [x,y,w,h] in absolute image coordinates
+    """
+    # First denormalize to image coordinates
+    x1 = network_bbox[0] / network_shape[1] * orig_shape[1]
+    y1 = network_bbox[1] / network_shape[0] * orig_shape[0]
+    x2 = network_bbox[2] / network_shape[1] * orig_shape[1]
+    y2 = network_bbox[3] / network_shape[0] * orig_shape[0]
+    
+    # Then convert [x1,y1,x2,y2] to COCO format [x,y,w,h]
+    x = x1
+    y = y1
+    w = x2 - x1
+    h = y2 - y1
+    
+    return [x, y, w, h]
 
 def main(host , port, model, files):
   if not files:
