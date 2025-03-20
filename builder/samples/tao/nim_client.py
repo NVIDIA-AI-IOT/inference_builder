@@ -4,6 +4,7 @@ import time
 import os
 from typing import List
 import cv2
+import mimetypes
 
 API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC="shfklsjlfjsljgl"
 NETWORK_WIDTH = 960
@@ -56,13 +57,13 @@ def coco_to_network_bbox(coco_bbox, orig_shape, network_shape):
     y1 = coco_bbox[1]
     x2 = coco_bbox[0] + coco_bbox[2]
     y2 = coco_bbox[1] + coco_bbox[3]
-    
+
     # Then normalize to network dimensions
     x1_norm = x1 / orig_shape[1] * network_shape[1]
     y1_norm = y1 / orig_shape[0] * network_shape[0]
     x2_norm = x2 / orig_shape[1] * network_shape[1]
     y2_norm = y2 / orig_shape[0] * network_shape[0]
-    
+
     return [x1_norm, y1_norm, x2_norm, y2_norm]
 
 def network_to_coco_bbox(network_bbox, orig_shape, network_shape):
@@ -79,13 +80,13 @@ def network_to_coco_bbox(network_bbox, orig_shape, network_shape):
     y1 = network_bbox[1] / network_shape[0] * orig_shape[0]
     x2 = network_bbox[2] / network_shape[1] * orig_shape[1]
     y2 = network_bbox[3] / network_shape[0] * orig_shape[0]
-    
+
     # Then convert [x1,y1,x2,y2] to COCO format [x,y,w,h]
     x = x1
     y = y1
     w = x2 - x1
     h = y2 - y1
-    
+
     return [x, y, w, h]
 
 def main(host , port, model, files):
@@ -95,10 +96,10 @@ def main(host , port, model, files):
 
   invoke_url = "http://" + host + ":" + port + "/v1/inference"
 
-  file_exts = []
+  mime_types = []
   b64_images = []
   for file in files:
-    file_exts.append(os.path.splitext(file)[1][1:])
+    mime_types.append(mimetypes.guess_type(file)[0])
     with open(file, "rb") as f:
       b64_images.append(base64.b64encode(f.read()).decode())
 
@@ -113,7 +114,7 @@ def main(host , port, model, files):
   }
 
   payload = {
-    "input": [f"data:image/{e};base64,{i}" for e, i in zip(file_exts, b64_images)],
+    "input": [f"data:{mime_type};base64,{b64_image}" for mime_type, b64_image in zip(mime_types, b64_images)],
     "model": f"nvidia/{model}"
   }
 
