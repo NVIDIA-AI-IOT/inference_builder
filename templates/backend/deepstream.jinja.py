@@ -1,4 +1,4 @@
-from pyservicemaker import Pipeline, Flow, BufferProvider, Buffer, RenderMode, BatchMetadataOperator, Probe
+from pyservicemaker import Pipeline, Flow, BufferProvider, Buffer, RenderMode, BatchMetadataOperator, Probe, as_tensor
 from typing import Dict, List
 from queue import Queue, Empty
 from dataclasses import dataclass, field
@@ -15,9 +15,9 @@ warmup_data_1 = {
     }
 
 
-class TensorInput(BufferProvider):
+class ImageTensorInput(BufferProvider):
 
-    def __init__(self, height, width, format):
+    def __init__(self, height, width, format, tensor_name):
         super().__init__()
         self.width = width
         self.height = height
@@ -25,6 +25,7 @@ class TensorInput(BufferProvider):
         self.framerate = 1
         self.device = 'cpu'
         self.queue = Queue(maxsize=1)
+        self._tensor_name = tensor_name
 
     def generate(self, size):
         tensor = self.queue.get()
@@ -40,14 +41,40 @@ class TensorInput(BufferProvider):
     def send(self, data):
         self.queue.put(data)
 
+    @property
+    def tensor_name(self):
+        return self._tensor_name
+
+class GenericTensorInput():
+    def __init__(self, device_id):
+        self.queue = Queue(maxsize=1)
+        self._device_id = device_id
+
+    def generate(self):
+        try:
+            tensors = self.queue.get(timeout=1)
+        except Empty:
+            logger.warning("No tensor data to generate")
+            return dict()
+        result = {k: as_tensor(v, "").to_gpu(self._device_id) for k, v in tensors.items()}
+        return result
+
+    def send(self, data):
+        self.queue.put(data)
+
 class TensorInputPool:
 
-    def __init__(self, height, width, formats, batch_size):
-        self._inputs = [TensorInput(width, height, format) for format in formats for _ in range(batch_size)]
+    def __init__(self, height, width, formats, batch_size, image_tensor_name, device_id, require_extra_input=False):
+        self._image_inputs = [ImageTensorInput(width, height, format, image_tensor_name) for format in formats for _ in range(batch_size)]
+        self._generic_input = GenericTensorInput(device_id) if require_extra_input else None
 
     @property
-    def instances(self):
-        return self._inputs
+    def image_inputs(self):
+        return self._image_inputs
+
+    @property
+    def generic_input(self):
+        return self._generic_input
 
     def submit(self, data: List):
         indices = []
@@ -55,17 +82,18 @@ class TensorInputPool:
             format = item.pop('format', None).upper()
             if format == 'JPG':
                 format = 'JPEG'
-            for key in item:
-                tensor = item[key]
             # try find the free slog for the specific format
-            i, tensor_input = next(((i, x) for i,x in enumerate(self._inputs) if x.format == format and x.queue.empty()), (-1, None))
-            if tensor_input is None:
-                i, tensor_input = next(((i, x) for i,x in enumerate(self._inputs) if x.format == format), (-1, None))
+            i, image_tensor_input = next(((i, x) for i,x in enumerate(self._image_inputs) if x.format == format and x.queue.empty()), (-1, None))
+            if image_tensor_input is None:
+                i, image_tensor_input = next(((i, x) for i,x in enumerate(self._image_inputs) if x.format == format), (-1, None))
             indices.append(i)
-            if tensor_input is not None:
-                tensor_input.send(tensor)
+            if image_tensor_input is not None:
+                image_tensor = item.pop(image_tensor_input.tensor_name, None)
+                image_tensor_input.send(image_tensor)
             else:
                 logger.error(f"Format {format} is not supported")
+        if self._generic_input:
+            self._generic_input.send(stack_tensors_in_dict(data))
         return indices
 
 class TensorOutput(BatchMetadataOperator):
@@ -112,12 +140,27 @@ class PreprocessMetadataOutput(BatchMetadataOperator):
             for roi in preprocess_batch.rois:
                 metadata = DeepstreamMetadata()
                 q = self._queues[roi.frame_meta.pad_index]
+                # segmentation metadata
                 for u_meta in roi.segmentation_items:
                     seg_meta = u_meta.as_segmentation()
                     if seg_meta:
                         metadata.shape = [seg_meta.height, seg_meta.width]
                         metadata.seg_map = seg_meta.class_map
                         break
+                # object metadata
+                for object_meta in roi.frame_meta.object_items:
+                    labels = [object_meta.label] if object_meta.label else []
+                    left = int(object_meta.rect_params.left)
+                    top = int(object_meta.rect_params.top)
+                    width = int(object_meta.rect_params.width)
+                    height = int(object_meta.rect_params.height)
+                    metadata.shape = [self._shape[0], self._shape[1]]
+                    metadata.bboxes.append([left, top, left + width, top + height])
+                    metadata.probs.append(object_meta.confidence)
+                    for classifier in object_meta.classifier_items:
+                        for i in range(classifier.n_labels):
+                            labels.append(classifier.get_n_label(i))
+                    metadata.labels.append(labels)
                 q.put({"data": metadata})
 
     def get(self, indices: List):
@@ -144,7 +187,6 @@ class MetadataOutput(BatchMetadataOperator):
                 metadata.bboxes.append([left, top, left + width, top + height])
                 metadata.probs.append(object_meta.confidence)
                 for classifier in object_meta.classifier_items:
-                    logger.info(f"classifier: {classifier.n_labels}")
                     for i in range(classifier.n_labels):
                         labels.append(classifier.get_n_label(i))
                 metadata.labels.append(labels)
@@ -180,8 +222,22 @@ class DeepstreamBackend(ModelBackend):
         preprocess_config_path = model_config["parameters"]['preprocess_config_path'] if "preprocess_config_path" in model_config["parameters"] else []
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
+        image_tensor_name = None
+        require_extra_input = False
+        for input in model_config['input']:
+            if input['data_type'] == 'TYPE_CUSTOM_DS_IMAGE':
+                image_tensor_name = input['name']
+            elif input['name'] != 'format' and 'optional' in input and not input['optional']:
+                tensor_name = input['name']
+                require_extra_input = True
+                np_type = np_datatype_mapping[input['data_type']]
+                warmup_data_0[tensor_name] = np.random.rand(*input['dims']).astype(np_type)
+                warmup_data_1[tensor_name] = np.random.rand(*input['dims']).astype(np_type)
+        if image_tensor_name is None:
+            raise Exception("Deepstream pipeline requires at least one TYPE_CUSTOM_DS_IMAGE input")
+
         self._formats = ['JPEG', 'PNG']
-        self._in_pool = TensorInputPool(d[0], d[1], self._formats, self._max_batch_size)
+        self._in_pool = TensorInputPool(d[0], d[1], self._formats, self._max_batch_size, image_tensor_name, device_id, require_extra_input)
         n_output = self._max_batch_size * len(self._formats)
         if tensor_output:
             self._out = TensorOutput(n_output)
@@ -194,9 +250,9 @@ class DeepstreamBackend(ModelBackend):
         # build the inference flow
         flow = Flow(self._pipeline)
         probe = Probe('tensor_retriver', self._out)
-        flow = flow.inject(self._in_pool.instances).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=1000, live_source=False, width=d[1], height=d[0])
+        flow = flow.inject(self._in_pool.image_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=1000, live_source=False, width=d[1], height=d[0])
         for config in preprocess_config_path:
-            flow = flow.preprocess(config)
+            flow = flow.preprocess(config, None if not require_extra_input else lambda: self._in_pool.generic_input.generate())
         for config in infer_config_path:
             flow = flow.infer(config, with_triton, batch_size=self._max_batch_size)
         flow = flow.attach(probe).render(RenderMode.DISCARD, enable_osd=False)

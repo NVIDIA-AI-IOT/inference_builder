@@ -57,7 +57,7 @@ models:
   max_batch_size: 1
   input:
   - name: images
-    data_type: TYPE_UINT8
+    data_type: TYPE_CUSTOM_DS_IMAGE
     dims: [544, 960, 3]
   - name: format
     data_type: TYPE_STRING
@@ -69,5 +69,4 @@ models:
     dims: [ -1 ]
   parameters:
     infer_config_path:
-      - /opt/nim/.cache/model-repo/tao/config_nvinfer.yaml
-
+      - /opt/nim/.cache/model-repo/tao/nvdsinfer_config.yaml

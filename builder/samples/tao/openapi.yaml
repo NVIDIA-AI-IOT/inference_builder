@@ -80,6 +80,16 @@ components:
           title: Input
           description: 'The list of images on which you want to perform inference. Images should be in form
           of `data:image/{format};base64,{base64encodedimage}`.Accepted formats are `jpg`, `png` and `jpeg`.'
+        text:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+              maxLength: 256
+            maxItems: 10
+          title: Text
+          description: 'A 2D array of text to be used for the extra prompt on the inference.'
         model:
           type: string
           enum: [nvidia/nvdino-v2, nvidia/c-radio-p3-v3, nvidia/convnext]

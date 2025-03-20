@@ -11,6 +11,11 @@ input:
   dims: [ -1 ]
   optional: false
 
+- name: text
+  data_type: TYPE_STRING
+  dims: [ -1, -1 ]
+  optional: true
+
 output:
   - name: output
     data_type: TYPE_CUSTOM_DS_METADATA
@@ -33,6 +38,11 @@ server:
               {% for item in image_items %}
                 {{ item|extract('data:image\/(\w+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
               {% endfor %}
+            ],
+            "text": [
+              {% for item in request.text %}
+                {{ item|tojson }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
             ]
           }
       responses:
@@ -54,7 +64,7 @@ server:
 models:
 - name: tao
   backend: deepstream/nvinfer
-  max_batch_size: 2
+  max_batch_size: 1
   input:
   - name: images
     data_type: TYPE_CUSTOM_DS_IMAGE
@@ -62,6 +72,26 @@ models:
   - name: format
     data_type: TYPE_STRING
     dims: [ -1 ]
+    optional: false
+  - name: input_ids
+    data_type: TYPE_INT64
+    dims: [ 256 ]
+    optional: false
+  - name: attention_mask
+    data_type: TYPE_BOOL
+    dims: [ 256 ]
+    optional: false
+  - name: position_ids
+    data_type: TYPE_INT64
+    dims: [ 256 ]
+    optional: false
+  - name: token_type_ids
+    data_type: TYPE_INT64
+    dims: [ 256 ]
+    optional: false
+  - name: text_token_mask
+    data_type: TYPE_BOOL
+    dims: [ 256, 256 ]
     optional: false
   output:
   - name: output
@@ -71,6 +101,11 @@ models:
     infer_config_path:
       - /opt/nim/.cache/model-repo/tao/nvdsinfer_config.yaml
     preprocess_config_path:
-      - /opt/nim/.cache/model-repo/tao/config_preprocess_0.txt
-      - /opt/nim/.cache/model-repo/tao/config_preprocess_1.txt
+      - /opt/nim/.cache/model-repo/tao/nvdspreprocess_config.txt
+  preprocessors:
+    - kind: "custom"
+      name: "gdino-tokenizer"
+      input: ["text"]
+      output: ["input_ids", "attention_mask", "position_ids", "token_type_ids", "text_token_mask"]
+
 

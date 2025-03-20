@@ -9,7 +9,6 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 ################################################################################
-version: '3'
 
 services:
   nim-vila:
@@ -181,4 +180,4 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 1
-      NIM_MODEL_NAME: rtdetr
+      NIM_MODEL_NAME: gdino
