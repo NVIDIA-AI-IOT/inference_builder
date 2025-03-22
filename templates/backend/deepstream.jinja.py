@@ -7,11 +7,11 @@ import base64
 warmup_data = [
     {
         "images": np.frombuffer(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGK6HcwNCAAA//8DTgE8HuxwEQAAAABJRU5ErkJggg=="), dtype=np.uint8),
-        "format": "PNG"
+        "mime": "image/png"
     },
     {
         "images": np.frombuffer(base64.b64decode("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCgr/2wBDAQICAgICAgUDAwUKBwYHCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgr/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD+f+iiigAooooAKKKKACiiigD/2Q=="), dtype=np.uint8),
-        "format": "JPG"
+        "mime": "image/jpeg"
     }
 ]
 
@@ -52,20 +52,28 @@ class TensorInputPool:
     def submit(self, data: List):
         indices = []
         for item in data:
-            format = item.pop('format', None).upper()
-            if format == 'JPG':
-                format = 'JPEG'
-            for key in item:
-                tensor = item[key]
-            # try find the free for the specific format
-            i, tensor_input = next(((i, x) for i,x in enumerate(self._inputs) if x.format == format and x.queue.empty()), (-1, None))
-            if tensor_input is None:
-                i, tensor_input = next(((i, x) for i,x in enumerate(self._inputs) if x.format == format), (-1, None))
-            indices.append(i)
-            if tensor_input is not None:
-                tensor_input.send(tensor)
+            mime_type = item.pop('mime', None)
+            if mime_type is None:
+                logger.error("MIME type is not specified")
+                continue
+            mime_type = mime_type.split('/');
+            if mime_type[0] == 'image':
+                format = mime_type[1].upper()
+                for key in item:
+                    tensor = item[key]
+                # try find the free for the specific format
+                i, tensor_input = next(((i, x) for i,x in enumerate(self._inputs) if x.format == format and x.queue.empty()), (-1, None))
+                if tensor_input is None:
+                    i, tensor_input = next(((i, x) for i,x in enumerate(self._inputs) if x.format == format), (-1, None))
+                indices.append(i)
+                if tensor_input is not None:
+                    tensor_input.send(tensor)
+                else:
+                    logger.error(f"Unable to find tensor input for format {format}")
             else:
-                logger.error(f"Format {format} is not supported")
+                logger.error(f"Unsupported MIME type {mime_type}")
+                continue
+        # batched indices for each input
         return indices
 
 class TensorOutput(BatchMetadataOperator):
