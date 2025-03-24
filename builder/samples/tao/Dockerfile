@@ -141,7 +141,7 @@ ADD tao.tgz $NIM_DIR_PATH
 
 RUN groupadd --gid 1000 --non-unique nvs && \
     useradd --create-home --shell /usr/sbin/nologin --uid 1000 --non-unique --gid 1000 nvs && \
-    chown -R 1000.1000 $NIM_DIR_PATH && chmod o+w $NIM_DIR_PATH/config* && chmod o+w $NIM_DIR_PATH
+    chown -R 1000.1000 $NIM_DIR_PATH && chmod o+w $NIM_DIR_PATH
 
 USER nvs:1000
 
@@ -167,7 +167,7 @@ RUN touch $NIM_DIR_PATH/start_server.sh && \
         echo "Symlink deleted: \$SYMLINK"
     fi
     ln -s \${NIM_CACHE_PATH}/model-repo/\${NIM_MODEL_NAME} "\$SYMLINK"
-    python3 inference.py
+    python3 __main__.py
 #    while true; do sleep 5; done
 EOF
 

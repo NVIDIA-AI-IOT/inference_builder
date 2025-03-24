@@ -1,5 +1,3 @@
-
-
 import argparse
 import base64
 import tempfile
@@ -18,6 +16,7 @@ from omegaconf.errors import ConfigKeyError
 from jinja2 import Environment, FileSystemLoader
 import ast
 import os
+import subprocess
 import validate
 
 ALLOWED_SERVER = ["triton", "fastapi"]
@@ -173,7 +172,7 @@ def build_inference(server_type, config, output_dir: Path):
 
     # create backends and model.py
     backends = []
-    target_dir = triton_model_repo_dir/f"{config.name}"/"1/" if server_type == "triton" else output_dir
+    target_dir = triton_model_repo_dir/f"{config.name}"/"1/" if server_type == "triton" else output_dir / "server"
     for backend in t_backends:
         backend_tpl = jinja_env.get_template(f"backend/{backend}.jinja.py")
         backends.append(backend_tpl.render(server_type=server_type))
@@ -188,30 +187,45 @@ def build_inference(server_type, config, output_dir: Path):
 
 
 
-def build_server(server_type, model_name, api_schema, config: Dict, output_dir):
+def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
+    output_dir = output_dir / "server"
     # generate pydantic data models from swagger spec
     output_file = output_dir / "data_model.py"
-    data_generator.generate(
-        api_schema, output=output_file, output_model_type=data_generator.DataModelType.PydanticV2BaseModel
-    )
-    # generate the server
     tpl_dir = get_resource_path("templates")
+    if server_type == "fastapi":
+        fastapi_tpl_dir = get_resource_path("templates/api_server/fastapi/route")
+        command = (
+            f"fastapi-codegen --input {api_spec.name} --output {output_dir} --output-model-type pydantic_v2.BaseModel "
+            f"--template-dir {fastapi_tpl_dir} -m data_model.py --disable-timestamp"
+        )
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise Exception(f"Failed to generate fastapi data models: {result.stderr}")
+    else:
+        with open(api_spec, "r") as f:
+            api_schema = f.read()
+            data_generator.generate(
+                api_schema, output=output_file, output_model_type=data_generator.DataModelType.PydanticV2BaseModel
+            )
+    # generate the server
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
-    svr_tpl = jinja_env.get_template(f"api_server/{server_type}.jinja.py")
-    endpoints = { e: v['path'] for e, v in config["endpoints"].items() }
-    if 'infer' not in endpoints:
-        raise Exception("Server configuration must contain infer endpoint")
 
-    req_cls = [k for k in config["endpoints"]["infer"]["requests"]]
-    res_cls = [k for k in config["endpoints"]["infer"]["responses"]]
+    responders = []
+    for name, r in config["responders"].items():
+        responder = {
+            "name": name,
+            "operation": r["operation"],
+        }
+        tpl = jinja_env.get_template(f"responder/{name}.jinja.py")
+        responder["implementation"] = tpl.render(**responder)
+        responders.append(responder)
+
+    svr_tpl = jinja_env.get_template(f"api_server/{server_type}/responder.jinja.py")
     output = svr_tpl.render(
         service_name=model_name,
-        request_class=req_cls[0],
-        response_class=res_cls[0],
-        streaming_response_class=res_cls[0] if len(res_cls) < 2 else res_cls[1],
-        endpoints=endpoints
+        responders=responders
     )
-    with open(output_dir/"inference.py", 'w') as f:
+    with open(output_dir/"responder.py", 'w') as f:
         f.write(output)
 
 
@@ -225,24 +239,25 @@ def generate_configuration(config, tree):
             else:
                 encoded_templates[key] = value
         return encoded_templates
-    # base64 encode the templates
-    input_templates = None
-    output_templates = None
+    # base64 encode the templates if found in the config
+    config_map = OmegaConf.to_container(config)
     try:
-        input_templates = config.server.endpoints.infer.requests
-        output_templates = config.server.endpoints.infer.responses
+        for responder in config_map["server"]["responders"].values():
+            input_templates = responder.get("requests", None)
+            output_templates = responder.get("responses", None)
+            if input_templates:
+                responder["requests"] = encode_templates(input_templates)
+            if output_templates:
+                responder["responses"] = encode_templates(output_templates)
     except ConfigKeyError:
-        pass
-    if input_templates:
-        config.server.endpoints.infer.requests = encode_templates(input_templates)
-    if output_templates:
-        config.server.endpoints.infer.responses = encode_templates(output_templates)
-    # generate from the template
+        raise ValueError("Server config error: responders not found")
+    # write the config to a python file
     tpl_dir = get_resource_path("templates")
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
     config_tpl = jinja_env.get_template('common/config.jinja.py')
+    config = OmegaConf.create(config_map)
     output = config_tpl.render(config=OmegaConf.to_yaml(config))
-    with open(tree/"config.py", 'w') as f:
+    with open(tree/"config/__init__.py", 'w') as f:
         f.write(output)
 
 
@@ -250,10 +265,7 @@ def main(args):
     config = OmegaConf.load(args.config)
     with tempfile.TemporaryDirectory() as temp_dir:
         tree = build_tree(args.server_type, config, temp_dir)
-        api_schema = None
-        with args.api_spec as f:
-            api_schema = f.read()
-        build_server(args.server_type, config.name, api_schema, OmegaConf.to_container(config.server), tree)
+        build_server(args.server_type, config.name, args.api_spec, OmegaConf.to_container(config.server), tree)
         build_inference(args.server_type, config, tree)
         generate_configuration(config, tree)
         if not args.exclude_lib :

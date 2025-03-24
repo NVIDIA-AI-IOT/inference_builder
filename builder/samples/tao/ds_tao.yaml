@@ -17,9 +17,10 @@ output:
     dims: [ -1 ]
 
 server:
-  endpoints:
+  # map server implementation to the operation endpoint
+  responders:
     infer:
-      path: /v1/inference
+      operation: inference
       requests:
         InferenceRequest: >
           {

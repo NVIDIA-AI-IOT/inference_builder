@@ -34,11 +34,11 @@ def draw_bboxes(image_path, bboxes, shape):
     image = cv2.imread(image_path)
     height, width, _ = image.shape
     for bbox in bboxes:
-      x1 = int(bbox[0] / shape[1] * width)
-      y1 = int(bbox[1] / shape[0] * height)
-      x2 = int(bbox[2] / shape[1] * width)
-      y2 = int(bbox[3] / shape[0] * height)
-      cv2.rectangle(image, (x1, y1), (x2, y2), (255, 255, 0), 1)
+        x1 = int(bbox[0] / shape[1] * width)
+        y1 = int(bbox[1] / shape[0] * height)
+        x2 = int(bbox[2] / shape[1] * width)
+        y2 = int(bbox[3] / shape[0] * height)
+        cv2.rectangle(image, (x1, y1), (x2, y2), (255, 255, 0), 1)
     cv2.imshow("Image with Bounding Boxes", image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -89,76 +89,87 @@ def network_to_coco_bbox(network_bbox, orig_shape, network_shape):
 
     return [x, y, w, h]
 
-def main(host , port, model, files):
-  if not files:
-    print("Need the file path for inference")
-    return
+def main(host , port, model, files, upload):
+    if not files:
+        print("Need the file path for inference")
+        return
 
-  invoke_url = "http://" + host + ":" + port + "/v1/inference"
+    invoke_url = "http://" + host + ":" + port + "/v1/inference"
+    headers = {
+        "Authorization": "Bearer $API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC",
+        "Accept": "application/json",
+        # "NVCF-ASSET-DIR": "some-temp-dir",
+        # "NVCF-FUNCTION-ASSET-IDS": "udjflsjo-jfoisjof-lsdfjofdj"
+    }
+    if upload:
+        upload_url = "http://" + host + ":" + port + "/v1/files"
+        # Create multipart form-data payload for file upload
+        for file in files:
+            with open(file, 'rb') as f:
+                files = {"file": (file, f, 'application/octet-stream')}
+                # Send multipart request
+                response = requests.post(upload_url, headers=headers, files=files)
+                print(response)
+        payload = {}
+        return
+    else:
+        mime_types = []
+        b64_images = []
+        for file in files:
+            mime_types.append(mimetypes.guess_type(file)[0])
+            with open(file, "rb") as f:
+                b64_images.append(base64.b64encode(f.read()).decode())
 
-  mime_types = []
-  b64_images = []
-  for file in files:
-    mime_types.append(mimetypes.guess_type(file)[0])
-    with open(file, "rb") as f:
-      b64_images.append(base64.b64encode(f.read()).decode())
+        # assert len(image_b64) < 180_000, \
+        #   "To upload larger images, use the assets API (see docs)"
 
-# assert len(image_b64) < 180_000, \
-#   "To upload larger images, use the assets API (see docs)"
 
-  headers = {
-    "Authorization": "Bearer $API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC",
-    "Accept": "application/json",
-    # "NVCF-ASSET-DIR": "some-temp-dir",
-    # "NVCF-FUNCTION-ASSET-IDS": "udjflsjo-jfoisjof-lsdfjofdj"
-  }
 
-  payload = {
-    "input": [f"data:{mime_type};base64,{b64_image}" for mime_type, b64_image in zip(mime_types, b64_images)],
-    "model": f"nvidia/{model}"
-  }
+        payload = {
+            "input": [f"data:{mime_type};base64,{b64_image}" for mime_type, b64_image in zip(mime_types, b64_images)],
+            "model": f"nvidia/{model}"
+        }
 
-  start_time = time.time()
-  response = requests.post(invoke_url, headers=headers, json=payload)
-  infer_time = time.time() - start_time
-  print(response)
-  print(infer_time)
+    start_time = time.time()
+    response = requests.post(invoke_url, headers=headers, json=payload)
+    infer_time = time.time() - start_time
+    print(response)
+    print(infer_time)
 
-  bboxes_list = []
-  if response.status_code == 200:
-    output = response.json()
-    print(f"Usage: num_images= {output['usage']['num_images']}")
-    print("Output:")
-    for data in output["data"]:
-      shape = data["shape"]
-      bboxes = data["bboxes"]
-      probs = data["probs"]
-      labels = data["labels"]
-      print(f"index = {data['index']}")
-      print(f"shape = {shape}")
-      print(f"bboxes = {bboxes}")
-      print(f"probs = {probs}")
-      print(f"labels = {labels}")
-      bboxes_list.append(bboxes)
+    bboxes_list = []
+    if response.status_code == 200:
+        output = response.json()
+        print(f"Usage: num_images= {output['usage']['num_images']}")
+        print("Output:")
+        for data in output["data"]:
+            shape = data["shape"]
+            bboxes = data["bboxes"]
+            probs = data["probs"]
+            labels = data["labels"]
+            print(f"index = {data['index']}")
+            print(f"shape = {shape}")
+            print(f"bboxes = {bboxes}")
+            print(f"probs = {probs}")
+            print(f"labels = {labels}")
+            bboxes_list.append(bboxes)
 
-    for file, bboxes in zip(files, bboxes_list):
-        draw_bboxes(file, bboxes, shape)
+        for file, bboxes in zip(files, bboxes_list):
+            draw_bboxes(file, bboxes, shape)
 
-  elif response.status_code == 422:
-     print("Unable to process request: 422. Check the payload")
+    elif response.status_code == 422:
+        print("Unable to process request: 422. Check the payload")
 
 
 if __name__ == '__main__':
-  parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser()
 
-  parser.add_argument("--host", type=str,
-                    help= "Server IP Address", default="127.0.0.1")
-  parser.add_argument("--port", type=str,
-                    help="Server port", default="8000")
+    parser.add_argument("--host", type=str,
+                      help= "Server IP Address", default="127.0.0.1")
+    parser.add_argument("--port", type=str,
+                      help="Server port", default="8000")
+    parser.add_argument("--model", type=str, help="Model name", default="nvdino-v2")
+    parser.add_argument("--file", type=str, help="File to send for inference", nargs='*', default=None)
+    parser.add_argument("-u", "--upload", action="store_true", help="Upload the file to server")
 
-  parser.add_argument("--model", type=str, help="Model name", default="nvdino-v2")
-
-  parser.add_argument("--file", type=str, help="File to send for inference", nargs='*', default=None)
-
-  args = parser.parse_args()
-  main(args.host, args.port, args.model, args.file)
+    args = parser.parse_args()
+    main(args.host, args.port, args.model, args.file, args.upload)
