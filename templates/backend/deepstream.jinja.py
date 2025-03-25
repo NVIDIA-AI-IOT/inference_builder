@@ -97,22 +97,38 @@ class TensorInputPool:
         return indices
 
 class TensorOutput(BatchMetadataOperator):
-    def __init__(self, n_outputs):
+    def __init__(self, n_outputs, preprocess_config_path):
         super().__init__()
         self._queues = [Queue() for _ in range(n_outputs)]
+        self._preprocess_config_path = preprocess_config_path
 
     def handle_metadata(self, batch_meta):
-        for frame_meta in batch_meta.frame_items:
-            result = dict()
-            q = self._queues[frame_meta.pad_index]
-            for user_meta in frame_meta.tensor_items:
-                tensor_output = user_meta.as_tensor_output()
-                if tensor_output :
-                    for n, tensor in tensor_output.get_layers().items():
-                        torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
-                        result[n] = torch_tensor
-            q.put(result)
-
+        if self._preprocess_config_path:
+            for meta in batch_meta.preprocess_batch_items:
+                preprocess_batch = meta.as_preprocess_batch()
+                if not preprocess_batch:
+                    continue
+                for roi in preprocess_batch.rois:
+                    result = dict()
+                    q = self._queues[roi.frame_meta.pad_index]
+                    for user_meta in roi.tensor_items:
+                        tensor_output = user_meta.as_tensor_output()
+                        if tensor_output :
+                            for n, tensor in tensor_output.get_layers().items():
+                                torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
+                                result[n] = torch_tensor
+                    q.put(result)
+        else:
+            for frame_meta in batch_meta.frame_items:
+                result = dict()
+                q = self._queues[frame_meta.pad_index]
+                for user_meta in frame_meta.tensor_items:
+                    tensor_output = user_meta.as_tensor_output()
+                    if tensor_output :
+                        for n, tensor in tensor_output.get_layers().items():
+                            torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
+                            result[n] = torch_tensor
+                q.put(result)
 
     def get(self, indices: List):
         return [self._queues[i].get() if i >= 0 else None for i in indices]
@@ -210,6 +226,7 @@ class DeepstreamBackend(ModelBackend):
         self._model_name = model_config["name"]
         self._output_names = [o['name'] for o in model_config['output']]
         self._output_types = [o['data_type'] for o in model_config['output']]
+        self._pass_through_tensors = []
 
         if len(self._output_names) > 1 and self._output_types[0] == "TYPE_CUSTOM_DS_METADATA":
             raise Exception(f"No more than one output is allowed for DS metadata!")
@@ -227,7 +244,9 @@ class DeepstreamBackend(ModelBackend):
         for input in model_config['input']:
             if input['data_type'] == 'TYPE_CUSTOM_DS_IMAGE':
                 image_tensor_name = input['name']
-            elif input['name'] != 'format' and 'optional' in input and not input['optional']:
+            elif input['data_type'] == 'TYPE_CUSTOM_DS_PASSTHROUGH':
+                self._pass_through_tensors.append(input['name'])
+            elif input['name'] != 'format' and not ('optional' in input and input['optional']):
                 tensor_name = input['name']
                 require_extra_input = True
                 np_type = np_datatype_mapping[input['data_type']]
@@ -240,7 +259,7 @@ class DeepstreamBackend(ModelBackend):
         self._in_pool = TensorInputPool(d[0], d[1], self._formats, self._max_batch_size, image_tensor_name, device_id, require_extra_input)
         n_output = self._max_batch_size * len(self._formats)
         if tensor_output:
-            self._out = TensorOutput(n_output)
+            self._out = TensorOutput(n_output, preprocess_config_path)
         elif preprocess_config_path:
             self._out = PreprocessMetadataOutput(n_output, self._output_names[0], d)
         else:
@@ -271,9 +290,25 @@ class DeepstreamBackend(ModelBackend):
     def __call__(self, *args, **kwargs):
         logger.debug(f"DeepstreamBackend {self._model_name} triggerred with  {args if args else kwargs}")
         in_data_list = args if args else [kwargs]
+        pass_through_list = [dict() for _ in range(len(in_data_list))]
+        for data, pass_through_data in zip(in_data_list, pass_through_list):
+            for tensor_name in self._pass_through_tensors:
+                pass_through_data[tensor_name] = data.pop(tensor_name, None)
         indices = self._in_pool.submit(in_data_list)
-        for result in self._out.get(indices):
-            yield { o: result[o] for o in self._output_names } if result else Error("Error")
+        for result, pass_through_data in zip(self._out.get(indices), pass_through_list):
+            if pass_through_data:
+                result.update(pass_through_data)
+        # check the result and yield the output
+        if result:
+            out_data = dict()
+            for o in self._output_names:
+                if o in result:
+                    out_data[o] = result[o]
+                else:
+                    out_data[o] = None
+            yield out_data
+        else:
+            yield Error("Error")
 
     def stop(self):
         self._tensor_input.send(Stop())

@@ -102,11 +102,10 @@ def main(host , port, model, files, text):
             print(f"labels = {labels}")
             print(f"mask = {mask}")
             bboxes_list.append(bboxes)
-
-        for file, bboxes in zip(files, bboxes_list):
-            draw_bboxes(file, bboxes, shape)
-        if mask:
-            overlay_segmentation_mask(file, mask)
+            if bboxes:
+                draw_bboxes(file, bboxes, shape)
+            if mask:
+                overlay_segmentation_mask(file, mask)
     elif response.status_code == 422:
         print("Unable to process request: 422. Check the payload")
 

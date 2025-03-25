@@ -122,4 +122,63 @@ class GDinoTokenizer:
     def __call__(self, *args, **kwargs):
         caption = [" . ".join(args[0]) + ' .']
         input_ids, attention_mask, position_ids, token_type_ids, text_self_attention_masks, pos_map = tokenize_captions(self.tokenizer, args[0], caption, self.max_text_len)
-        return input_ids, attention_mask, position_ids, token_type_ids, text_self_attention_masks
+        return input_ids, attention_mask, position_ids, token_type_ids, text_self_attention_masks, pos_map
+
+class GDinoPostProcessor:
+    name = "gdino-postprocessor"
+    def __init__(self, config):
+        self.num_select = config.get("num_select", 300)
+        self.shape = np.array(config.get("dims", [544, 960]))
+
+    def __call__(self, *args, **kwargs):
+        def sigmoid(x):
+            return 1 / (1 + np.exp(-x))
+
+        pred_logits = args[0]
+        pred_boxes = args[1]
+        pred_masks = args[2]
+        pos_maps = args[3]
+
+        # Sigmoid
+        # prob_to_token = sigmoid(pred_logits).reshape((bs, pred_logits.shape[1], -1))
+        prob_to_token = sigmoid(pred_logits)
+
+        for label_ind in range(len(pos_maps)):
+            if pos_maps[label_ind].sum() != 0:
+                pos_maps[label_ind] = pos_maps[label_ind] / pos_maps[label_ind].sum()
+
+        prob_to_label = prob_to_token @ pos_maps.T
+
+        prob = prob_to_label  # 900, 2
+
+        # Get topk scores
+        topk_indices = np.argsort(prob.reshape((-1)))[:self.num_select]
+        scores = prob.reshape((-1))[topk_indices]
+        # Get corresponding boxes
+        topk_boxes = topk_indices // prob.shape[1]
+        # Get corresponding labels
+        labels = topk_indices % prob.shape[1]
+
+        # Take corresponding topk boxes
+        boxes = np.take_along_axis(pred_boxes, np.repeat(np.expand_dims(topk_boxes, -1), 4, axis=-1), axis=0)
+        # Scale back the bounding boxes to the target size
+        print(self.shape)
+        boxes = boxes * np.array([self.shape[1], self.shape[0], self.shape[1], self.shape[0]])
+
+        masks = []
+
+        return {
+            "data": {
+                "shape": self.shape.tolist(),
+                "bboxes": boxes.tolist(),
+                "probs": scores.tolist(),
+                "labels": [[str(i)] for i in labels.tolist()],
+                "mask": []
+            }
+        }
+
+
+
+
+
+

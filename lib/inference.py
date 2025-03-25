@@ -40,6 +40,7 @@ np_datatype_mapping = {
     "TYPE_FP64": np.float64,
     "TYPE_STRING": np.string_,
     "TYPE_CUSTOM_DS_IMAGE": np.ubyte,
+    "TYPE_CUSTOM_DS_PASSTHROUGH": None,
     "TYPE_BF16": None
 }
 
@@ -59,6 +60,7 @@ torch_datatype_mapping = {
     "TYPE_FP64": torch.float64,
     "TYPE_STRING": None,
     "TYPE_CUSTOM_DS_IMAGE": torch.int8,
+    "TYPE_CUSTOM_DS_PASSTHROUGH": None,
     "TYPE_BF16": None
 }
 
