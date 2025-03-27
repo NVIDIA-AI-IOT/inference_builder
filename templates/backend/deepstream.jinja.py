@@ -177,6 +177,11 @@ class PreprocessMetadataOutput(BatchMetadataOperator):
                         for i in range(classifier.n_labels):
                             labels.append(classifier.get_n_label(i))
                     metadata.labels.append(labels)
+                for classifier in roi.classifier_items:
+                    labels = []
+                    for i in range(classifier.n_labels):
+                        labels.append(classifier.get_n_label(i))
+                    metadata.labels.append(labels)
                 q.put({"data": metadata})
 
     def get(self, indices: List):
