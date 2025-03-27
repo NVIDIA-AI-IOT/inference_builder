@@ -337,6 +337,9 @@ class ModelOperator:
         self._out.append(flow)
         return flow
 
+    def import_output(self, output: DataFlow):
+        self._out.append(output)
+
     def run(self, model_backend: ModelBackend):
         logger.debug(f"Model operator for {self._model_name} started")
 
@@ -401,6 +404,8 @@ class ModelOperator:
                     if isinstance(result, Error):
                         logger.error(f"Error in inference: {result}")
                         break
+
+                    result = self._postprocess(result)
                     # collect the result
                     for out in self._out:
                         expected_result = dict()
@@ -420,10 +425,8 @@ class ModelOperator:
                                 expected_result[expected_key] = np.array([text], np.string_)
                             else:
                                 logger.error("Format not supported by tokenizer")
-                    # call postprocess() before depositing the results
-                    expected_result = self._postprocess(expected_result)
-                    logger.debug(f"Deposit result: {expected_result}")
-                    out.put(expected_result)
+                        logger.debug(f"Deposit result: {expected_result}")
+                        out.put(expected_result)
                 # mark the stop of this inference batch
                 for out in self._out:
                     out.put(Stop('Done'))
@@ -587,9 +590,14 @@ class InferenceBase:
         elif  len(self._operators) == 1:
             # default flow for single model use case without an explicit route
             operator = self._operators[0]
-            # assume the input names all match the model
+            # direct connection from top level input to the model
             self._inputs.append(operator.bind_input(OmegaConf.to_container(global_config.input)))
-            self._outputs.append(operator.export_output())
+            # direct connection from the model to top level output
+            configs = [OmegaConf.to_container(c) for c in global_config.output]
+            output_names = [c['name'] for c in configs]
+            dataflow = DataFlow(configs, output_names)
+            self._outputs.append(dataflow)
+            operator.import_output(dataflow)
         else:
             logger.error("Unable to set up inference routes")
         self._executor = ThreadPoolExecutor(max_workers=len(self._operators))

@@ -113,10 +113,13 @@ models:
       name: "gdino-tokenizer"
       input: ["text"]
       output: ["input_ids", "attention_mask", "position_ids", "token_type_ids", "text_token_mask", "pos_map"]
-postprocessors:
-  - kind: "custom"
-    name: "gdino-postprocessor"
-    input: ["pred_logits", "pred_boxes", "pred_masks", "pos_map"]
-    output: ["output"]
-    config:
-      num_select: 10
+  postprocessors:
+    - kind: "custom"
+      name: "gdino-postprocessor"
+      input: ["pred_logits", "pred_boxes", "pred_masks", "pos_map"]
+      output: ["output"]
+      config:
+        num_select: 10
+        dims: [544, 960]
+
+
