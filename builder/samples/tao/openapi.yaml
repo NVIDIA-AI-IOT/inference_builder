@@ -185,9 +185,13 @@ components:
               description: |
                 The mask as a list of bytes, The dimension of the vector depends on the model.
               items:
-                type: integer
-                format: uint8
-              maxItems: 262144 # 512 x 512
+                type: array
+                items:
+                  type: integer
+                  format: uint8
+                maxItems: 522240 # 544 * 960
+              maxItems: 512
+              # maxItems: 262144 # 512 x 512
             - type: string
               maxLength: 10240
               description: |
