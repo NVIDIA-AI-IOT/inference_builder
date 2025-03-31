@@ -6,7 +6,7 @@ input:
   dims: [ -1 ]
   optional: false
 
-- name: format
+- name: mime
   data_type: TYPE_STRING
   dims: [ -1 ]
   optional: false
@@ -31,7 +31,7 @@ server:
                 {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
               {% endfor %}
             ],
-            "format": [
+            "mime": [
               {% for item in image_items %}
                 {{ item|extract('data:image\/(\w+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
               {% endfor %}
@@ -54,7 +54,7 @@ models:
   - name: images
     data_type: TYPE_UINT8
     dims: [224, 224, 3]
-  - name: format
+  - name: mime
     data_type: TYPE_STRING
     dims: [ -1 ]
     optional: false

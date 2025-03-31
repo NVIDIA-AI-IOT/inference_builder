@@ -4,15 +4,16 @@ from queue import Queue, Empty
 from dataclasses import dataclass, field
 import base64
 
-warmup_data_0 = {
+warmup_data = [
+    {
         "images": np.frombuffer(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGK6HcwNCAAA//8DTgE8HuxwEQAAAABJRU5ErkJggg=="), dtype=np.uint8),
-        "format": "PNG"
-    }
-
-warmup_data_1 = {
+        "mime": "image/png"
+    },
+    {
         "images": np.frombuffer(base64.b64decode("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCgr/2wBDAQICAgICAgUDAwUKBwYHCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgr/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD+f+iiigAooooAKKKKACiiigD/2Q=="), dtype=np.uint8),
-        "format": "JPG"
+        "mime": "image/jpeg"
     }
+]
 
 
 class ImageTensorInput(BufferProvider):
@@ -79,27 +80,47 @@ class TensorInputPool:
     def submit(self, data: List):
         indices = []
         for item in data:
-            format = item.pop('format', None).upper()
-            if format == 'JPG':
-                format = 'JPEG'
-            # try find the free slog for the specific format
-            i, image_tensor_input = next(((i, x) for i,x in enumerate(self._image_inputs) if x.format == format and x.queue.empty()), (-1, None))
-            if image_tensor_input is None:
-                i, image_tensor_input = next(((i, x) for i,x in enumerate(self._image_inputs) if x.format == format), (-1, None))
-            indices.append(i)
-            if image_tensor_input is not None:
-                image_tensor = item.pop(image_tensor_input.tensor_name, None)
-                image_tensor_input.send(image_tensor)
+            mime_type = item.pop('mime', None)
+            if mime_type is None:
+                logger.error("MIME type is not specified")
+                continue
+            mime_type = mime_type.split('/');
+            if mime_type[0] == 'image':
+                format = mime_type[1].upper()
+                for key in item:
+                    tensor = item[key]
+                # try find the free for the specific format
+                i, image_tensor_input = next(((i, x) for i,x in enumerate(self._image_inputs) if x.format == format and x.queue.empty()), (-1, None))
+                if image_tensor_input is None:
+                    i, image_tensor_input = next(((i, x) for i,x in enumerate(self._image_inputs) if x.format == format), (-1, None))
+                indices.append(i)
+                if image_tensor_input is not None:
+                    image_tensor = item.pop(image_tensor_input.tensor_name, None)
+                    image_tensor_input.send(image_tensor)
+                else:
+                    logger.error(f"Unable to find tensor input for format {format}")
             else:
-                logger.error(f"Format {format} is not supported")
+                logger.error(f"Unsupported MIME type {mime_type}")
+                continue
         if self._generic_input:
             self._generic_input.send(stack_tensors_in_dict(data))
+        # batched indices for each input
         return indices
 
-class TensorOutput(BatchMetadataOperator):
-    def __init__(self, n_outputs, preprocess_config_path):
+class BaseTensorOutput(BatchMetadataOperator):
+    def __init__(self, n_outputs):
         super().__init__()
         self._queues = [Queue() for _ in range(n_outputs)]
+
+    def handle_metadata(self, batch_meta):
+        pass
+
+    def get(self, indices: List):
+        pass
+
+class TensorOutput(BaseTensorOutput):
+    def __init__(self, n_outputs, preprocess_config_path):
+        super().__init__(n_outputs)
         self._preprocess_config_path = preprocess_config_path
 
     def handle_metadata(self, batch_meta):
@@ -139,12 +160,11 @@ class DeepstreamMetadata:
     bboxes: list[list[int]] = field(default_factory=list)
     probs: list[float] = field(default_factory=list)
     labels: list[str] = field(default_factory=list)
-    seg_map: list[int] = field(default_factory=list)
+    seg_maps: list[list[int]] = field(default_factory=list)
 
-class PreprocessMetadataOutput(BatchMetadataOperator):
+class PreprocessMetadataOutput(BaseTensorOutput):
     def __init__(self, n_outputs, output_name, d):
-        super().__init__()
-        self._queues = [Queue() for _ in range(n_outputs)]
+        super().__init__(n_outputs)
         self._output_name = output_name
         self._shape = d
 
@@ -161,8 +181,7 @@ class PreprocessMetadataOutput(BatchMetadataOperator):
                     seg_meta = u_meta.as_segmentation()
                     if seg_meta:
                         metadata.shape = [seg_meta.height, seg_meta.width]
-                        metadata.seg_map = seg_meta.class_map
-                        break
+                        metadata.seg_maps.append(seg_meta.class_map)
                 # object metadata
                 for object_meta in roi.frame_meta.object_items:
                     labels = [object_meta.label] if object_meta.label else []
@@ -187,10 +206,9 @@ class PreprocessMetadataOutput(BatchMetadataOperator):
     def get(self, indices: List):
         return [{self._output_name: self._queues[i].get()} if i >= 0 else None for i in indices]
 
-class MetadataOutput(BatchMetadataOperator):
+class MetadataOutput(BaseTensorOutput):
     def __init__(self, n_outputs, output_name, d):
-        super().__init__()
-        self._queues = [Queue() for _ in range(n_outputs)]
+        super().__init__(n_outputs)
         self._output_name = output_name
         self._shape = d
 
@@ -215,9 +233,7 @@ class MetadataOutput(BatchMetadataOperator):
                 seg_meta = user_meta.as_segmentation()
                 if seg_meta:
                     metadata.shape = [seg_meta.height, seg_meta.width]
-                    metadata.seg_map = seg_meta.class_map
-                # only one seg meta is expected on one frame
-                break
+                    metadata.seg_maps.append(seg_meta.class_map)
             q.put({"data": metadata})
 
     def get(self, indices: List):
@@ -251,12 +267,12 @@ class DeepstreamBackend(ModelBackend):
                 image_tensor_name = input['name']
             elif input['data_type'] == 'TYPE_CUSTOM_DS_PASSTHROUGH':
                 self._pass_through_tensors.append(input['name'])
-            elif input['name'] != 'format' and not ('optional' in input and input['optional']):
+            elif input['name'] != 'mime' and not ('optional' in input and input['optional']):
                 tensor_name = input['name']
                 require_extra_input = True
                 np_type = np_datatype_mapping[input['data_type']]
-                warmup_data_0[tensor_name] = np.random.rand(*input['dims']).astype(np_type)
-                warmup_data_1[tensor_name] = np.random.rand(*input['dims']).astype(np_type)
+                for warmup in warmup_data:
+                    warmup[tensor_name] = np.random.rand(*input['dims']).astype(np_type)
         if image_tensor_name is None:
             raise Exception("Deepstream pipeline requires at least one TYPE_CUSTOM_DS_IMAGE input")
 
@@ -284,13 +300,10 @@ class DeepstreamBackend(ModelBackend):
         logger.info(f"DeepstreamBackend created for {self._model_name} to generate {self._output_names}, output tensor: {tensor_output}")
 
         # warm up
-        indices = self._in_pool.submit([warmup_data_0.copy() for _ in range(self._max_batch_size)])
-        for result in self._out.get(indices):
-            logger.info(f"Warm up 0: {result}")
-        indices = self._in_pool.submit([warmup_data_1.copy() for _ in range(self._max_batch_size)])
-        for result in self._out.get(indices):
-            logger.info(f"Warm up 1: {result}")
-
+        for data in warmup_data:
+            indices = self._in_pool.submit([data])
+            for result in self._out.get(indices):
+                logger.info(f"Warm up: {result}")
 
     def __call__(self, *args, **kwargs):
         logger.debug(f"DeepstreamBackend {self._model_name} triggerred with  {args if args else kwargs}")
@@ -303,17 +316,17 @@ class DeepstreamBackend(ModelBackend):
         for result, pass_through_data in zip(self._out.get(indices), pass_through_list):
             if pass_through_data:
                 result.update(pass_through_data)
-        # check the result and yield the output
-        if result:
-            out_data = dict()
-            for o in self._output_names:
-                if o in result:
-                    out_data[o] = result[o]
-                else:
-                    out_data[o] = None
-            yield out_data
-        else:
-            yield Error("Error")
+            # check the result and yield the output
+            if result:
+                out_data = dict()
+                for o in self._output_names:
+                    if o in result:
+                        out_data[o] = result[o]
+                    else:
+                        out_data[o] = None
+                yield out_data
+            else:
+                yield Error("Error")
 
     def stop(self):
         self._tensor_input.send(Stop())

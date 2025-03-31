@@ -6,7 +6,7 @@ input:
   dims: [ -1 ]
   optional: false
 
-- name: format
+- name: mime
   data_type: TYPE_STRING
   dims: [ -1 ]
   optional: false
@@ -29,9 +29,9 @@ server:
                 {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
               {% endfor %}
             ],
-            "format": [
+            "mime": [
               {% for item in image_items %}
-                {{ item|extract('data:image\/(\w+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
+                {{ item|extract('data:([\w+/]+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
               {% endfor %}
             ]
           }
@@ -59,10 +59,9 @@ models:
   - name: images
     data_type: TYPE_CUSTOM_DS_IMAGE
     dims: [544, 960, 3]
-  - name: format
+  - name: mime
     data_type: TYPE_STRING
     dims: [ -1 ]
-    optional: false
   output:
   - name: output
     data_type: TYPE_CUSTOM_DS_METADATA

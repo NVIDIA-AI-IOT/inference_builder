@@ -36,7 +36,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install nimlib[runtime]==0.8.4
 
-LABEL com.nvidia.nim.base_image="gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-blos-dev269"
+LABEL com.nvidia.nim.base_image="gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-blos-dev271"
 LABEL com.nvidia.nim.name={{MODEL_NAME}}
 LABEL com.nvidia.nim.type=triton
 LABEL com.nvidia.nim.version=0.0.1

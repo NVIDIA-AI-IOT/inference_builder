@@ -5,6 +5,7 @@ import os
 from typing import List
 import cv2
 import numpy as np
+import mimetypes
 
 API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC="shfklsjlfjsljgl"
 
@@ -23,23 +24,23 @@ def draw_label(image, text, x1, y1, bg_color=(255, 255, 0), text_color=(0, 0, 0)
     # Get text size
     (text_width, text_height), _ = cv2.getTextSize(
         text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-    
+
     # Draw label background
-    cv2.rectangle(image, 
-                (x1, y1 - text_height - 4), 
-                (x1 + text_width + 4, y1), 
-                bg_color, 
+    cv2.rectangle(image,
+                (x1, y1 - text_height - 4),
+                (x1 + text_width + 4, y1),
+                bg_color,
                 -1)  # -1 fills the rectangle
-    
+
     # Draw label text
-    cv2.putText(image, 
-               text, 
-               (x1 + 2, y1 - 2), 
-               cv2.FONT_HERSHEY_SIMPLEX, 
-               0.5, 
-               text_color, 
+    cv2.putText(image,
+               text,
+               (x1 + 2, y1 - 2),
+               cv2.FONT_HERSHEY_SIMPLEX,
+               0.5,
+               text_color,
                1)
-    
+
     return image
 
 def convert_bboxes_to_image_size(bboxes, original_shape, target_shape):
@@ -54,7 +55,7 @@ def convert_bboxes_to_image_size(bboxes, original_shape, target_shape):
     """
     if not bboxes:
         return None
-        
+
     converted_bboxes = []
     for bbox in bboxes:
         x1 = int(bbox[0] / original_shape[1] * target_shape[1])
@@ -62,7 +63,7 @@ def convert_bboxes_to_image_size(bboxes, original_shape, target_shape):
         x2 = int(bbox[2] / original_shape[1] * target_shape[1])
         y2 = int(bbox[3] / original_shape[0] * target_shape[0])
         converted_bboxes.append([x1, y1, x2, y2])
-    
+
     return converted_bboxes
 
 def convert_masks_to_image_size(masks_list, original_shape, target_shape):
@@ -77,10 +78,10 @@ def convert_masks_to_image_size(masks_list, original_shape, target_shape):
     """
     if not masks_list:
         return None
-        
+
     converted_masks = []
     binary_masks = []
-    
+
     for mask in masks_list:
         # Convert flattened list back to 2D numpy array
         mask = np.array(mask).reshape(original_shape)
@@ -89,16 +90,16 @@ def convert_masks_to_image_size(masks_list, original_shape, target_shape):
         binary_mask = (mask > 0.5).astype('uint8')
 
         # Scale the original mask to 0-255 for coloring
-        if mask.max() <= 1.0:
-            mask = (mask * 255).astype('uint8')
+        if mask.max() <= 255:
+            mask = mask.astype('uint8')
 
         # Resize both masks to match target dimensions
         mask = cv2.resize(mask, (target_shape[1], target_shape[0]))
         binary_mask = cv2.resize(binary_mask, (target_shape[1], target_shape[0]))
-        
+
         converted_masks.append(mask)
         binary_masks.append(binary_mask)
-    
+
     return converted_masks, binary_masks
 
 def overlay_bboxes(image, bboxes, labels=None):
@@ -112,16 +113,16 @@ def overlay_bboxes(image, bboxes, labels=None):
         Image with bounding boxes and labels overlay
     """
     overlay = image.copy()
-    
+
     for i, bbox in enumerate(bboxes):
         x1, y1, x2, y2 = bbox
         # Draw bounding box
         cv2.rectangle(overlay, (x1, y1), (x2, y2), (255, 255, 0), 2)
-        
+
         # Add label if available
         if labels and i < len(labels):
             overlay = draw_label(overlay, labels[i], x1, y1)
-    
+
     return overlay
 
 def overlay_masks(image, masks, binary_masks, labels=None, alpha=0.5):
@@ -153,7 +154,7 @@ def overlay_masks(image, masks, binary_masks, labels=None, alpha=0.5):
             alpha,  # Apply alpha only to the masked regions
             0
         )
-        
+
         # Add label if available
         if labels and i < len(labels):
             # Calculate bbox from mask to position the label
@@ -161,7 +162,7 @@ def overlay_masks(image, masks, binary_masks, labels=None, alpha=0.5):
             if bbox:
                 x1, y1, _, _ = bbox
                 overlay = draw_label(overlay, labels[i], x1, y1)
-    
+
     return overlay
 
 def get_mask_bbox(mask):
@@ -176,13 +177,13 @@ def get_mask_bbox(mask):
     y_indices, x_indices = np.nonzero(mask)
     if len(y_indices) == 0 or len(x_indices) == 0:
         return None
-        
+
     # Get bbox coordinates
     x1 = np.min(x_indices)
     y1 = np.min(y_indices)
     x2 = np.max(x_indices)
     y2 = np.max(y_indices)
-    
+
     return (x1, y1, x2, y2)
 
 def parse_labels(raw_labels, label_names=None):
@@ -196,7 +197,7 @@ def parse_labels(raw_labels, label_names=None):
     """
     if not raw_labels:
         return None
-        
+
     parsed_labels = []
     for label_data in raw_labels:
         # Convert all attributes to text and join with commas
@@ -207,11 +208,11 @@ def parse_labels(raw_labels, label_names=None):
                 label_texts.append(label_names[idx])
             else:
                 label_texts.append(str(idx))
-        
+
         # Join all attributes with commas
         label_text = ", ".join(label_texts)
         parsed_labels.append(label_text)
-    
+
     return parsed_labels
 
 def visualize_detections(image_path, masks=None, bboxes=None, labels=None, shape=None):
@@ -230,10 +231,10 @@ def visualize_detections(image_path, masks=None, bboxes=None, labels=None, shape
     # Validate input lengths match if provided
     if bboxes and masks and len(bboxes) != len(masks):
         raise ValueError(f"Number of bboxes ({len(bboxes)}) doesn't match number of masks ({len(masks)})")
-    
+
     if bboxes and labels and len(bboxes) != len(labels):
         raise ValueError(f"Number of bboxes ({len(bboxes)}) doesn't match number of labels ({len(labels)})")
-        
+
     if masks and labels and not bboxes and len(masks) != len(labels):
         raise ValueError(f"Number of masks ({len(masks)}) doesn't match number of labels ({len(labels)})")
 
@@ -243,22 +244,22 @@ def visualize_detections(image_path, masks=None, bboxes=None, labels=None, shape
 
     result = image.copy()
     target_shape = image.shape[:2]  # (height, width)
-    
+
     # Convert and apply masks if available
     if masks:
         converted_masks, binary_masks = convert_masks_to_image_size(masks, shape, target_shape)
-        result = overlay_masks(result, converted_masks, binary_masks, 
+        result = overlay_masks(result, converted_masks, binary_masks,
                              labels if not bboxes else None)
-    
+
     # Convert and apply bounding boxes if available
     if bboxes:
         converted_bboxes = convert_bboxes_to_image_size(bboxes, shape, target_shape)
         result = overlay_bboxes(result, converted_bboxes, labels)
-    
+
     cv2.imshow("Inference Results", result)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-    
+
     return result
 
 def main(host , port, model, files, text):
@@ -268,15 +269,13 @@ def main(host , port, model, files, text):
 
     invoke_url = "http://" + host + ":" + port + "/v1/inference"
 
-    file_exts = []
+    mime_types = []
     b64_images = []
     for file in files:
-        file_exts.append(os.path.splitext(file)[1][1:])
+        mime_types.append(mimetypes.guess_type(file)[0])
         with open(file, "rb") as f:
             b64_images.append(base64.b64encode(f.read()).decode())
 
-# assert len(image_b64) < 180_000, \
-#   "To upload larger images, use the assets API (see docs)"
 
     headers = {
       "Authorization": "Bearer $API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC",
@@ -286,8 +285,8 @@ def main(host , port, model, files, text):
     }
 
     payload = {
-      "input": [f"data:image/{e};base64,{i}" for e, i in zip(file_exts, b64_images)],
-      "model": f"nvidia/{model}"
+        "input": [f"data:{mime_type};base64,{b64_image}" for mime_type, b64_image in zip(mime_types, b64_images)],
+        "model": f"nvidia/{model}"
     }
 
     if text:
@@ -303,32 +302,32 @@ def main(host , port, model, files, text):
         output = response.json()
         print(f"Usage: num_images= {output['usage']['num_images']}")
         print("Output:")
-        
+
         # Parse label names from text argument if provided
         label_names = text[0].split(',') if text else None
-        
+
         for data in output["data"]:
             shape = data["shape"]
             bboxes = data["bboxes"]
             probs = data["probs"]
             raw_labels = data["labels"]
-            mask = data["mask"]
-            
+            mask = data["masks"]
+
             print(f"index = {data['index']}")
             print(f"shape = {shape}")
             print(f"bboxes = {bboxes}")
             print(f"probs = {probs}")
             print(f"labels = {raw_labels}")
-            
+
             # Parse raw labels into human-readable format
             parsed_labels = parse_labels(raw_labels, label_names) if raw_labels else None
-            
+
             # Visualize results with whatever data is available
             try:
                 visualize_detections(
-                    files[data['index']], 
-                    masks=mask, 
-                    bboxes=bboxes, 
+                    files[data['index']],
+                    masks=mask,
+                    bboxes=bboxes,
                     labels=parsed_labels,
                     shape=shape
                 )
