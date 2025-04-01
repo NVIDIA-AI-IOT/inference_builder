@@ -129,9 +129,10 @@ class GDinoPostProcessor:
     name = "gdino-postprocessor"
     def __init__(self, config):
         # TODO: read from nvdsinfer_config.yaml for 1) topk, 2) threshold
-        self.num_select = config.get("num_select", 300)
+        self.top_k = config.get("top_k", 300)
         self.shape = None
         self.has_masks = False
+        self.threshold = 0.5
 
     def __call__(self, *args, **kwargs):
         # TODO: overflow observed
@@ -228,17 +229,57 @@ class GDinoPostProcessor:
         - Might be useful when a single region could validly contain multiple objects
         - e.g., "person" and "athlete" could both be valid for the same box
         """
-        topk_indices = np.argsort(prob.reshape((bs, -1)), axis=1)[:, ::-1][:, :self.num_select]  # [1, 10]
+        topk_indices = np.argsort(prob.reshape((bs, -1)), axis=1)[:, ::-1][:, :self.top_k]  # [1, 10]
 
+        """
+        prob.reshape((bs, -1)) shape: (1, 1800)  # 900 predictions x 2 labels
+        per_batch_prob = [[0.1, 0.8, 0.4, 0.3, 0.7, 0.9, 0.2, 0.5, 0.6, 0.1, ...]]
+
+        topk_indices shape: (1, 10)
+        ind = [[5, 1, 4, 8, ...]]  # Top 10 indices
+
+        scores shape: (1, 10)
+        scores = [[0.9, 0.8, 0.7, 0.6, ...]]  # Top 10 scores
+        """
         scores = [per_batch_prob[ind] for per_batch_prob, ind in zip(prob.reshape((bs, -1)), topk_indices)]  # [1, 10]
         scores = np.array(scores)
-        # TODO: compare scores with threshold to get subset of topk_indices
 
-        # Get corresponding boxes
-        topk_boxes = topk_indices // prob.shape[2]  # [1, 10]
 
-        # Get corresponding labels
-        labels = topk_indices % prob.shape[2]  # [1, 10]
+        """
+        If self.threshold = 0.7, then
+        scores shape: (1, 10)
+        scores = [[0.9, 0.8, 0.7, 0.6]]
+        threshold_mask = [[True, True, False, False]]
+
+        After filtering:
+        scores shape: (1, 2)
+        scores = [[0.9, 0.8]]
+        result_indices shape: (1, 2)
+        result_indices = [[5, 1]]
+        """
+        # Apply mask while preserving batch dimension
+        threshold_mask = scores > self.threshold  # shape: (1, 10)
+        scores = scores[threshold_mask]  # Flatten to 1D array of valid scores
+        threshold_topk_indices = topk_indices[threshold_mask]  # Flatten to 1D array of valid indices
+        # Reshape to ensure (bs, N) shape
+        scores = scores.reshape(bs, -1)  # shape: (1, N), N <= 10
+        threshold_topk_indices = threshold_topk_indices.reshape(bs, -1)  # shape: (1, N), N <= 10
+
+
+        """
+        After filtering with threshold:
+        scores = [[0.9, 0.8, 0.7, 0.6]]           # shape: (1, 4)
+        result_box_indices = [[2, 0, 2, 4]]               # shape: (1, 4)
+        result_label_indices = [[1, 1, 0, 0]]                   # shape: (1, 4)
+
+        This means:
+        - Score 0.9 is for box 2, label 1
+        - Score 0.8 is for box 0, label 1
+        - Score 0.7 is for box 2, label 0
+        - Score 0.6 is for box 4, label 0
+        """
+        result_box_indices = threshold_topk_indices // prob.shape[2]  # shape: (1, N), N <= 10
+        result_label_indices = threshold_topk_indices % prob.shape[2]       # shape: (1, N), N <= 10
 
         # Take corresponding topk boxes
         """
@@ -248,9 +289,9 @@ class GDinoPostProcessor:
                                   [9,10,11,12],    # box 2
                                   [13,14,15,16],   # box 3
                                   [17,18,19,20]]]) # box 4
-        - topk_boxes = [[2, 0, 2, 4]], shape = (1, 4)
+        - result_box_indices = [[2, 0, 2, 4]], shape = (1, 4)
 
-        1. np.expand_dims(topk_boxes, -1)
+        1. np.expand_dims(result_box_indices, -1)
         The -1 means add dimension at the end:
         From: [[2, 0, 2, 4]]
         To:   [[[2],
@@ -276,7 +317,7 @@ class GDinoPostProcessor:
           [ 17,18,19,20 ]]]  # box 4
 
         NOTE: This is copied from model owner. More memory efficient and readable way is in each batch directly select the rows:
-        boxes = np.stack([boxes[b][topk_boxes[b]] for b in range(boxes.shape[0])])
+        boxes = np.stack([boxes[b][result_box_indices[b]] for b in range(boxes.shape[0])])
         # print(boxes[0][[2, 0, 2, 4]])
         # Result will be:
         # [[ 9,10,11,12],    # box 2
@@ -284,7 +325,7 @@ class GDinoPostProcessor:
         #  [ 9,10,11,12 ],   # box 2 again
         #  [ 17,18,19,20 ]]  # box 4
         """
-        boxes = np.take_along_axis(pred_boxes, np.repeat(np.expand_dims(topk_boxes, -1), 4, axis=-1), axis=1)
+        boxes = np.take_along_axis(pred_boxes, np.repeat(np.expand_dims(result_box_indices, -1), 4, axis=-1), axis=1)
 
         # Convert to x1, y1, x2, y2 format
         boxes = box_cxcywh_to_xyxy(boxes)
@@ -300,9 +341,8 @@ class GDinoPostProcessor:
                 w, h = target_size[0], target_size[1]
                 boxes[i, :, 0::2] = np.clip(boxes[i, :, 0::2], 0.0, w)
                 boxes[i, :, 1::2] = np.clip(boxes[i, :, 1::2], 0.0, h)
-                m = pred_masks[i][topk_boxes[i], ...]  # Shape: (10, 1, 136, 240), if top 10
+                m = pred_masks[i][result_box_indices[i], ...]  # Shape: (10, 1, 136, 240), if top 10
                 m = m.squeeze(axis=1)  # Shape becomes: (10, 136, 240), if top 10
-                print("Shape of m before transpose:", m.shape)  # Add this debug print
                 m = np.transpose(m, (1, 2, 0))  # Shape: (136, 240, 10)
 
                 # NOTE: move resize to client side
@@ -324,14 +364,14 @@ class GDinoPostProcessor:
 
         boxes = boxes.squeeze(0)
         scores = scores.squeeze(0)
-        labels = labels.squeeze(0)
+        result_label_indices = result_label_indices.squeeze(0)
 
         return {
             "data": {
                 "shape": self.shape.tolist(),
                 "bboxes": boxes.tolist(),
                 "probs": scores.tolist(),
-                "labels": [[str(i)] for i in labels.tolist()],
+                "labels": [[str(i)] for i in result_label_indices.tolist()],
                 "mask": mask_list
             }
         }
