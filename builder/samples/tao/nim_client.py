@@ -340,7 +340,7 @@ def main(host , port, model, files, text):
             try:
                 visualize_detections(
                     files[data['index']], 
-                    masks=mask,
+                    masks=mask, 
                     bboxes=bboxes, 
                     labels=parsed_labels,
                     shape=shape
