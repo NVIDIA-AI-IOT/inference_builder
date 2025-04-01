@@ -4,16 +4,15 @@ from queue import Queue, Empty
 from dataclasses import dataclass, field
 import base64
 
-warmup_data = [
-    {
+warmup_data_0 = {
         "images": np.frombuffer(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGK6HcwNCAAA//8DTgE8HuxwEQAAAABJRU5ErkJggg=="), dtype=np.uint8),
         "mime": "image/png"
-    },
-    {
+}
+
+warmup_data_1 = {
         "images": np.frombuffer(base64.b64decode("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCgr/2wBDAQICAgICAgUDAwUKBwYHCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgr/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD+f+iiigAooooAKKKKACiiigD/2Q=="), dtype=np.uint8),
         "mime": "image/jpeg"
-    }
-]
+}
 
 
 class ImageTensorInput(BufferProvider):
@@ -65,8 +64,9 @@ class GenericTensorInput():
 
 class TensorInputPool:
 
-    def __init__(self, height, width, formats, batch_size, image_tensor_name, device_id, require_extra_input=False):
+    def __init__(self, height, width, formats, batch_size, image_tensor_name, mime_tensor_name, device_id, require_extra_input=False):
         self._image_inputs = [ImageTensorInput(width, height, format, image_tensor_name) for format in formats for _ in range(batch_size)]
+        self._mime_tensor_name = mime_tensor_name
         self._generic_input = GenericTensorInput(device_id) if require_extra_input else None
 
     @property
@@ -80,15 +80,13 @@ class TensorInputPool:
     def submit(self, data: List):
         indices = []
         for item in data:
-            mime_type = item.pop('mime', None)
+            mime_type = item.pop(self._mime_tensor_name, None)
             if mime_type is None:
                 logger.error("MIME type is not specified")
                 continue
             mime_type = mime_type.split('/');
             if mime_type[0] == 'image':
                 format = mime_type[1].upper()
-                for key in item:
-                    tensor = item[key]
                 # try find the free for the specific format
                 i, image_tensor_input = next(((i, x) for i,x in enumerate(self._image_inputs) if x.format == format and x.queue.empty()), (-1, None))
                 if image_tensor_input is None:
@@ -262,22 +260,27 @@ class DeepstreamBackend(ModelBackend):
         with_triton = infer_element == 'nvinferserver'
         image_tensor_name = None
         require_extra_input = False
+        mime_tensor_name = None
         for input in model_config['input']:
             if input['data_type'] == 'TYPE_CUSTOM_DS_IMAGE':
                 image_tensor_name = input['name']
             elif input['data_type'] == 'TYPE_CUSTOM_DS_PASSTHROUGH':
                 self._pass_through_tensors.append(input['name'])
-            elif input['name'] != 'mime' and not ('optional' in input and input['optional']):
+            elif input['data_type'] == 'TYPE_CUSTOM_DS_MIME':
+                mime_tensor_name = input['name']
+            elif not ('optional' in input and input['optional']):
                 tensor_name = input['name']
                 require_extra_input = True
                 np_type = np_datatype_mapping[input['data_type']]
-                for warmup in warmup_data:
-                    warmup[tensor_name] = np.random.rand(*input['dims']).astype(np_type)
+                warmup_data_0[tensor_name] = np.random.rand(*input['dims']).astype(np_type)
+                warmup_data_1[tensor_name] = np.random.rand(*input['dims']).astype(np_type)
         if image_tensor_name is None:
             raise Exception("Deepstream pipeline requires at least one TYPE_CUSTOM_DS_IMAGE input")
+        if mime_tensor_name is None:
+            raise Exception("Deepstream pipeline requires at least one TYPE_CUSTOM_DS_MIME input")
 
         self._formats = ['JPEG', 'PNG']
-        self._in_pool = TensorInputPool(d[0], d[1], self._formats, self._max_batch_size, image_tensor_name, device_id, require_extra_input)
+        self._in_pool = TensorInputPool(d[0], d[1], self._formats, self._max_batch_size, image_tensor_name, mime_tensor_name, device_id, require_extra_input)
         n_output = self._max_batch_size * len(self._formats)
         if tensor_output:
             self._out = TensorOutput(n_output, preprocess_config_path)
@@ -300,10 +303,13 @@ class DeepstreamBackend(ModelBackend):
         logger.info(f"DeepstreamBackend created for {self._model_name} to generate {self._output_names}, output tensor: {tensor_output}")
 
         # warm up
-        for data in warmup_data:
-            indices = self._in_pool.submit([data])
-            for result in self._out.get(indices):
-                logger.info(f"Warm up: {result}")
+        indices = self._in_pool.submit([warmup_data_0.copy() for _ in range(self._max_batch_size)])
+        for result in self._out.get(indices):
+            logger.info(f"Warm up 0: {result}")
+        indices = self._in_pool.submit([warmup_data_1.copy() for _ in range(self._max_batch_size)])
+        for result in self._out.get(indices):
+            logger.info(f"Warm up 1: {result}")
+
 
     def __call__(self, *args, **kwargs):
         logger.debug(f"DeepstreamBackend {self._model_name} triggerred with  {args if args else kwargs}")

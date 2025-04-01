@@ -183,6 +183,7 @@ Each input and output definition contains the following sections:
   - TYPE_CUSTOM_IMAGE_BASE64: The input or output is a base64 encoded image and will be decoded to a image tensor.
   - TYPE_CUSTOM_BINARY_BASE64: The input or output is a base64 encoded string and will be decoded to a binary tensor.
   - TYPE_CUSTOM_DS_IMAGE: Encoded image specificially for Deepstream pipeline
+  - TYPE_CUSTOM_DS_MIME: Mime type used by Deepstream pipeline to determine the decoder type
   - TYPE_CUSTOM_DS_METADATA: Structured output data specifically for Deepstream pipeline
   - TYPE_CUSTOM_DS_PASSTHROUGH: Passthrough data, the DS pipeline will pass it to the output without modification
 

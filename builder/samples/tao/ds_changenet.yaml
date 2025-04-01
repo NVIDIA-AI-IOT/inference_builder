@@ -60,7 +60,7 @@ models:
     data_type: TYPE_CUSTOM_DS_IMAGE
     dims: [544, 960, 3]
   - name: mime
-    data_type: TYPE_STRING
+    data_type: TYPE_CUSTOM_DS_MIME
     dims: [ -1 ]
     optional: false
   output:
