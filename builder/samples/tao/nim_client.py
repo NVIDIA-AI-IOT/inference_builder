@@ -261,6 +261,18 @@ def visualize_detections(image_path, masks=None, bboxes=None, labels=None, shape
     
     return result
 
+def check_empty_2d_list(mask):
+    """
+    Check if mask from JSON response is [[]] and return None if so
+    Args:
+        mask: Mask data from JSON response
+    Returns:
+        None if mask is [[]], otherwise returns mask unchanged
+    """
+    if isinstance(mask, list) and len(mask) == 1 and isinstance(mask[0], list) and len(mask[0]) == 0:
+        return None
+    return mask
+
 def main(host , port, model, files, text):
     if not files:
         print("Need the file path for inference")
@@ -327,7 +339,7 @@ def main(host , port, model, files, text):
             try:
                 visualize_detections(
                     files[data['index']], 
-                    masks=mask, 
+                    masks=check_empty_2d_list(mask),
                     bboxes=bboxes, 
                     labels=parsed_labels,
                     shape=shape
