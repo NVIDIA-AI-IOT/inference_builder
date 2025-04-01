@@ -325,6 +325,7 @@ def main(host , port, model, files, text):
             probs = data["probs"]
             raw_labels = data["labels"]
             mask = data["mask"]
+            mask=check_empty_2d_list(mask)
             
             print(f"index = {data['index']}")
             print(f"shape = {shape}")
@@ -339,7 +340,7 @@ def main(host , port, model, files, text):
             try:
                 visualize_detections(
                     files[data['index']], 
-                    masks=check_empty_2d_list(mask),
+                    masks=mask,
                     bboxes=bboxes, 
                     labels=parsed_labels,
                     shape=shape
