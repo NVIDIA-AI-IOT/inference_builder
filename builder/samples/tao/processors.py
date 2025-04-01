@@ -131,6 +131,7 @@ class GDinoPostProcessor:
         # TODO: read from nvdsinfer_config.yaml for 1) topk, 2) threshold
         self.num_select = config.get("num_select", 300)
         self.shape = None
+        self.has_masks = False
 
     def __call__(self, *args, **kwargs):
         # TODO: overflow observed
@@ -162,6 +163,11 @@ class GDinoPostProcessor:
         pred_masks = args[2]   # [900, 1, 136, 240]
         pos_maps = args[3]     # [num_labels, 256]
 
+        if pred_masks is not None:
+            self.has_masks = True
+        else:
+            self.has_masks = False
+
         """
         Extend leading dimension to match the implementation:
         - pred_logits: (B x NQ x 4) where B=1, NQ=900
@@ -171,8 +177,11 @@ class GDinoPostProcessor:
         """
         pred_logits = np.expand_dims(pred_logits, axis=0)  # [1, 900, 256]
         pred_boxes = np.expand_dims(pred_boxes, axis=0)    # [1, 900, 4]
-        pred_masks = np.expand_dims(pred_masks, axis=0)    # [1, 900, 1, 136, 240]
-        self.shape = np.array(pred_masks.shape[3:])        # [136, 240]
+        if self.has_masks:
+            pred_masks = np.expand_dims(pred_masks, axis=0)    # [1, 900, 1, 136, 240]
+            self.shape = np.array(pred_masks.shape[3:])        # [136, 240]
+        else:
+            self.shape = np.array([1, 1])                      # [1, 1]
         target_sizes = np.array([[self.shape[1], self.shape[0],
                                  self.shape[1], self.shape[0]]])  # [1, 4]
 
@@ -284,37 +293,38 @@ class GDinoPostProcessor:
         target_sizes = np.array(target_sizes)
         boxes = boxes * target_sizes[:, None, :]
 
-        masks = []
+        if self.has_masks:
+            masks = []
+            # Clamp bounding box coordinates
+            for i, target_size in enumerate(target_sizes):
+                w, h = target_size[0], target_size[1]
+                boxes[i, :, 0::2] = np.clip(boxes[i, :, 0::2], 0.0, w)
+                boxes[i, :, 1::2] = np.clip(boxes[i, :, 1::2], 0.0, h)
+                m = pred_masks[i][topk_boxes[i], ...]  # Shape: (10, 1, 136, 240), if top 10
+                m = m.squeeze(axis=1)  # Shape becomes: (10, 136, 240), if top 10
+                print("Shape of m before transpose:", m.shape)  # Add this debug print
+                m = np.transpose(m, (1, 2, 0))  # Shape: (136, 240, 10)
 
-        # Clamp bounding box coordinates
-        for i, target_size in enumerate(target_sizes):
-            w, h = target_size[0], target_size[1]
-            boxes[i, :, 0::2] = np.clip(boxes[i, :, 0::2], 0.0, w)
-            boxes[i, :, 1::2] = np.clip(boxes[i, :, 1::2], 0.0, h)
-            m = pred_masks[i][topk_boxes[i], ...]  # Shape: (10, 1, 136, 240), if top 10
-            m = m.squeeze(axis=1)  # Shape becomes: (10, 136, 240), if top 10
-            print("Shape of m before transpose:", m.shape)  # Add this debug print
-            m = np.transpose(m, (1, 2, 0))  # Shape: (136, 240, 10)
+                # NOTE: move resize to client side
+                # from functools import partial
+                # N = 2  # small number, divisible by n_queries
+                # m_split = np.split(m, N, axis=2)
+                # m_split = list(map(partial(_resize_func, width=w, height=h), m_split))
+                # m_scaled = np.concatenate(m_split, axis=2)
+                # m_scaled = sigmoid(m_scaled) # Shape: (544, 960, 10)
 
-            # NOTE: move resize to client side
-            # from functools import partial
-            # N = 2  # small number, divisible by n_queries
-            # m_split = np.split(m, N, axis=2)
-            # m_split = list(map(partial(_resize_func, width=w, height=h), m_split))
-            # m_scaled = np.concatenate(m_split, axis=2)
-            # m_scaled = sigmoid(m_scaled) # Shape: (544, 960, 10)
-
-            m_scaled = sigmoid(m) # Shape: (136, 240, 10)
-            # Use moveaxis directly on m_scaled
-            mask_array = np.moveaxis(m_scaled, 2, 0)  # reshape from (136, 240, 10) to (10, 136, 240)
-            masks.append(mask_array)
+                m_scaled = sigmoid(m) # Shape: (136, 240, 10)
+                # Use moveaxis directly on m_scaled
+                mask_array = np.moveaxis(m_scaled, 2, 0)  # reshape from (136, 240, 10) to (10, 136, 240)
+                masks.append(mask_array)
+            # Convert to flattened masks
+            mask_list = [mask.flatten().tolist() for mask in masks[0]]
+        else:
+            mask_list = [[]]
 
         boxes = boxes.squeeze(0)
         scores = scores.squeeze(0)
         labels = labels.squeeze(0)
-
-        # Convert to flattened masks
-        mask_list = [mask.flatten().tolist() for mask in masks[0]]
 
         return {
             "data": {
