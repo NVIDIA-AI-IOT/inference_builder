@@ -55,7 +55,7 @@ server:
                 "bboxes": {{item.data.bboxes}},
                 "probs": {{item.data.probs}},
                 "labels": {{item.data.labels|tojson}},
-                "mask": {{item.data.mask}}
+                "masks": {{item.data.mask}}
               } {% if not loop.last %}, {% endif %} {% endfor %} ],
             "usage": { "num_images": 1},
             "model": "nvidia/nvdinov2"

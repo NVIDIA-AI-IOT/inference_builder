@@ -182,7 +182,7 @@ components:
             maxItems: 10
           maxItems: 512
           title: Labels
-        mask:
+        masks:
           oneOf:
             - type: array
               description: |
