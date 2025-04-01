@@ -128,11 +128,36 @@ class GDinoTokenizer:
 class GDinoPostProcessor:
     name = "gdino-postprocessor"
     def __init__(self, config):
-        # TODO: read from nvdsinfer_config.yaml for 1) topk, 2) threshold
+        self.infer_config_path = config.get("infer_config_path", None)
+        # set default values
         self.top_k = config.get("top_k", 300)
+        self.threshold = config.get("threshold", 0.5)
+        # load top_k and threshold from nvdsinfer_config.yaml
+        self._load_config()
+
+        # other members
         self.shape = None
         self.has_masks = False
-        self.threshold = 0.5
+
+    def _load_config(self):
+        """Load configuration from nvdsinfer_config.yaml file."""
+        import yaml
+        if not self.infer_config_path:
+            return
+        try:
+            with open(self.infer_config_path, 'r') as f:
+                config = yaml.safe_load(f)
+            # Get values from class-attrs-all section
+            if 'class-attrs-all' in config:
+                class_attrs = config['class-attrs-all']
+                # Update threshold if pre-cluster-threshold is specified
+                if 'pre-cluster-threshold' in class_attrs:
+                    self.threshold = float(class_attrs['pre-cluster-threshold'])
+                # Update top_k if topk is specified
+                if 'topk' in class_attrs:
+                    self.top_k = int(class_attrs['topk'])
+        except Exception as e:
+            print(f"Warning: Failed to load config from {self.infer_config_path}: {str(e)}")
 
     def __call__(self, *args, **kwargs):
         # TODO: overflow observed
@@ -158,7 +183,6 @@ class GDinoPostProcessor:
         #         return zoom(x, (zoom_y, zoom_x, 1), order=1)
         #     # For 2D arrays (height, width)
         #     return zoom(x, (zoom_y, zoom_x), order=1)
-
         pred_logits = args[0]  # [900, 256]
         pred_boxes = args[1]   # [900, 4]
         pred_masks = args[2]   # [900, 1, 136, 240]
