@@ -90,8 +90,11 @@ def convert_masks_to_image_size(masks_list, original_shape, target_shape):
         binary_mask = (mask > 0.5).astype('uint8')
 
         # Scale the original mask to 0-255 for coloring
-        if mask.max() <= 255:
-            mask = mask.astype('uint8')
+        if mask.max() <= 1.0:
+            mask = mask * 255
+
+        # Convert to uint8, 0 to 255, for cv2.resize()
+        mask = mask.astype('uint8')
 
         # Resize both masks to match target dimensions
         mask = cv2.resize(mask, (target_shape[1], target_shape[0]))
@@ -202,12 +205,17 @@ def parse_labels(raw_labels, label_names=None):
     for label_data in raw_labels:
         # Convert all attributes to text and join with commas
         label_texts = []
-        for attr_idx in label_data:
-            idx = int(attr_idx)
-            if label_names and idx < len(label_names):
-                label_texts.append(label_names[idx])
+        for attr in label_data:
+            # Check if the attribute is a numeric string
+            if isinstance(attr, str) and attr.isdigit():
+                idx = int(attr)
+                if label_names and idx < len(label_names):
+                    label_texts.append(label_names[idx])
+                else:
+                    label_texts.append(str(idx))
             else:
-                label_texts.append(str(idx))
+                # If not a numeric string, use the attribute directly
+                label_texts.append(str(attr))
 
         # Join all attributes with commas
         label_text = ", ".join(label_texts)
