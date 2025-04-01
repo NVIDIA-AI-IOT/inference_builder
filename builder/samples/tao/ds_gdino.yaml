@@ -107,7 +107,7 @@ models:
     infer_config_path:
       - /opt/nim/.cache/model-repo/tao/nvdsinfer_config.yaml
     preprocess_config_path:
-      - /opt/nim/.cache/model-repo/tao/nvdspreprocess_config.txt
+      - /opt/nim/.cache/model-repo/tao/nvdspreprocess_config.yaml
   preprocessors:
     - kind: "custom"
       name: "gdino-tokenizer"
