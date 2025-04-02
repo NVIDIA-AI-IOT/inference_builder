@@ -1,0 +1,76 @@
+name: "tao"
+
+input:
+- name: images
+  data_type: TYPE_CUSTOM_BINARY_BASE64
+  dims: [ -1 ]
+  optional: false
+
+- name: mime
+  data_type: TYPE_STRING
+  dims: [ -1 ]
+  optional: false
+
+output:
+  - name: output
+    data_type: TYPE_CUSTOM_DS_METADATA
+    dims: [ -1 ]
+
+server:
+  endpoints:
+    infer:
+      path: /v1/inference
+      requests:
+        InferenceRequest: >
+          {
+            {% set image_items = request.input if request.input is iterable else [request.input] %}
+            "images": [
+              {% for item in image_items %}
+                {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            ],
+            "mime": [
+              {% for item in image_items %}
+                {{ item|extract('data:([\w+/]+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            ]
+          }
+      responses:
+        InferenceResponse: >
+          {
+            "data": [
+              {% for item in response.output %} {
+                "index": {{loop.index0}},
+                "shape": {{item.data.shape}},
+                "bboxes": {{item.data.bboxes}},
+                "probs": {{item.data.probs}},
+                "labels": {{item.data.labels|tojson}},
+                "masks": {{item.data.seg_maps}}
+              } {% if not loop.last %}, {% endif %} {% endfor %} ],
+            "usage": { "num_images": 1},
+            "model": "nvidia/nvdinov2"
+          }
+
+models:
+- name: tao
+  backend: deepstream/nvinfer
+  max_batch_size: 2
+  input:
+  - name: images
+    data_type: TYPE_CUSTOM_DS_IMAGE
+    dims: [544, 960, 3]
+  - name: mime
+    data_type: TYPE_CUSTOM_DS_MIME
+    dims: [ -1 ]
+    optional: false
+  output:
+  - name: output
+    data_type: TYPE_CUSTOM_DS_METADATA
+    dims: [ -1 ]
+  parameters:
+    infer_config_path:
+      - /opt/nim/.cache/model-repo/tao/nvdsinfer_config.yaml
+    preprocess_config_path:
+      - /opt/nim/.cache/model-repo/tao/nvdspreprocess_config_0.yaml
+      - /opt/nim/.cache/model-repo/tao/nvdspreprocess_config_1.yaml
+

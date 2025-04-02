@@ -161,7 +161,11 @@ class GenericInference(InferenceBase):
             for key, value in zip(processor.output, output):
                 processed[key] = value
                 # correct data type
-                data_type = self._output_config["data_type"]
+                output_config = next((c for c in self._output_config if c['name'] == key), None)
+                if output_config is None:
+                    logger.warning(f"Invalid output parsed: {key}")
+                    continue
+                data_type = output_config["data_type"]
                 if isinstance(value, np.ndarray):
                     data_type = np_datatype_mapping[data_type]
                     if value.dtype != data_type:

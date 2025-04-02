@@ -11,7 +11,7 @@
 dependencies:
   python:
     - name: "Requests"
-      version: "2.30.0"
+      version: "2.32.3"
     - name: "python-multipart"
       version: "0.0.9"
     - name: "aiofiles"

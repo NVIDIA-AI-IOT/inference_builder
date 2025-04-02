@@ -9,7 +9,7 @@
 # its affiliates is strictly prohibited.
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.02.1-ma" AS nim_builder_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-blos-dev271" AS nim_builder_base
 
 ENV NIM_DIR_PATH="/opt/nim" \
     PIP_INDEX_URL=https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple \
@@ -34,9 +34,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     #&& apt-get purge -y --auto-remove curl
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install nimlib[triton,ngcsdk]==0.1.47
+    pip install nimlib[runtime]==0.8.4
 
-LABEL com.nvidia.nim.base_image="nvcr.io/nvidia/tritonserver-pb24h1:24.03.04-py3"
+LABEL com.nvidia.nim.base_image="gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-blos-dev271"
 LABEL com.nvidia.nim.name={{MODEL_NAME}}
 LABEL com.nvidia.nim.type=triton
 LABEL com.nvidia.nim.version=0.0.1
@@ -50,11 +50,11 @@ ENV NIM_CACHE_PATH="/opt/nim/.cache" \
 
 ENV BACKEND_TYPE=triton
 ENV BASE_IMAGE="nvcr.io/nvidia/tritonserver-pb24h1:24.03.04-py3"
-ENV NIMTOOLS_VERSION=0.3.1rc7
+ENV NIMTOOLS_VERSION=1.1.1
 ENV BACKEND_TYPE="triton"
 ENV NIM_NSPECT_ID=NSPECT-Z39R-IVVG
 #ENV NIM_MODEL_NAME={{MODEL_NAME}}
-ENV NIM_LOG_LEVEL="DEBUG"
+ENV TRANSFORMERS_CACHE=/tmp
 
 # COPY ./model_manifest.yaml /opt/nim/etc/default/model_manifest.yaml
 COPY ./dependencies.yaml /etc/nim/config/dependencies.yaml

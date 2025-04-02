@@ -49,7 +49,7 @@ server:
                 "bboxes": {{item.data.bboxes}},
                 "probs": {{item.data.probs}},
                 "labels": {{item.data.labels|tojson}},
-                "mask": {{item.data.seg_map}}
+                "masks": {{item.data.seg_maps}}
               } {% if not loop.last %}, {% endif %} {% endfor %} ],
             "usage": { "num_images": 1},
             "model": "nvidia/nvdinov2"
@@ -94,15 +94,15 @@ models:
   max_batch_size: 1
   input:
   - name: images
-    data_type: TYPE_UINT8
+    data_type: TYPE_CUSTOM_DS_IMAGE
     dims: [544, 960, 3]
   - name: mime
-    data_type: TYPE_STRING
+    data_type: TYPE_CUSTOM_DS_MIME
     dims: [ -1 ]
-    optional: false
   output:
   - name: output
     data_type: TYPE_CUSTOM_DS_METADATA
     dims: [ -1 ]
   parameters:
-    infer_config_path: /opt/nim/.cache/model-repo/tao/nvdsinfer_config.yaml
+    infer_config_path:
+      - /opt/nim/.cache/model-repo/tao/nvdsinfer_config.yaml

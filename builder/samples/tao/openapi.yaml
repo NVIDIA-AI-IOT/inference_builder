@@ -236,6 +236,16 @@ components:
           description: 'The list of images on which you want to perform inference. Images should be in form
           of `data:image/{format};base64,{base64encodedimage}`.Accepted formats are `jpg`, `png` and `jpeg`. Or they
           can be uploaded media assets.'
+        text:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+              maxLength: 256
+            maxItems: 10
+          title: Text
+          description: 'A 2D array of text to be used for the extra prompt on the inference.'
         model:
           type: string
           enum: [nvidia/nvdino-v2, nvidia/c-radio-p3-v3, nvidia/convnext]
@@ -326,15 +336,19 @@ components:
             maxItems: 10
           maxItems: 512
           title: Labels
-        mask:
+        masks:
           oneOf:
             - type: array
               description: |
                 The mask as a list of bytes, The dimension of the vector depends on the model.
               items:
-                type: integer
-                format: uint8
-              maxItems: 262144 # 512 x 512
+                type: array
+                items:
+                  type: integer
+                  format: uint8
+                maxItems: 522240 # 544 * 960
+              maxItems: 512
+              # maxItems: 262144 # 512 x 512
             - type: string
               maxLength: 10240
               description: |

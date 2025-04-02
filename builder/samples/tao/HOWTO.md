@@ -204,7 +204,20 @@ Build inference package:
 cd ../../..
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+For generic TAO CV models:
+```bash
 python builder/main.py builder/samples/tao/ds_tao.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -t
+```
+
+For visual changenet:
+```bash
+python builder/main.py builder/samples/tao/ds_changenet.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -t
+```
+
+For Grounding DINO and Mask Grouding DINO:
+```bash
+python builder/main.py builder/samples/tao/ds_gdino.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -c builder/samples/tao/processors.py -t
 ```
 
 Build inference package with validation:

@@ -131,7 +131,7 @@ models:
   max_batch_size: 1
   input:
   - name: images
-    data_type: TYPE_UINT8
+    data_type: TYPE_CUSTOM_DS_IMAGE
     dims: [544, 960, 3]
   - name: format
     data_type: TYPE_STRING
@@ -182,6 +182,11 @@ Each input and output definition contains the following sections:
 - data_type: The data type of the input or output. In addition to the basic data types defined by Triton, the project also supports following custom data types:
   - TYPE_CUSTOM_IMAGE_BASE64: The input or output is a base64 encoded image and will be decoded to a image tensor.
   - TYPE_CUSTOM_BINARY_BASE64: The input or output is a base64 encoded string and will be decoded to a binary tensor.
+  - TYPE_CUSTOM_DS_IMAGE: Encoded image specificially for Deepstream pipeline
+  - TYPE_CUSTOM_DS_MIME: Mime type used by Deepstream pipeline to determine the decoder type
+  - TYPE_CUSTOM_DS_METADATA: Structured output data specifically for Deepstream pipeline
+  - TYPE_CUSTOM_DS_PASSTHROUGH: Passthrough data, the DS pipeline will pass it to the output without modification
+
 - dims: The dimensions of the input or output in the form of a list. Each item in the list specifies the maximum length of the dimension and -1 means it is dynamic.
 - optional: Whether the input or output is optional.
 - force_cpu: Whether to force the input or output to be on CPU.
