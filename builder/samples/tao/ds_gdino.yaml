@@ -119,7 +119,6 @@ models:
       input: ["pred_logits", "pred_boxes", "pred_masks", "pos_map"]
       output: ["output"]
       config:
-        num_select: 10
-        dims: [544, 960]
+        infer_config_path: /opt/nim/.cache/model-repo/tao/nvdsinfer_config.yaml
 
 
