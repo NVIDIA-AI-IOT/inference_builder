@@ -1,15 +1,17 @@
 import base64
 import json
+from dataclasses import asdict
 from config import global_config
 from .model import GenericInference
 from lib.utils import create_jinja2_env, stack_tensors_in_dict, convert_list, get_logger
+from lib.asset_manager import AssetManager
 from omegaconf.errors import ConfigKeyError
 import re
 from omegaconf import OmegaConf
 import numpy as np
 import torch
-from typing import Dict
-
+from typing import Dict, Any
+import os
 jinja2_env = create_jinja2_env()
 
 class Responder:
@@ -19,7 +21,9 @@ class Responder:
         self._inference.initialize()
         self._request_templates = dict()
         self._response_templates = dict()
+        self._asset_manager = AssetManager()
         self.logger = get_logger(__name__)
+
         # load the request and response templates
         try:
             input_config = OmegaConf.to_container(global_config.server.responders)
@@ -55,7 +59,7 @@ class Responder:
         template = templates[request_class]
         json_string = jinja2_env.from_string(template).render(request=result)
         result = json.loads(json_string)
-        print(f"request: {result}")
+
         # template filters on each field
         for key, value in templates.items():
             if not key in result:
@@ -80,25 +84,26 @@ class Responder:
                     result[x].append(y)
         return result
 
-    def process_response(self, responder: str, request, response: Dict[str, np.ndarray]):
+    def process_response(self, responder: str, request, response: Dict[str, Any]):
         self.logger.debug(f"Processing response {response}")
-        type_map = { i.name: i.data_type for i in global_config.output}
 
-        # transform numpy ndarray to universal value types
-        for name in response:
-            if not name in response:
-                self.logger.error(f"Unexpected output: {name}")
-                continue
-            expected_type = type_map[name]
-            value = response[name]
-            if isinstance(value, np.ndarray) or isinstance(value, torch.Tensor):
-                l = value.tolist()
-                if expected_type == "TYPE_STRING" and value.dtype != np.string_:
-                    response[name] = convert_list(l, lambda i: i.decode("utf-8", "ignore"))
-                elif len(response[name].shape) == 1 and len(l) == 1:
-                    response[name] = l[0]
-                else:
-                    response[name] = l
+        # transform numpy ndarray or tensor to universal value types for inference
+        if responder == "infer":
+            type_map = { i.name: i.data_type for i in global_config.output}
+            for name in response:
+                if not name in type_map:
+                    self.logger.error(f"Unexpected output: {name}")
+                    continue
+                expected_type = type_map[name]
+                value = response[name]
+                if isinstance(value, np.ndarray) or isinstance(value, torch.Tensor):
+                    l = value.tolist()
+                    if expected_type == "TYPE_STRING" and value.dtype != np.string_:
+                        response[name] = convert_list(l, lambda i: i.decode("utf-8", "ignore"))
+                    elif len(response[name].shape) == 1 and len(l) == 1:
+                        response[name] = l[0]
+                    else:
+                        response[name] = l
 
         # Load the response template for the endpoint
         templates = self._response_templates.get(responder, None)
@@ -114,7 +119,6 @@ class Responder:
         return json.loads(json_string)
 
     async def take_action(self, action_name:str, *args):
-        print(f"args: {args}")
         action = self._action_map.get(action_name, None)
         if not action:
             raise ValueError(f"Unknown action: {action_name}")

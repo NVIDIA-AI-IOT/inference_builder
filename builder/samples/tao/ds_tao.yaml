@@ -4,12 +4,9 @@ input:
 - name: images
   data_type: TYPE_CUSTOM_BINARY_BASE64
   dims: [ -1 ]
-  optional: false
-
 - name: mime
   data_type: TYPE_STRING
   dims: [ -1 ]
-  optional: false
 
 output:
   - name: output
@@ -27,12 +24,18 @@ server:
             {% set image_items = request.input if request.input is iterable else [request.input] %}
             "images": [
               {% for item in image_items %}
-                {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
+                {% if item is string %}
+                  {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
+                {% endif %}
               {% endfor %}
             ],
             "mime": [
               {% for item in image_items %}
-                {{ item|extract('data:([\w+/]+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
+                {% if item is string %}
+                  {{ item|extract('data:([\w+/]+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
+                {% else %}
+                  {{ item.contentType|tojson }}{% if not loop.last %}, {% endif %}
+                {% endif %}
               {% endfor %}
             ]
           }
@@ -50,6 +53,39 @@ server:
               } {% if not loop.last %}, {% endif %} {% endfor %} ],
             "usage": { "num_images": 1},
             "model": "nvidia/nvdinov2"
+          }
+    add_file:
+      operation: add_media_file
+      responses:
+        AddFileResponse: >
+          {
+            "data": {
+              "id": {{response.id|tojson}},
+              "path": {{response.path|tojson}},
+              "size": {{response.size|tojson}},
+              "contentType": {{response.mime_type|tojson}}
+            }
+          }
+    del_file:
+      operation: delete_media_file
+      responses:
+        DeleteFileResponse: >
+          {
+            "deleted": {{response.status|tojson}}
+          }
+    list_files:
+      operation: list_media_files
+      responses:
+        ListFilesResponse: >
+          {
+            "data": [
+              {% for item in response.assets %} {
+                "id": {{item.id|tojson}},
+                "path": {{item.path|tojson}},
+                "size": {{item.size|tojson}},
+                "contentType": {{item.mime_type|tojson}}
+              } {% if not loop.last %}, {% endif %} {% endfor %}
+            ]
           }
 
 models:

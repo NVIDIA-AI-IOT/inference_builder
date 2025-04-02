@@ -124,7 +124,7 @@ components:
       type: http
       scheme: bearer
   schemas:
-    AddFileResponse:
+    MediaAsset:
       properties:
         id:
           type: string
@@ -132,10 +132,48 @@ components:
           pattern: '[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?4[0-9a-fA-F]{3}-?[89abAB][0-9a-fA-F]{3}-?[0-9a-fA-F]{12}'
           title: Id
           description: The file identifier (asset_id),                     which can be referenced in the API endpoints.
+        path:
+          type: string
+          maxLength: 256
+          pattern: ^([a-zA-Z][a-zA-Z0-9+.-]*:?//?)?[A-Za-z0-9_.\-/]*$
+          title: Filename
+          description: Local path of the file or URI with optional protocol.
+          examples:
+            - myfile.jpg
+            - /tmp/assets/name.jpg
+            - file:///tmp/myfile.jpg
+            - rtsp://camera.example.com/stream
+            - udp://192.168.1.100:5000
+            - rtsp:camera.example.com/stream
+            - udp:192.168.1.100:5000
+        size:
+          type: integer
+          format: int64
+          title: Size
+          description: Size of the file in bytes.
+        contentType:
+          type: string
+          title: Content Type
+          description: MIME type of the file.
+          examples:
+            - image/jpeg
       additionalProperties: false
       type: object
       required:
         - id
+        - path
+        - size
+        - contentType
+      title: MediaAsset
+      description: Represents a media asset.
+    AddFileResponse:
+      properties:
+        data:
+          $ref: '#/components/schemas/MediaAsset'
+      additionalProperties: false
+      type: object
+      required:
+        - data
       title: AddFileResponse
       description: Response schema for the add file request.
     AddFileRequest:
@@ -155,7 +193,7 @@ components:
       properties:
         data:
           items:
-            $ref: '#/components/schemas/AddFileResponse'
+            $ref: '#/components/schemas/MediaAsset'
           type: array
           maxItems: 100000000000000000
           title: Data
@@ -185,15 +223,19 @@ components:
             title: string
             maxLength: 4294967296
             pattern: ^.*$
+          - $ref: '#/components/schemas/MediaAsset'
           - type: array
             items:
-              type: string
-              pattern: ^.*$
-              maxLength: 4294967296
+              oneOf:
+                - type: string
+                  pattern: ^.*$
+                  maxLength: 4294967296
+                - $ref: '#/components/schemas/MediaAsset'
             maxItems: 64
           title: Input
           description: 'The list of images on which you want to perform inference. Images should be in form
-          of `data:image/{format};base64,{base64encodedimage}`.Accepted formats are `jpg`, `png` and `jpeg`.'
+          of `data:image/{format};base64,{base64encodedimage}`.Accepted formats are `jpg`, `png` and `jpeg`. Or they
+          can be uploaded media assets.'
         model:
           type: string
           enum: [nvidia/nvdino-v2, nvidia/c-radio-p3-v3, nvidia/convnext]
@@ -233,7 +275,6 @@ components:
         - model
       title: InferenceResponse
       description: Response schema for the inference request.
-
     InferenceResult:
       type: object
       description: Represents detected bounding boxes
