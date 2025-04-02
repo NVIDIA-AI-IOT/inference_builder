@@ -130,8 +130,8 @@ class GDinoPostProcessor:
     def __init__(self, config):
         self.infer_config_path = config.get("infer_config_path", None)
         # set default values
-        self.top_k = config.get("top_k", 300)
-        self.threshold = config.get("threshold", 0.5)
+        self.top_k = 300
+        self.threshold = 0.5
         # load top_k and threshold from nvdsinfer_config.yaml
         self._load_config()
 
