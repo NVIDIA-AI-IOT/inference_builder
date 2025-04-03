@@ -6,8 +6,43 @@ from typing import List
 import cv2
 import numpy as np
 import mimetypes
+import json
+import colorsys
+
+import sys
+from pathlib import Path
+
+# Add the project root to the Python path
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.append(str(project_root))
+from builder.utils import PayloadBuilder
 
 API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC="shfklsjlfjsljgl"
+
+def create_color_map(num_classes):
+    """
+    Create a color map for visualizing different classes
+    Args:
+        num_classes: Number of classes to create colors for
+    Returns:
+        numpy array of shape (num_classes, 3) with RGB values
+    """
+    # Corner case: ensure at least 1 class
+    if num_classes < 1:
+        num_classes = 1
+
+    # Generate evenly spaced colors in HSV space
+    hsv_colors = np.zeros((num_classes, 3))
+    hsv_colors[:, 0] = np.linspace(0, 1, num_classes, endpoint=False)  # Hue
+    hsv_colors[:, 1] = 1.0  # Saturation
+    hsv_colors[:, 2] = 1.0  # Value
+    
+    # Convert to BGR (what OpenCV uses)
+    color_map = np.zeros((num_classes, 3))
+    for i in range(num_classes):
+        rgb = colorsys.hsv_to_rgb(*hsv_colors[i])
+        color_map[i] = (rgb[2] * 255, rgb[1] * 255, rgb[0] * 255)  # BGR format
+    return color_map.astype(np.uint8)  # Ensure uint8 type
 
 def draw_label(image, text, x1, y1, bg_color=(255, 255, 0), text_color=(0, 0, 0)):
     """
@@ -70,40 +105,56 @@ def convert_masks_to_image_size(masks_list, original_shape, target_shape):
     """
     Convert masks from relative size to target image size
     Args:
-        masks_list: List of masks
+        masks_list: List of masks with label indices
         original_shape: Shape that masks are based on (height, width)
         target_shape: Target image shape to convert to (height, width)
     Returns:
-        List of resized masks and binary masks
+        List of resized masks with original label indices preserved
     """
     if not masks_list:
         return None
 
+    # Validate shapes
+    if len(original_shape) != 2 or len(target_shape) != 2:
+        raise ValueError("Both original_shape and target_shape must be (height, width)")
+
     converted_masks = []
-    binary_masks = []
-
     for mask in masks_list:
-        # Convert flattened list back to 2D numpy array
-        mask = np.array(mask).reshape(original_shape)
+        try:
+            # Convert flattened list back to 2D numpy array
+            mask = np.array(mask).reshape(original_shape)
+            
+            if mask.max() > 255:
+                # If we have more than 255 labels, we need to:
+                # 1. Create empty mask using cv2.resize for consistent dimensions
+                empty_mask = np.zeros(original_shape, dtype=np.uint8)
+                resized_mask = cv2.resize(empty_mask,
+                                        (target_shape[1], target_shape[0]),
+                                        interpolation=cv2.INTER_NEAREST).astype(np.int32)
 
-        # Create binary mask for non-zero values
-        binary_mask = (mask > 0.5).astype('uint8')
+                # 2. Keep track of unique labels
+                unique_labels = np.unique(mask[mask > 0])  # exclude 0 (background)
+                
+                # 3. Resize each label's binary mask separately
+                for label in unique_labels:
+                    binary_mask = (mask == label).astype(np.uint8)
+                    resized_binary = cv2.resize(binary_mask,
+                                            (target_shape[1], target_shape[0]),
+                                            interpolation=cv2.INTER_NEAREST)
+                    # 4. Restore the original label value
+                    resized_mask[resized_binary > 0] = label
+            else:
+                # If we have fewer than 255 labels, we can resize directly
+                resized_mask = cv2.resize(mask.astype(np.uint8),
+                                        (target_shape[1], target_shape[0]),
+                                        interpolation=cv2.INTER_NEAREST)
+                
+            converted_masks.append(resized_mask)
+        except Exception as e:
+            print(f"Error processing mask: {e}")
+            continue
 
-        # Scale the original mask to 0-255 for coloring
-        if mask.max() <= 1.0:
-            mask = mask * 255
-
-        # Convert to uint8, 0 to 255, for cv2.resize()
-        mask = mask.astype('uint8')
-
-        # Resize both masks to match target dimensions
-        mask = cv2.resize(mask, (target_shape[1], target_shape[0]))
-        binary_mask = cv2.resize(binary_mask, (target_shape[1], target_shape[0]))
-
-        converted_masks.append(mask)
-        binary_masks.append(binary_mask)
-
-    return converted_masks, binary_masks
+    return converted_masks if converted_masks else None
 
 def overlay_bboxes(image, bboxes, labels=None):
     """
@@ -128,40 +179,55 @@ def overlay_bboxes(image, bboxes, labels=None):
 
     return overlay
 
-def overlay_masks(image, masks, binary_masks, labels=None, alpha=0.5):
+def overlay_masks(image, masks, labels=None, alpha=0.5):
     """
     Create a segmentation mask overlay on the image
     Args:
         image: Original image (numpy array)
-        masks: List of masks in image coordinates
-        binary_masks: List of binary masks in image coordinates
+        masks: List of masks with label indices
         labels: Optional list of string labels
         alpha: Transparency value for the overlay (0-1)
     Returns:
         Image with masks overlay
     """
+    if image is None or not isinstance(image, np.ndarray):
+        raise ValueError("Invalid input image")
+    if not masks:
+        return image.copy()
+
     overlay = image.copy()
 
-    for i, (mask, binary_mask) in enumerate(zip(masks, binary_masks)):
-        # Create colored mask
-        colored_mask = cv2.applyColorMap(mask, cv2.COLORMAP_JET)
+    # Find the maximum label index to create color map
+    max_label = 0
+    for mask in masks:
+        max_label = max(max_label, mask.max())
+    # Create color map for all possible labels (add 1 because 0 is background)
+    color_map = create_color_map(max_label + 1)
 
-        # Only apply color where binary_mask is non-zero
-        colored_mask = colored_mask * binary_mask[:, :, np.newaxis]
-
-        # Overlay only the non-zero parts
-        overlay = cv2.addWeighted(
-            overlay,
-            1.0,  # Keep full intensity of original image
-            colored_mask,
-            alpha,  # Apply alpha only to the masked regions
+    for i, mask in enumerate(masks):
+        # Create colored mask based on label indices
+        colored_mask = np.zeros_like(image, dtype=np.uint8)
+        for label_idx in range(1, max_label + 1):  # Skip 0 (background)
+            mask_for_label = (mask == label_idx)
+            if mask_for_label.any():
+                colored_mask[mask_for_label] = color_map[label_idx]
+        
+        # Create binary mask for alpha blending
+        mask_any = (mask > 0)
+        
+        # Apply alpha blending only where mask exists
+        overlay[mask_any] = cv2.addWeighted(
+            overlay[mask_any],
+            1.0 - alpha,
+            colored_mask[mask_any],
+            alpha,
             0
         )
 
         # Add label if available
         if labels and i < len(labels):
             # Calculate bbox from mask to position the label
-            bbox = get_mask_bbox(binary_mask)
+            bbox = get_mask_bbox(masks)
             if bbox:
                 x1, y1, _, _ = bbox
                 overlay = draw_label(overlay, labels[i], x1, y1)
@@ -255,8 +321,8 @@ def visualize_detections(image_path, masks=None, bboxes=None, labels=None, shape
 
     # Convert and apply masks if available
     if masks:
-        converted_masks, binary_masks = convert_masks_to_image_size(masks, shape, target_shape)
-        result = overlay_masks(result, converted_masks, binary_masks,
+        converted_masks = convert_masks_to_image_size(masks, shape, target_shape)
+        result = overlay_masks(result, converted_masks,
                              labels if not bboxes else None)
 
     # Convert and apply bounding boxes if available
@@ -282,21 +348,32 @@ def check_empty_2d_list(mask):
         return None
     return mask
 
-def main(host , port, model, files, text):
+def dump_response_json(response_data, output_dir="/tmp"):
+    """
+    Dump response JSON data to a file
+    Args:
+        response_data: JSON response data to dump
+        output_dir: Directory to save the dump file (default: /tmp)
+    """
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    filename = f"infer_response_{timestamp}.json"
+    filepath = os.path.join(output_dir, filename)
+    
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+        with open(filepath, 'w') as f:
+            json.dump(response_data, f)
+        print(f"Response JSON dumped to: {filepath}")
+    except Exception as e:
+        print(f"Error dumping response JSON: {e}")
+
+
+def main(host , port, model, files, text, dump_response: bool):
     if not files:
         print("Need the file path for inference")
         return
 
     invoke_url = "http://" + host + ":" + port + "/v1/inference"
-
-    mime_types = []
-    b64_images = []
-    for file in files:
-        mime_types.append(mimetypes.guess_type(file)[0])
-        with open(file, "rb") as f:
-            b64_images.append(base64.b64encode(f.read()).decode())
-
-
     headers = {
       "Authorization": "Bearer $API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC",
       "Accept": "application/json",
@@ -304,15 +381,15 @@ def main(host , port, model, files, text):
     # "NVCF-FUNCTION-ASSET-IDS": "udjflsjo-jfoisjof-lsdfjofdj"
     }
 
-    payload = {
-        "input": [f"data:{mime_type};base64,{b64_image}" for mime_type, b64_image in zip(mime_types, b64_images)],
-        "model": f"nvidia/{model}"
-    }
-
-    if text:
-      payload["text"] = [ t.split(",") for t in text]
+    payload = (PayloadBuilder(files, model)
+                .add_text(text)
+                # .add_more_field("key1", "value1")
+                # .add_more_field("key2", "value2")
+                .build())
 
     start_time = time.time()
+    # This is unofficial client call to quickly visualize results without comprehensive type validation,
+    # The validation script uses the official client to validate results against openapi spec
     response = requests.post(invoke_url, headers=headers, json=payload)
     infer_time = time.time() - start_time
     print(response)
@@ -320,6 +397,9 @@ def main(host , port, model, files, text):
 
     if response.status_code == 200:
         output = response.json()
+        if dump_response:
+            dump_response_json(output)
+            return
         print(f"Usage: num_images= {output['usage']['num_images']}")
         print("Output:")
 
@@ -370,6 +450,7 @@ if __name__ == '__main__':
     parser.add_argument("--model", type=str, help="Model name", default="nvdino-v2")
     parser.add_argument("--file", type=str, help="File to send for inference", nargs='*', default=None)
     parser.add_argument("--text", type=str, help="Extra text to send for inference", nargs='*', default=None)
-
+    parser.add_argument("--dump-response", action="store_true", default=False, help="Enable dumping response JSON to file")
+    
     args = parser.parse_args()
-    main(args.host, args.port, args.model, args.file, args.text)
+    main(args.host, args.port, args.model, args.file, args.text, args.dump_response)
