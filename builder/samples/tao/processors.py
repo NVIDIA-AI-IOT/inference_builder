@@ -131,7 +131,8 @@ class GDinoPostProcessor:
         self.infer_config_path = config.get("infer_config_path", None)
         # set default values
         self.top_k = 300
-        self.threshold = 0.5
+        self.item_threshold = 0.5  # threshold for the score per inferenced item
+        self.segmentation_threshold = 0.5  # threshold per pixel for segmentation mask
         # load top_k and threshold from nvdsinfer_config.yaml
         self._load_config()
 
@@ -147,12 +148,18 @@ class GDinoPostProcessor:
         try:
             with open(self.infer_config_path, 'r') as f:
                 config = yaml.safe_load(f)
+            # Get value from property section
+            if "property" in config:
+                property = config["property"]
+                if "segmentation-threshold" in property:
+                    self.segmentation_threshold = float(property["segmentation-threshold"])
+
             # Get values from class-attrs-all section
             if 'class-attrs-all' in config:
                 class_attrs = config['class-attrs-all']
                 # Update threshold if pre-cluster-threshold is specified
                 if 'pre-cluster-threshold' in class_attrs:
-                    self.threshold = float(class_attrs['pre-cluster-threshold'])
+                    self.item_threshold = float(class_attrs['pre-cluster-threshold'])
                 # Update top_k if topk is specified
                 if 'topk' in class_attrs:
                     self.top_k = int(class_attrs['topk'])
@@ -270,7 +277,7 @@ class GDinoPostProcessor:
 
 
         """
-        If self.threshold = 0.7, then
+        If self.item_threshold = 0.7, then
         scores shape: (1, 10)
         scores = [[0.9, 0.8, 0.7, 0.6]]
         threshold_mask = [[True, True, False, False]]
@@ -282,7 +289,7 @@ class GDinoPostProcessor:
         result_indices = [[5, 1]]
         """
         # Apply mask while preserving batch dimension
-        threshold_mask = scores > self.threshold  # shape: (1, 10)
+        threshold_mask = scores > self.item_threshold  # shape: (1, 10)
         scores = scores[threshold_mask]  # Flatten to 1D array of valid scores
         threshold_topk_indices = topk_indices[threshold_mask]  # Flatten to 1D array of valid indices
         # Reshape to ensure (bs, N) shape
@@ -358,6 +365,7 @@ class GDinoPostProcessor:
         target_sizes = np.array(target_sizes)
         boxes = boxes * target_sizes[:, None, :]
 
+        result_label_indices = result_label_indices.squeeze(0)
         if self.has_masks:
             masks = []
             # Clamp bounding box coordinates
@@ -380,15 +388,28 @@ class GDinoPostProcessor:
                 m_scaled = sigmoid(m) # Shape: (136, 240, 10)
                 # Use moveaxis directly on m_scaled
                 mask_array = np.moveaxis(m_scaled, 2, 0)  # reshape from (136, 240, 10) to (10, 136, 240)
+                # For each mask, assign its corresponding label index where probability > threshold
+                for idx, label_idx in enumerate(result_label_indices):  # result_label_indices is already squeezed to 1D
+                    # mask_array[idx] shape: (136, 240)
+                    # Example: if label_idx = 1 and threshold = 0.5
+                    # mask_array[idx] = [
+                    #   [0.7, 0.2, 0.8],
+                    #   [0.1, 0.6, 0.3]
+                    # ]
+                    # After threshold:
+                    # mask_array[idx] = [
+                    #   [2, 0, 2],  # 2 because (label_idx=1 + 1)
+                    #   [0, 2, 0]
+                    # ]
+                    mask_array[idx] = ((mask_array[idx] > self.segmentation_threshold) * (label_idx + 1)).astype(np.uint8)  # uint8 [0, 255]
                 masks.append(mask_array)
             # Convert to flattened masks
-            mask_list = [mask.flatten().tolist() for mask in masks[0]]
+            mask_list = [mask.flatten().astype(np.uint8).tolist() for mask in masks[0]]
         else:
             mask_list = [[]]
 
         boxes = boxes.squeeze(0)
         scores = scores.squeeze(0)
-        result_label_indices = result_label_indices.squeeze(0)
 
         return {
             "data": {
