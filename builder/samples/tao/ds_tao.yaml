@@ -26,7 +26,7 @@ server:
       requests:
         InferenceRequest: >
           {
-            {% set input_items = request.input if request.input is iterable else [request.input] %}
+            {% set input_items = request.input %}
             {% if input_items|length > 0 %}
               {% if input_items[0] is string %}
                 "image": [

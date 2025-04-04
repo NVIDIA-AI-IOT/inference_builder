@@ -28,22 +28,37 @@ server:
       requests:
         InferenceRequest: >
           {
-            {% set image_items = request.input if request.input is iterable else [request.input] %}
-            "image": [
-              {% for item in image_items %}
-                {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
-              {% endfor %}
-            ],
-            "mime": [
-              {% for item in image_items %}
-                {{ item|extract('data:([\w+/]+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
-              {% endfor %}
-            ],
-            "text": [
-              {% for item in request.text %}
-                {{ item|tojson }}{% if not loop.last %}, {% endif %}
-              {% endfor %}
-            ]
+            {% set input_items = request.input %}
+            {% if input_items|length > 0 %}
+              {% if input_items[0] is string %}
+                "image": [
+                  {% for item in input_items %}
+                      {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                ],
+                "mime": [
+                  {% for item in input_items %}
+                    {{ item|extract('data:([\w+/]+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                ],
+              {% elif input_items[0] is mapping %}
+                "media_url": [
+                  {% for item in input_items %}
+                    {{ item.path|tojson }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                ],
+                "mime": [
+                  {% for item in input_items %}
+                    {{ item.contentType|tojson }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                ],
+              {% endif %}
+                "text": [
+                  {% for item in request.text %}
+                    {{ item|tojson }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                ]
+            {% endif %}
           }
       responses:
         InferenceResponse: >
