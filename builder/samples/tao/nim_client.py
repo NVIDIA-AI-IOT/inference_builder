@@ -6,6 +6,7 @@ from typing import List
 import cv2
 import numpy as np
 import mimetypes
+from requests_toolbelt import MultipartEncoder
 
 API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC="shfklsjlfjsljgl"
 
@@ -282,32 +283,37 @@ def check_empty_2d_list(mask):
         return None
     return mask
 
-def main(host , port, model, files, text):
+def main(host , port, model, files, text, upload):
     if not files:
         print("Need the file path for inference")
         return
 
     invoke_url = "http://" + host + ":" + port + "/v1/inference"
-
-    mime_types = []
-    b64_images = []
-    for file in files:
-        mime_types.append(mimetypes.guess_type(file)[0])
-        with open(file, "rb") as f:
-            b64_images.append(base64.b64encode(f.read()).decode())
-
-
     headers = {
-      "Authorization": "Bearer $API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC",
-      "Accept": "application/json",
+    "Authorization": "Bearer $API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC",
+    "Accept": "application/json",
     # "NVCF-ASSET-DIR": "some-temp-dir",
     # "NVCF-FUNCTION-ASSET-IDS": "udjflsjo-jfoisjof-lsdfjofdj"
     }
-
-    payload = {
-        "input": [f"data:{mime_type};base64,{b64_image}" for mime_type, b64_image in zip(mime_types, b64_images)],
-        "model": f"nvidia/{model}"
-    }
+    payload = { "input": [], "model": f"nvidia/{model}"}
+    if upload:
+        upload_url = "http://" + host + ":" + port + "/v1/files"
+        for file in files:
+            multipart_data = MultipartEncoder(
+                fields={
+                    'file': (os.path.basename(file), open(file, 'rb'), mimetypes.guess_type(file)[0])
+                }
+            )
+            response = requests.post(upload_url, headers={"Content-Type": multipart_data.content_type}, data=multipart_data)
+            payload["input"].append(response.json()["data"])
+    else:
+        mime_types = []
+        b64_images = []
+        for file in files:
+            mime_types.append(mimetypes.guess_type(file)[0])
+            with open(file, "rb") as f:
+                b64_images.append(base64.b64encode(f.read()).decode())
+        payload["input"] = [f"data:{mime_type};base64,{b64_image}" for mime_type, b64_image in zip(mime_types, b64_images)]
 
     if text:
       payload["text"] = [ t.split(",") for t in text]
@@ -370,6 +376,7 @@ if __name__ == '__main__':
     parser.add_argument("--model", type=str, help="Model name", default="nvdino-v2")
     parser.add_argument("--file", type=str, help="File to send for inference", nargs='*', default=None)
     parser.add_argument("--text", type=str, help="Extra text to send for inference", nargs='*', default=None)
+    parser.add_argument("-u", "--upload", action="store_true", help="Upload files to server", default=False)
 
     args = parser.parse_args()
-    main(args.host, args.port, args.model, args.file, args.text)
+    main(args.host, args.port, args.model, args.file, args.text, args.upload)

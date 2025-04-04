@@ -93,9 +93,7 @@ class GenericInference(InferenceBase):
         loop = asyncio.get_event_loop()
         for a_output, output in zip(self._async_outputs, self._outputs):
             self._async_executor.submit(thread_to_async_bridge, output, a_output, loop)
-        stop = False
-        results = []
-        while not stop:
+        while True:
             try:
                 logger.debug("Waiting for tensors from async queue")
                 response_data = dict()
@@ -105,40 +103,17 @@ class GenericInference(InferenceBase):
                     logger.debug(f"Got output data: {data}")
                     if isinstance(data, Error):
                         logger.debug(f"Got Error: {data.message}")
-                        continue
+                        return
                     elif isinstance(data, Stop):
-                        stop = True
-                        continue
+                        logger.debug(f"Got Stop: {data.reason}")
+                        return
                     # collect the output
                     for k, v in data.items():
                         response_data[k] = v
                     response_data = self._post_process(response_data)
-                    results.append(response_data)
+                    yield response_data
             except Exception as e:
                 logger.exception(e)
-        if len(results) > 0:
-            # dimension check
-            need_stack = []
-            for k, v in results[0].items():
-                config = next((c for c in self._output_config if c['name'] == k), None)
-                if config is None:
-                    logger.warning(f"Invalid output parsed: {k}")
-                    continue
-                if isinstance(v, np.ndarray) or isinstance(v, torch.Tensor):
-                    # if the output is tensor, need to check if they need to be stacked
-                    dims = config['dims']
-                    if len(dims) == len(v.shape) + 1:
-                        need_stack.append(True)
-                    else:
-                        need_stack.append(False)
-            # combine multiple inference result based on dimensions
-            if all(need_stack):
-                results = stack_tensors_in_dict(results)
-            elif len(results) > 1:
-                results = concat_tensors_in_dict(results)
-            else:
-                results = results[0]
-        return results
 
 
     def finalize(self):

@@ -1,9 +1,14 @@
 name: "tao"
 
 input:
-- name: images
+- name: image
   data_type: TYPE_CUSTOM_BINARY_BASE64
   dims: [ -1 ]
+  optional: true
+- name: media_url
+  data_type: TYPE_CUSTOM_BINARY_URLS
+  dims: [ -1 ]
+  optional: true
 - name: mime
   data_type: TYPE_STRING
   dims: [ -1 ]
@@ -21,23 +26,32 @@ server:
       requests:
         InferenceRequest: >
           {
-            {% set image_items = request.input if request.input is iterable else [request.input] %}
-            "images": [
-              {% for item in image_items %}
-                {% if item is string %}
-                  {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
-                {% endif %}
-              {% endfor %}
-            ],
-            "mime": [
-              {% for item in image_items %}
-                {% if item is string %}
-                  {{ item|extract('data:([\w+/]+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
-                {% else %}
-                  {{ item.contentType|tojson }}{% if not loop.last %}, {% endif %}
-                {% endif %}
-              {% endfor %}
-            ]
+            {% set input_items = request.input if request.input is iterable else [request.input] %}
+            {% if input_items|length > 0 %}
+              {% if input_items[0] is string %}
+                "image": [
+                  {% for item in input_items %}
+                      {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                ],
+                "mime": [
+                  {% for item in input_items %}
+                    {{ item|extract('data:([\w+/]+);base64,')|tojson }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                ]
+              {% elif input_items[0] is mapping %}
+                "media_url": [
+                  {% for item in input_items %}
+                    {{ item.path|tojson }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                ],
+                "mime": [
+                  {% for item in input_items %}
+                    {{ item.contentType|tojson }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                ]
+              {% endif %}
+            {% endif %}
           }
       responses:
         InferenceResponse: >
@@ -49,7 +63,8 @@ server:
                 "bboxes": {{item.data.bboxes}},
                 "probs": {{item.data.probs}},
                 "labels": {{item.data.labels|tojson}},
-                "masks": {{item.data.seg_maps}}
+                "masks": {{item.data.seg_maps}},
+                "timestamp": {{item.data.timestamp}}
               } {% if not loop.last %}, {% endif %} {% endfor %} ],
             "usage": { "num_images": 1},
             "model": "nvidia/nvdinov2"
@@ -63,6 +78,7 @@ server:
               "id": {{response.id|tojson}},
               "path": {{response.path|tojson}},
               "size": {{response.size|tojson}},
+              "duration": {{response.duration|tojson}},
               "contentType": {{response.mime_type|tojson}}
             }
           }
@@ -93,9 +109,12 @@ models:
   backend: deepstream/nvinfer
   max_batch_size: 1
   input:
-  - name: images
+  - name: image
     data_type: TYPE_CUSTOM_DS_IMAGE
     dims: [544, 960, 3]
+  - name: media_url
+    data_type: TYPE_CUSTOM_BINARY_URLS
+    dims: [ -1 ]
   - name: mime
     data_type: TYPE_CUSTOM_DS_MIME
     dims: [ -1 ]

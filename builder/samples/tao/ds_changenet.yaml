@@ -17,9 +17,9 @@ output:
     dims: [ -1 ]
 
 server:
-  endpoints:
+  responders:
     infer:
-      path: /v1/inference
+      operation: inference
       requests:
         InferenceRequest: >
           {

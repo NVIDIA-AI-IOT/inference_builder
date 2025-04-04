@@ -109,6 +109,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InferenceResponse'
+            application/x-ndjson:
+              schema:
+                $ref: '#/components/schemas/InferenceResponse'
         "500":
           description: The invocation ended with an error.
           content:
@@ -151,6 +154,11 @@ components:
           format: int64
           title: Size
           description: Size of the file in bytes.
+        duration:
+          type: integer
+          format: int64
+          title: Duration
+          description: Duration of the file in nanoseconds.
         contentType:
           type: string
           title: Content Type
@@ -218,20 +226,14 @@ components:
       additionalProperties: false
       properties:
         input:
-          oneOf:
-          - type: string
-            title: string
-            maxLength: 4294967296
-            pattern: ^.*$
-          - $ref: '#/components/schemas/MediaAsset'
-          - type: array
-            items:
-              oneOf:
-                - type: string
-                  pattern: ^.*$
-                  maxLength: 4294967296
-                - $ref: '#/components/schemas/MediaAsset'
-            maxItems: 64
+          type: array
+          items:
+            oneOf:
+              - type: string
+                pattern: ^.*$
+                maxLength: 4294967296
+              - $ref: '#/components/schemas/MediaAsset'
+          maxItems: 64
           title: Input
           description: 'The list of images on which you want to perform inference. Images should be in form
           of `data:image/{format};base64,{base64encodedimage}`.Accepted formats are `jpg`, `png` and `jpeg`. Or they
@@ -355,9 +357,15 @@ components:
                 The mask vector as base64 string. The length of the vector depends on the model.
               format: ^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)$
           title: Mask
+        timestamp:
+          type: integer
+          format: int64
+          default: 0
+          title: Timestamp
+          description: The timestamp of the inference result.
       required:
         - index
-        - mask
+        - shape
       title: SegmentationResult
     Usage:
       properties:

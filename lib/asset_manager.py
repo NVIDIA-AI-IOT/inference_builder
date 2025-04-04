@@ -6,6 +6,8 @@ import json
 import uuid
 from fastapi import UploadFile
 import shutil
+from pyservicemaker.utils import MediaInfo
+
 logger = get_logger(__name__)
 
 DEFAULT_ASSET_DIR = "/tmp/assets"
@@ -15,7 +17,7 @@ class Asset:
     file_name: str
     mime_type: str
     size: int
-    purpose: str
+    duration: int
     path: str
     use_count: int
     asset_dir: str
@@ -41,7 +43,7 @@ class Asset:
                          path=info["path"],
                          file_name=info["fileName"],
                          mime_type=info["mimeType"],
-                         purpose=info["purpose"],
+                         duration=info["duration"],
                          username=info["username"],
                          password=info["password"],
                          description=info["description"],
@@ -61,7 +63,7 @@ class AssetManager:
             for asset_id in asset_ids
         }
 
-    def save_file(self, file: UploadFile, file_name: str, purpose: str, mime_type: str) -> Asset | None:
+    def save_file(self, file: UploadFile, file_name: str, mime_type: str) -> Asset | None:
         asset_id = str(uuid.uuid4())
         while asset_id in self._asset_map:
             asset_id = str(uuid.uuid4())
@@ -78,6 +80,7 @@ class AssetManager:
             size = os.path.getsize(os.path.join(asset_dir, file_name))
         except:
             size = 0
+        mediainfo = MediaInfo.discover(os.path.join(asset_dir, file_name))
 
         with open(os.path.join(asset_dir, "info.json"), "w") as f:
             json.dump(
@@ -86,7 +89,7 @@ class AssetManager:
                     "path": os.path.join(asset_dir, file_name),
                     "fileName": file_name,
                     "mimeType": mime_type,
-                    "purpose": purpose,
+                    "duration": mediainfo.duration,
                     "username": "",
                     "password": "",
                     "description": "",

@@ -1,7 +1,7 @@
 name: "tao"
 
 input:
-- name: images
+- name: image
   data_type: TYPE_CUSTOM_BINARY_BASE64
   dims: [ -1 ]
   optional: false
@@ -22,14 +22,14 @@ output:
     dims: [ -1 ]
 
 server:
-  endpoints:
+  responders:
     infer:
-      path: /v1/inference
+      operation: inference
       requests:
         InferenceRequest: >
           {
             {% set image_items = request.input if request.input is iterable else [request.input] %}
-            "images": [
+            "image": [
               {% for item in image_items %}
                 {{ item|replace('data:image\/[a-zA-Z0-9.+-]+;base64,', '')|tojson }}{% if not loop.last %}, {% endif %}
               {% endfor %}
@@ -66,7 +66,7 @@ models:
   backend: deepstream/nvinfer
   max_batch_size: 1
   input:
-  - name: images
+  - name: image
     data_type: TYPE_CUSTOM_DS_IMAGE
     dims: [544, 960, 3]
   - name: mime

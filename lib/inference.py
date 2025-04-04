@@ -120,6 +120,10 @@ class DataFlow:
             bytes_list.append(np.frombuffer(base64.b64decode(input), dtype=np.uint8))
         return bytes_list
 
+    def _process_binary_urls(self, inputs: np.ndarray):
+        # transform the binary urls into a list
+        return [input for input in inputs]
+
     @property
     def in_names(self):
         return [ i['name'] for i in self._configs]
@@ -162,6 +166,8 @@ class DataFlow:
                     tensor = self._process_base64_image(tensor)
                 elif data_type == "TYPE_CUSTOM_BINARY_BASE64":
                     tensor = self._process_base64_binary(tensor)
+                elif data_type == "TYPE_CUSTOM_BINARY_URLS":
+                    tensor = self._process_binary_urls(tensor)
             collected[o_name] = tensor
 
         self._queue.put(collected, timeout=self._timeout)
@@ -374,7 +380,7 @@ class ModelOperator:
         self._backend = model_backend
         while True:
             try:
-                # collect input data
+                # collect input data until Stop is received
                 args = []
                 kwargs = dict()
                 for input in self._in:
@@ -385,6 +391,7 @@ class ModelOperator:
                     kwargs.update(data)
                 if not kwargs:
                     continue
+                message = "Completed"
                 logger.debug(f"Input collected: {kwargs}")
                 # apply tokenizer if required
                 if self._tokenizer:
@@ -402,42 +409,34 @@ class ModelOperator:
                 # call preprocess() before passing args to the backend
                 args = self._preprocess(args)
                 # execute inference backend and collect result
-                for result in self._backend(*args):
-                    if isinstance(result, Error):
-                        logger.error(f"Error in inference: {result}")
-                        break
-
-                    result = self._postprocess(result)
-                    # collect the result
+                for results in self._backend(*args):
+                    # iterate the result list and postprocess each of them
                     for out in self._out:
-                        expected_result = dict()
-                        for n in out.in_names:
-                            if n in result:
-                                expected_result[n] = result[n]
-                        if len(expected_result) != len(out.in_names):
-                            logger.error(f"Not all the expected result is received from model {self._model_name}")
-                            continue
-                        if self._tokenizer:
-                            expected_key = self._tokenizer.decoder_config[0]
-                            value = expected_result.pop(expected_key, None)
-                            if value is not None and isinstance(value, np.ndarray):
-                                # CPU only tokenizer for now
-                                value = value.flatten().tolist()
-                                text = self._tokenizer._tokenizer.decode(value, skip_special_tokens=True)
-                                expected_result[expected_key] = np.array([text], np.string_)
-                            else:
-                                logger.error("Format not supported by tokenizer")
-                        logger.debug(f"Deposit result: {expected_result}")
-                        out.put(expected_result)
-                # mark the stop of this inference batch
-                for out in self._out:
-                    out.put(Stop('Done'))
+                        output_data = {n : [] for n in out.in_names}
+                        for result in results:
+                            result = self._postprocess(result)
+                            if len(result) != len(out.in_names):
+                                logger.error(f"Not all the expected result is received from model {self._model_name}")
+                                continue
+                            # collect the result
+                            for n, v in output_data.items():
+                                if n in result:
+                                    v.append(result[n])
+                                else:
+                                    v.append(None)
+
+                        logger.debug(f"Deposit result: {output_data}")
+                        out.put(output_data)
+
             except Exception as e:
                 logger.exception(e)
+                message = "Error"
+            # notify the end of the current inference cycle
+            for out in self._out:
+                out.put(Stop(message))
 
     def _preprocess(self, args: List):
-        logger.debug(f"Preprocessing data for model {self._model_name}")
-
+        print(f"preprocess: {args}")
         # go through the preprocess chain
         outcome = args
         for preprocessor in self._preprocessors:
