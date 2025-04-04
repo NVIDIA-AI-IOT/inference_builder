@@ -334,7 +334,7 @@ def visualize_detections(image_path, masks=None, bboxes=None, labels=None, shape
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-    return result
+    return True
 
 def check_empty_2d_list(mask):
     """
@@ -367,6 +367,79 @@ def dump_response_json(response_data, output_dir="/tmp"):
     except Exception as e:
         print(f"Error dumping response JSON: {e}")
 
+def prompt_save_reference():
+    """
+    Prompt user whether to save the response as a reference
+    Returns:
+        bool: True if user wants to save, False otherwise
+    """
+    user_input = input("Use this response to overwrite validation reference? (y/N): ").lower()
+    return user_input == 'y'
+
+def save_as_validation_reference(response_data, image_path, text=None):
+    """
+    Save response JSON as validation reference next to the image file
+    Args:
+        response_data: JSON response data to save
+        image_path: Path to the original image file
+        text: Optional text input to save
+    """
+    # Convert image path to Path object for easier manipulation
+    image_path = Path(image_path)
+    base_name = image_path.name.rsplit('.', 1)[0]
+    # Create validation reference filename by replacing image extension with .json
+    validation_ref_path = image_path.parent / f"expected.{base_name}.json"
+
+    try:
+        need_write = False
+        if validation_ref_path.exists():
+            with open(validation_ref_path, 'r') as f:
+                existing_data = json.load(f)
+            if existing_data == response_data:
+                print(f"Validation reference response already exists and is identical to the current response")
+            else:
+                print(f"Validation reference response already exists but is different from the current response")
+                need_write = True
+        else:
+            print(f"Validation reference response not found at: {validation_ref_path}")
+            need_write = True
+
+        if need_write:
+            with open(validation_ref_path, 'w') as f:
+                json.dump(response_data, f)
+            print(f"Validation reference response overwritten to: {validation_ref_path}")
+        else:
+            print(f"Skip overwriting {validation_ref_path} as it already exists and is identical to the current response")
+    except Exception as e:
+        print(f"Error saving validation reference response: {e}")
+    # Save text input if provided
+    if text:
+        text_path = image_path.parent / f"{base_name}.txt"
+        try:
+            need_write = False
+            # Join multiple text inputs with commas if there are multiple
+            text_content = ','.join(text) if isinstance(text, list) else text
+            text_content = text_content + "\n"
+            if text_path.exists():
+                with open(text_path, 'r') as f:
+                    existing_text = f.read()
+                if existing_text == text_content:
+                    print(f"Validation reference input text already exists and is identical to the current text")
+                else:
+                    print(f"Validation reference input text already exists but is different from the current text")
+                    need_write = True
+            else:
+                print(f"Validation reference input text not found at: {text_path}")
+                need_write = True
+
+            if need_write:
+                with open(text_path, 'w') as f:
+                    f.write(text_content)
+                print(f"Validation reference input text overwritten to: {text_path}")
+            else:
+                print(f"Skip overwriting {text_path} as it already exists and is identical to the current text")
+        except Exception as e:
+            print(f"Error saving validation reference text input: {e}")
 
 def main(host , port, model, files, text, dump_response: bool):
     if not files:
@@ -425,13 +498,15 @@ def main(host , port, model, files, text, dump_response: bool):
 
             # Visualize results with whatever data is available
             try:
-                visualize_detections(
+                visualization_success = visualize_detections(
                     files[data['index']],
                     masks=mask,
                     bboxes=bboxes,
                     labels=parsed_labels,
                     shape=shape
                 )
+                if visualization_success and prompt_save_reference():
+                    save_as_validation_reference(output, files[data['index']], text)
             except ValueError as e:
                 print(f"Error visualizing results for image {data['index']}: {e}")
                 continue
