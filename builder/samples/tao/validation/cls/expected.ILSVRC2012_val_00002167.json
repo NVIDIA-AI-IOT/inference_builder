@@ -1,0 +1,1 @@
+{"data": [{"index": 0, "shape": [544, 960], "bboxes": [[0, 0, 960, 544]], "probs": [0.0], "labels": [["n13052670"]], "masks": []}], "model": "nvidia/nvdinov2", "usage": {"num_images": 1}}
