@@ -89,6 +89,8 @@ class Responder:
     def process_response(self, responder: str, request, response: Dict[str, Any]):
         self.logger.debug(f"Processing response {response}")
 
+        accept = request.headers.get("accept", "")
+        streaming = "application/x-ndjson" in accept
         # transform numpy ndarray or tensor to universal value types for inference
         if responder == "infer":
             type_map = { i.name: i.data_type for i in global_config.output}
@@ -118,7 +120,7 @@ class Responder:
         json_string = jinja2_env.from_string(template).render(request=request, response=response)
         self.logger.debug(f"Sending json payload: {json_string}")
 
-        return json.loads(json_string)
+        return json_string if streaming else json.loads(json_string)
 
     async def take_action(self, action_name:str, *args):
         action = self._action_map.get(action_name, None)

@@ -142,6 +142,9 @@ class BulkVideoInputPool(TensorInputPool):
             flow = flow.infer(config_path)
         flow = flow.attach(Probe('tensor_retriver', self._output)).render(RenderMode.DISCARD, enable_osd=False)
 
+        if self._pipeline is not None:
+            self._pipeline.wait()
+        logger.info("DeepstreamBackend: starting pipeline for bulk video inference...")
         pipeline.start()
         self._pipeline = pipeline
         return [i for i in range(len(url_list))]
@@ -160,8 +163,11 @@ class BaseTensorOutput(BatchMetadataOperator):
     def handle_metadata(self, batch_meta):
         pass
 
-    def collect(self, indices: List) -> List | None:
-        results = [self._queues[i].get() if i >= 0 else None for i in indices]
+    def collect(self, indices: List, timeout=None) -> List | None:
+        try:
+            results = [self._queues[i].get(timeout=timeout) if i >= 0 else None for i in indices]
+        except Empty:
+            return None
         if any (x is None for x in results):
             return None
         return results if self._name is None else [{self._name: r} for r in results]
@@ -419,9 +425,10 @@ class DeepstreamBackend(ModelBackend):
             indices = self._in_pools[media].submit(in_data_list)
             # collect the results
             while True:
-                results = self._outputs[media].collect(indices)
+                #TODO: timeout should be runtime configurable
+                results = self._outputs[media].collect(indices, timeout=3)
                 if results is None:
-                    logger.error("DeepstreamBackend: No more data from this batch")
+                    logger.info("DeepstreamBackend: No more data from this batch")
                     break
                 out_data_list = []
                 for result, pass_through_data in zip(results, pass_through_list):
