@@ -1,0 +1,21 @@
+class-attrs-all:
+  pre-cluster-threshold: 0.5
+property:
+  gie-unique-id: 1
+  cluster-mode: 4
+  data-format: channels_first
+  infer-dims: 3;640;640
+  maintain-aspect-ratio: 1
+  model-color-format: 0
+  net-scale-factor: 0.0173520735728
+  network-mode: 2
+  network-type: 0
+  num-detected-classes: 80
+  onnx-file: model.onnx
+  model-engine-file: ./model.onnx_b1_gpu0_fp16.engine
+  # output-blob-names: pred_boxes;pred_logits
+  # output-tensor-meta: 1
+  labelfile-path: ./labels.txt
+  parse-bbox-func-name: NvDsInferParseCustomDDETRTAO
+  custom-lib-path: /opt/nvidia/deepstream/deepstream/lib/libnvds_infercustomparser_tao.so
+  workspace-size: 1048576
