@@ -284,10 +284,10 @@ def get_request_template(client_dir: Path) -> Dict:
 
         # Import the request model
         from openapi_client.models.inference_request import InferenceRequest
-        from openapi_client.models.input import Input
+        from openapi_client.models.input_inner import InputInner
 
         # Create request using the model class
-        input_data = Input(["<image_placeholder>"])  # Create Input instance first
+        input_data = [InputInner("<image_placeholder>")]  # Create Input instance first
         request = InferenceRequest(
             model='nvidia/nvdino-v2',  # First allowed value from model_validate_enum
             input=input_data
@@ -515,6 +515,10 @@ class CvValidator:
         Returns:
             bool: True if dictionaries match within tolerance
         """
+        # Remove timestamp if present
+        actual.pop('timestamp', None)
+        expected.pop('timestamp', None)
+
         if actual.keys() != expected.keys():
             return False
 
