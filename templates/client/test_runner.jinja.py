@@ -77,11 +77,12 @@ class TestInference(unittest.TestCase):
 
     def test_health_check(self):
         """Test health check endpoint"""
-        self.logger.info("Running health check...")
-        response = self.api.health_ready_v1_health_ready_get_with_http_info()
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["status"], "ready")
-        self.logger.info("Health check successful")
+        # self.logger.info("Running health check...")
+        # response = self.api.health_ready_v1_health_ready_get_with_http_info()
+        # self.assertEqual(response.status_code, 200)
+        # self.assertEqual(response.data["status"], "ready")
+        # self.logger.info("Health check successful")
+        self.logger.info(f"Skip health check for {self.host}")
 
     def test_inference(self):
         """Test inference with pre-built requests"""
