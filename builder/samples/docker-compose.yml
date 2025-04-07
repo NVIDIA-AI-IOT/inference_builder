@@ -179,5 +179,5 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
-      DEBUG: 1
+#      DEBUG: 1
       NIM_MODEL_NAME: rtdetr

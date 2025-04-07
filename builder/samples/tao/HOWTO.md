@@ -14,25 +14,51 @@ Below packages are required to build and run the microservice:
 
 ## Run the microservice using docker compose
 
-Before running the microservice, users must set the name of the model can in the `docker-compose.yaml` file through the `NIM_MODEL_NAME` environment variable, meanwhile, users need to prepare the model files and drop them into the `~/.cache/nim/model_repo/{NIM_MODEL_NAME}` directory.
+Create the docker compose file from the below sample and save it as docker-compose.yaml:
+
+```yaml
+services:
+  tao-cv:
+    image: gitlab-master.nvidia.com:5005/chunlinl/nim-templates/tao_cv_nim:ds8.0-triton25.02.1_2
+    volumes:
+      - '~/.cache/nim:/opt/nim/.cache'
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              #count: 1
+              device_ids: ['0']
+              capabilities: [gpu]
+    environment:
+      NIM_MODEL_NAME: rtdetr
+```
+
+Before running the microservice, users must set the name of the model in the `docker-compose.yaml` file through the `NIM_MODEL_NAME` environment variable, meanwhile, users need to prepare the model files and drop them into the `~/.cache/nim/model_repo/{NIM_MODEL_NAME}` directory.
 
 Following files are expected to be present in the directory:
 
 - Deepstream inference config file : `nvdsinfer_config.yaml`
 - ONNX model file
 - Label file (optional, used for post-processing)
+- preprocessed config file (optional, used for pre-processing)
+
+When being used along with the TAO Finetune Microservice, the microservice can directly use the model files and configs exported from Finetune Microservice.
 
 Once the model files are ready, users can run the following command to start the microservice:
 
 ```bash
-cd ..
 docker compose up tao-cv
 
 ```
 
-# Run the Microservice as Helm Charts
+## Run the Microservice as Helm Charts
 
-Users can use the helm charts to deploy different TAO CV models simply by updating env NIM_MODEL_NAME, and there is no need to rebuild the helm charts.
+Users can also use the helm charts to deploy different TAO CV models simply by updating env NIM_MODEL_NAME, and there is no need to rebuild the helm charts.
 A values override file is provided to set the NIM_MODEL_NAME; and image.repository, image.tag in case there is a new image.
 
 Update the helm/tao-cv-app/custom_values.yaml for:
@@ -185,14 +211,75 @@ microk8s helm3 delete tao-cv-app
 
 The microservice provides a REST API that can be used to run inference on images and videos.
 
-### Run inference on an image
+There is an OpenAPI dynamic documentation endpoint on the server for detailed API usage: http://localhost:8800/docs, and examples to show the basic inference use cases are listed as below:
 
-A sample client is available as nim_client.py, which follows the OpenAPI specification and can be used as a reference for building your own client.
+### Run inference on a single image
 
 ```bash
-python nim_client.py --port 8800 --file <path_to_image>
+PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "your_file.jpg"))
+
+curl -X POST \
+  'http://localhost:8800/v1/inference' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d "{
+  \"input\": [ \"$PAYLOAD\" ],
+  \"model\": \"nvidia/nvdino-v2\"
+}"
 
 ```
+
+### Run inference on a single video
+
+```bash
+# upload the video file as an asset
+curl -X 'POST' \
+  'http://localhost:8800/v1/files' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: multipart/form-data' \
+  -F 'file=@your_file.mp4;type=video/mp4'
+```
+
+The expected response would be like:
+
+```
+{
+  "data": {
+    "id": "53c2d620-976e-49a4-90a3-3db20b95d225",
+    "path": "/tmp/assets/53c2d620-976e-49a4-90a3-3db20b95d225/output.mp4",
+    "size": 82223,
+    "duration": 2000000000,
+    "contentType": "video/mp4"
+  }
+}
+```
+
+Use the received asset object for inference
+
+```
+curl -X 'POST' \
+  'http://localhost:8800/v1/inference' \
+  -H 'accept: application/x-ndjson' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "input": [ {
+    "id": "94a41ce9-09da-4807-b676-5d5b62eedffc",
+    "path": "/tmp/assets/94a41ce9-09da-4807-b676-5d5b62eedffc/its_1920_30s.mp4",
+    "size": 3472221,
+    "duration": 30000000000,
+    "contentType": "video/mp4"
+  }
+  ],
+  "text": [
+    [
+      "string"
+    ]
+  ],
+  "model": "nvidia/nvdino-v2"
+}' -N
+```
+
+The OpenAPI specification also serves as the guide line for developing customized inference client and integrate it to any application.
 
 ## Build the microservice
 
@@ -217,7 +304,7 @@ python builder/main.py builder/samples/tao/ds_changenet.yaml --server-type fasta
 
 For Grounding DINO and Mask Grouding DINO:
 ```bash
-python builder/main.py builder/samples/tao/ds_gdino.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -c builder/samples/tao/processors.py -t
+python builder/main.py builder/samples/tao/ds_gdino.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao - -t
 ```
 
 Build inference package with validation:
