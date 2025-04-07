@@ -17,9 +17,12 @@ Below packages are required to build and run the microservice:
 ### 1. Run the microservice using docker compose
 
 There're 3 inference microservices available for different use cases:
-- Common CV tasks for classification, detection and segmentation: gitlab-master.nvidia.com:5005/chunlinl/nim-templates/tao_cv_nim:ds8.0-triton25.02.1_2
+- Common CV tasks for classification, detection and segmentation:
+  gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-common:rc0
 - Visual Change Net:
+  gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-changenet:rc0
 - Open Label detection and segmenation:
+  gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-gdino:rc0
 
 Create the docker compose file from the below sample and save it as docker-compose.yaml:
 
@@ -297,7 +300,7 @@ python builder/main.py builder/samples/tao/ds_changenet.yaml --server-type fasta
 
 For Grounding DINO and Mask Grouding DINO:
 ```bash
-python builder/main.py builder/samples/tao/ds_gdino.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao - -t
+python builder/main.py builder/samples/tao/ds_gdino.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -t
 ```
 
 Build inference package with validation:
