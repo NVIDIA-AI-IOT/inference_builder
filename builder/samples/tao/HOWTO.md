@@ -14,6 +14,11 @@ Below packages are required to build and run the microservice:
 
 ## Run the microservice using docker compose
 
+There're 3 inference microservices available for different use cases:
+- Common CV tasks for classification, detection and segmentation: gitlab-master.nvidia.com:5005/chunlinl/nim-templates/tao_cv_nim:ds8.0-triton25.02.1_2
+- Visual Change Net:
+- Open Label detection and segmenation:
+
 Create the docker compose file from the below sample and save it as docker-compose.yaml:
 
 ```yaml
@@ -211,7 +216,7 @@ microk8s helm3 delete tao-cv-app
 
 The microservice provides a REST API that can be used to run inference on images and videos.
 
-There is an OpenAPI dynamic documentation endpoint on the server for detailed API usage: http://localhost:8800/docs, and examples to show the basic inference use cases are listed as below:
+The OpenAPI compatible interactive documentation endpoint is available on the server for detailed API usage: http://localhost:8800/docs, and examples to show the basic inference use cases are listed as below:
 
 ### Run inference on a single image
 
@@ -254,7 +259,7 @@ The expected response would be like:
 }
 ```
 
-Use the received asset object for inference
+Use the received asset object for inference. ('accept' must be application/x-ndjson to get the inference result as a stream)
 
 ```
 curl -X 'POST' \
@@ -263,23 +268,18 @@ curl -X 'POST' \
   -H 'Content-Type: application/json' \
   -d '{
   "input": [ {
-    "id": "94a41ce9-09da-4807-b676-5d5b62eedffc",
-    "path": "/tmp/assets/94a41ce9-09da-4807-b676-5d5b62eedffc/its_1920_30s.mp4",
+    "id": "b6eccf7e-0758-4bba-9e51-d6f65b6794f5",
+    "path": "/tmp/assets/b6eccf7e-0758-4bba-9e51-d6f65b6794f5/its_1920_30s.mp4",
     "size": 3472221,
     "duration": 30000000000,
     "contentType": "video/mp4"
-  }
-  ],
-  "text": [
-    [
-      "string"
-    ]
-  ],
+  } ],
   "model": "nvidia/nvdino-v2"
 }' -N
+
 ```
 
-The OpenAPI specification also serves as the guide line for developing customized inference client and integrate it to any application.
+The OpenAPI specification also serves as the guideline for developing customized inference client and integrate it to any application.
 
 ## Build the microservice
 
