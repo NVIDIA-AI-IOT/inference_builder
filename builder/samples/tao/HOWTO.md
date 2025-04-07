@@ -29,7 +29,7 @@ Create the docker compose file from the below sample and save it as docker-compo
 ```yaml
 services:
   tao-cv:
-    image: gitlab-master.nvidia.com:5005/chunlinl/nim-templates/tao_cv_nim:ds8.0-triton25.02.1_2
+    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-common:rc0
     volumes:
       - '~/.cache/nim:/opt/nim/.cache'
     ipc: host
