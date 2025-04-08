@@ -135,7 +135,7 @@ build_tao_gdino.val_mgdino:
     # Build using docker compose
     - cd builder/samples
     # Copy the specific flavor's tgz file to tao.tgz for Docker build
-    - cp tao.${FLAVOR}.tgz tao.tgz
+    - cp tao/tao.${FLAVOR}.tgz tao/tao.tgz
     # tao.tgz is copied in Dockerfile, no need to extract
     - docker compose build nim-tao
     # Tag and push to registry
