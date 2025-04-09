@@ -28,7 +28,7 @@ output:
     dims: [ 1 ]
 
 server:
-  endpoints:
+  responders:
     health:
       path: "/health/live"
     infer:

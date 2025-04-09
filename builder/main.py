@@ -190,8 +190,8 @@ def build_inference(server_type, config, output_dir: Path):
 def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
     output_dir = output_dir / "server"
     # generate pydantic data models from swagger spec
-    output_file = output_dir / "data_model.py"
     tpl_dir = get_resource_path("templates")
+    jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
     if server_type == "fastapi":
         fastapi_tpl_dir = get_resource_path("templates/api_server/fastapi/route")
         command = (
@@ -201,32 +201,48 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
         if result.returncode != 0:
             raise Exception(f"Failed to generate fastapi data models: {result.stderr}")
+
+        responders = []
+        for name, r in config["responders"].items():
+            responder = {
+                "name": name,
+                "operation": r["operation"],
+            }
+            tpl = jinja_env.get_template(f"responder/{name}.jinja.py")
+            responder["implementation"] = tpl.render(**responder)
+            responders.append(responder)
+
+        svr_tpl = jinja_env.get_template(f"api_server/{server_type}/responder.jinja.py")
+        output = svr_tpl.render(
+            service_name=model_name,
+            responders=responders
+        )
+        with open(output_dir/"responder.py", 'w') as f:
+            f.write(output)
     else:
-        with open(api_spec, "r") as f:
+        output_file = output_dir / "data_model.py"
+        with open(api_spec.name, "r") as f:
             api_schema = f.read()
             data_generator.generate(
                 api_schema, output=output_file, output_model_type=data_generator.DataModelType.PydanticV2BaseModel
             )
-    # generate the server
-    jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
+        svr_tpl = jinja_env.get_template(f"api_server/{server_type}/inference.jinja.py")
+        responders = { r: v['path'] for r, v in config["responders"].items() }
+        if 'infer' not in responders:
+            raise Exception("Server configuration must contain infer endpoint")
+        req_cls = [k for k in config["responders"]["infer"]["requests"]]
+        res_cls = [k for k in config["responders"]["infer"]["responses"]]
+        output = svr_tpl.render(
+            service_name=model_name,
+            request_class=req_cls[0],
+            response_class=res_cls[0],
+            streaming_response_class=res_cls[0] if len(res_cls) < 2 else res_cls[1],
+            endpoints=responders
+        )
+        with open(output_dir/"inference.py", 'w') as f:
+            f.write(output)
 
-    responders = []
-    for name, r in config["responders"].items():
-        responder = {
-            "name": name,
-            "operation": r["operation"],
-        }
-        tpl = jinja_env.get_template(f"responder/{name}.jinja.py")
-        responder["implementation"] = tpl.render(**responder)
-        responders.append(responder)
 
-    svr_tpl = jinja_env.get_template(f"api_server/{server_type}/responder.jinja.py")
-    output = svr_tpl.render(
-        service_name=model_name,
-        responders=responders
-    )
-    with open(output_dir/"responder.py", 'w') as f:
-        f.write(output)
 
 
 def generate_configuration(config, tree):

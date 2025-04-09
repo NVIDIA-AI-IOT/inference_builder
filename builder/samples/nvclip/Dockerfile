@@ -1,18 +1,18 @@
-FROM gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:7.1.0-triton-blos-dev125 AS ds_stage
+FROM gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-blos-dev271 AS ds_stage
 
 FROM "nvcr.io/nvidia/tritonserver:24.08-py3" AS nim_builder_base
 
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/lib /opt/nvidia/deepstream/deepstream-7.1/lib
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/bin /opt/nvidia/deepstream/deepstream-7.1/bin
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/*.sh /opt/nvidia/deepstream/deepstream-7.1/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/*.txt /opt/nvidia/deepstream/deepstream-7.1/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/README* /opt/nvidia/deepstream/deepstream-7.1/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/*.pdf /opt/nvidia/deepstream/deepstream-7.1/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/service-maker /opt/nvidia/deepstream/deepstream-7.1/service-maker
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/lib /opt/nvidia/deepstream/deepstream-8.0/lib
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/bin /opt/nvidia/deepstream/deepstream-8.0/bin
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.sh /opt/nvidia/deepstream/deepstream-8.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.txt /opt/nvidia/deepstream/deepstream-8.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/README* /opt/nvidia/deepstream/deepstream-8.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.pdf /opt/nvidia/deepstream/deepstream-8.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/service-maker /opt/nvidia/deepstream/deepstream-8.0/service-maker
 
-RUN /opt/nvidia/deepstream/deepstream-7.1/install.sh
-RUN ln -sf deepstream-7.1 /opt/nvidia/deepstream/deepstream || true
-RUN rm -rf /opt/nvidia/deepstream/deepstream-7.1/lib/gst-plugins/libnvdsgst_udp.so \
+RUN /opt/nvidia/deepstream/deepstream-8.0/install.sh
+RUN ln -sf deepstream-8.0 /opt/nvidia/deepstream/deepstream || true
+RUN rm -rf /opt/nvidia/deepstream/deepstream-8.0/lib/gst-plugins/libnvdsgst_udp.so \
     /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstchromaprint.so \
     /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstmpeg2enc.so /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstmpeg2dec.so \
     /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstmpg123.so \
