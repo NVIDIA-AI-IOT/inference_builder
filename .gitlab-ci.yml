@@ -168,6 +168,7 @@ build_tao_gdino.val_mgdino:
     # - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     #   when: manual
     - when: manual   # Always allow manual trigger
+  allow_failure: true  # This makes the job optional for pipeline success
 
 
 # Docker builds for each flavor
