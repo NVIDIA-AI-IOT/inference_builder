@@ -108,6 +108,12 @@ build_tao_common.val_cls:
     FLAVOR: "tao"
     VALIDATION_MODEL: "cls"
 
+build_tao_common.val_seg:
+  <<: *build_tao_validation_template
+  variables:
+    FLAVOR: "tao"
+    VALIDATION_MODEL: "seg"
+
 # Changenet build (no validation)
 build_tao_changenet:
   <<: *build_tao_base_template
