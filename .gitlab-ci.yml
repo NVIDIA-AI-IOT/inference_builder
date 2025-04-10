@@ -43,22 +43,22 @@ build_builder_image:
         - .Dockerfile.builder
       when: always
 
-# Generate the inference package (tao.tgz)
-build_tao_inference:
+# Template for building the inference package (tao.tgz)
+.build_tao_base_template: &build_tao_base_template
   stage: build-inference
   # Use our custom builder image that has all dependencies
   image: $BUILDER_IMAGE
   script:
-    - python builder/main.py builder/samples/tao/ds_tao.yaml 
+    - python builder/main.py builder/samples/tao/ds_${FLAVOR}.yaml
       --server-type fastapi
       -a builder/samples/tao/openapi.yaml
-      -v builder/samples/tao/validation/rtdetr
       --no-docker
       -o builder/samples/tao
       -t
+    - mv builder/samples/tao/tao.tgz builder/samples/tao/tao.${FLAVOR}.tgz
   artifacts:
     paths:
-      - builder/samples/tao/tao.tgz
+      - builder/samples/tao/tao.${FLAVOR}.tgz
     expire_in: 1 week
   rules:
     - changes:
@@ -67,8 +67,75 @@ build_tao_inference:
         - templates/**/*
         - .gitlab-ci.yml
 
-# Build and push the final NIM container
-build_tao_docker:
+# Template that extends base with validation build
+.build_tao_validation_template: &build_tao_validation_template
+  <<: *build_tao_base_template
+  script:
+    - python builder/main.py builder/samples/tao/ds_${FLAVOR}.yaml
+      --server-type fastapi
+      -a builder/samples/tao/openapi.yaml
+      -v builder/samples/tao/validation/${VALIDATION_MODEL}
+      --no-docker
+      -o builder/samples/tao
+      -t
+    - mv builder/samples/tao/tao.tgz builder/samples/tao/tao.${FLAVOR}.tgz
+
+# Template specifically for GDINO builds that need processors.py
+.build_tao_gdino_validation_template: &build_tao_gdino_validation_template
+  <<: *build_tao_validation_template
+  script:
+    - python builder/main.py builder/samples/tao/ds_${FLAVOR}.yaml
+      --server-type fastapi
+      -a builder/samples/tao/openapi.yaml
+      --no-docker
+      -o builder/samples/tao
+      -t
+      -v builder/samples/tao/validation/${VALIDATION_MODEL}
+      -c builder/samples/tao/processors.py
+    - mv builder/samples/tao/tao.tgz builder/samples/tao/tao.${FLAVOR}.tgz
+
+
+# Basic TAO builds with different validations
+build_tao_common.val_rtdetr:
+  <<: *build_tao_validation_template
+  variables:
+    FLAVOR: "tao"
+    VALIDATION_MODEL: "rtdetr"
+
+build_tao_common.val_cls:
+  <<: *build_tao_validation_template
+  variables:
+    FLAVOR: "tao"
+    VALIDATION_MODEL: "cls"
+
+build_tao_common.val_seg:
+  <<: *build_tao_validation_template
+  variables:
+    FLAVOR: "tao"
+    VALIDATION_MODEL: "seg"
+
+# Changenet build (no validation)
+build_tao_changenet:
+  <<: *build_tao_base_template
+  variables:
+    FLAVOR: "changenet"
+
+# GDINO builds with validations
+build_tao_gdino.val_gdino:
+  <<: *build_tao_gdino_validation_template
+  variables:
+    FLAVOR: "gdino"
+    VALIDATION_MODEL: "gdino"
+
+build_tao_gdino.val_mgdino:
+  <<: *build_tao_gdino_validation_template
+  variables:
+    FLAVOR: "gdino"
+    VALIDATION_MODEL: "mgdino"
+
+
+# Template for building and pushing the final NIM container
+.build_tao_docker_template: &build_tao_docker_template
   stage: build-docker
   image: docker:24.0
   services:
@@ -88,17 +155,53 @@ build_tao_docker:
     - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
     # Build using docker compose
     - cd builder/samples
+    # Copy the specific flavor's tgz file to tao.tgz for Docker build
+    - cp tao/tao.${FLAVOR}.tgz tao/tao.tgz
     # tao.tgz is copied in Dockerfile, no need to extract
     - docker compose build nim-tao
     # Tag and push to registry
-    - docker tag nim-tao $NIM_TAO_IMAGE
-    - docker push $NIM_TAO_IMAGE
+    - docker tag nim-tao ${CI_REGISTRY_IMAGE}/cv-tao-${FLAVOR}:${CI_COMMIT_SHA}
+    - docker push ${CI_REGISTRY_IMAGE}/cv-tao-${FLAVOR}:${CI_COMMIT_SHA}
   rules:
-    - changes:
-        - builder/samples/tao/**/*
-        - builder/main.py
-        - templates/**/*
-        - .gitlab-ci.yml
+    # - changes:
+    #     - builder/samples/tao/**/*
+    #     - builder/main.py
+    #     - templates/**/*
+    #     - .gitlab-ci.yml
+    #
+    # - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    #   when: manual
+    # - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    #   when: manual
+    - when: manual   # Always allow manual trigger
+  allow_failure: true  # This makes the job optional for pipeline success
+
+
+# Docker builds for each flavor
+build_docker_common:
+  <<: *build_tao_docker_template
+  variables:
+    FLAVOR: "tao"
+  dependencies:
+    - build_tao_common.val_rtdetr
+    - build_tao_common.val_cls
+
+build_docker_changenet:
+  <<: *build_tao_docker_template
+  variables:
+    FLAVOR: "changenet"
+  dependencies:
+    - build_tao_changenet
+
+build_docker_gdino:
+  <<: *build_tao_docker_template
+  variables:
+    FLAVOR: "gdino"
+  dependencies:
+    - build_tao_gdino.val_gdino
+    - build_tao_gdino.val_mgdino
+
+
 # Cache pip packages between jobs
 cache:
   paths:

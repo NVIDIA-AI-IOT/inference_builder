@@ -1,0 +1,18 @@
+property:
+  gie-unique-id: 6
+  process-mode: 1
+  infer-dims: 3;224;224
+  maintain-aspect-ratio: 1
+  net-scale-factor: 0.007843137255  # 1 / (0.5 x 255)
+  offsets: 127.5;127.5;127.5  # 0.5 x 255
+  network-mode: 2
+  network-type: 2 # seg
+  num-detected-classes: 2
+  onnx-file: segformer.onnx
+  model-engine-file: ./segformer.onnx_b1_gpu0_fp16.engine
+  output-blob-names: output
+  # output-tensor-meta: 1
+  segmentation-output-order: 1
+  workspace-size: 1048576
+  parse-segmentation-func-name: NvDsInferParseCustomSegformerTAOArgmax
+  custom-lib-path: /opt/nvidia/deepstream/deepstream/lib/libnvds_infercustomparser_tao.so
