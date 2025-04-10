@@ -66,7 +66,7 @@ build_builder_image:
         - builder/main.py
         - templates/**/*
         - .gitlab-ci.yml
-      changes-exclude:
+      except:
         - "**/*.md"  # This will exclude all markdown files
 
 # Template that extends base with validation build
