@@ -80,6 +80,21 @@ build_builder_image:
       -t
     - mv builder/samples/tao/tao.tgz builder/samples/tao/tao.${FLAVOR}.tgz
 
+# Template specifically for GDINO builds that need processors.py
+.build_tao_gdino_validation_template: &build_tao_gdino_validation_template
+  <<: *build_tao_validation_template
+  script:
+    - python builder/main.py builder/samples/tao/ds_${FLAVOR}.yaml
+      --server-type fastapi
+      -a builder/samples/tao/openapi.yaml
+      --no-docker
+      -o builder/samples/tao
+      -t
+      -v builder/samples/tao/validation/${VALIDATION_MODEL}
+      -c builder/samples/tao/processors.py
+    - mv builder/samples/tao/tao.tgz builder/samples/tao/tao.${FLAVOR}.tgz
+
+
 # Basic TAO builds with different validations
 build_tao_common.val_rtdetr:
   <<: *build_tao_validation_template
@@ -101,13 +116,13 @@ build_tao_changenet:
 
 # GDINO builds with validations
 build_tao_gdino.val_gdino:
-  <<: *build_tao_validation_template
+  <<: *build_tao_gdino_validation_template
   variables:
     FLAVOR: "gdino"
     VALIDATION_MODEL: "gdino"
 
 build_tao_gdino.val_mgdino:
-  <<: *build_tao_validation_template
+  <<: *build_tao_gdino_validation_template
   variables:
     FLAVOR: "gdino"
     VALIDATION_MODEL: "mgdino"
