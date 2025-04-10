@@ -18,6 +18,8 @@ variables:
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      variables:
+          SKIP_DOCKER: "true"  # Skip docker builds in MR pipelines
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
       when: never
     - if: $CI_COMMIT_BRANCH
@@ -162,6 +164,8 @@ build_tao_gdino.val_mgdino:
     #     - builder/main.py
     #     - templates/**/*
     #     - .gitlab-ci.yml
+    - if: $SKIP_DOCKER == "true"
+      when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
