@@ -159,7 +159,7 @@ build_tao_gdino.val_mgdino:
     # Copy the specific flavor's tgz file to tao.tgz for Docker build
     - cp tao/tao.${FLAVOR}.tgz tao/tao.tgz
     # tao.tgz is copied in Dockerfile, no need to extract
-    - docker compose build nim-tao
+    - docker compose build --build-arg CACHE_BUSTER="$CI_COMMIT_SHA" nim-tao
     # Tag and push to registry
     - docker tag nim-tao ${CI_REGISTRY_IMAGE}/cv-tao-${FLAVOR}:${CI_COMMIT_SHA}
     - docker push ${CI_REGISTRY_IMAGE}/cv-tao-${FLAVOR}:${CI_COMMIT_SHA}
