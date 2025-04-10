@@ -325,8 +325,9 @@ python builder/samples/tao/validation/cls/.tmp/test_runner.py
 
 ##### 2.1.3 segmentation:
 ```bash
-not added yet, feel free to add:
-builder/samples/tao/validation/seg
+python builder/main.py builder/samples/tao/ds_tao.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -t -v builder/samples/tao/validation/seg
+# finish building tao.tgz to docker image and start it
+python builder/samples/tao/validation/seg/.tmp/test_runner.py
 ```
 
 #### 2.2 For visual changenet:

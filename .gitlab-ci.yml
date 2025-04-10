@@ -66,6 +66,8 @@ build_builder_image:
         - builder/main.py
         - templates/**/*
         - .gitlab-ci.yml
+      changes-exclude:
+        - "**/*.md"  # This will exclude all markdown files
 
 # Template that extends base with validation build
 .build_tao_validation_template: &build_tao_validation_template
