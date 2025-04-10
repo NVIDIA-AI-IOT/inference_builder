@@ -363,7 +363,7 @@ To build the microservice, run the following command:
 
 ```bash
 cd ..
-docker compose build --build-arg CACHE_BUSTER="$(date +%s)" nim-tao
+docker compose build nim-tao
 
 ```
 
