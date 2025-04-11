@@ -42,7 +42,8 @@ services:
       target: nim_builder_base
       dockerfile: Dockerfile
     image: nim-nvclip
-
+    volumes:
+      - '~/.cache/nim:/opt/nim/.cache'
     ipc: host
     # init: true
     ports:

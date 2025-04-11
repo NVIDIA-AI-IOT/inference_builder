@@ -5,7 +5,6 @@ import os
 from queue import Queue, Empty
 import tempfile
 from abc import ABC, abstractmethod
-from typing import Callable
 import uuid
 from config import global_config
 from .utils import get_logger, split_tensor_in_dict
@@ -404,27 +403,40 @@ class ModelOperator:
                 if any([isinstance(v, list) for _, v in kwargs.items()]):
                     # construct multiple inference requests
                     args = split_tensor_in_dict(kwargs)
-                else:
-                    args = [kwargs]
+                    kwargs = {}
                 # call preprocess() before passing args to the backend
-                args = self._preprocess(args)
+                processed = self._preprocess(args if args else [kwargs])
+                if args:
+                    # sequential processed data
+                    args = processed
+                elif kwargs:
+                    # batch processed data
+                    kwargs = processed[0]
+                else:
+                    logger.error(f"Invalid result from preprocess: {args} and {kwargs}")
+                    continue
                 # execute inference backend and collect result
-                for results in self._backend(*args):
+                for r in self._backend(*args, **kwargs):
                     # iterate the result list and postprocess each of them
                     for out in self._out:
                         output_data = {n : [] for n in out.in_names}
-                        for result in results:
-                            result = self._postprocess(result)
-                            if len(result) != len(out.in_names):
+                        if isinstance(r, list):
+                            for result in r:
+                                result = self._postprocess(result)
+                                if len(result) != len(out.in_names):
+                                    logger.error(f"Not all the expected result is received from model {self._model_name}")
+                                    continue
+                                # collect the result
+                                for n, v in output_data.items():
+                                    if n in result:
+                                        v.append(result[n])
+                                    else:
+                                        v.append(None)
+                        else:
+                            output_data = self._postprocess(r)
+                            if len(output_data) != len(out.in_names):
                                 logger.error(f"Not all the expected result is received from model {self._model_name}")
                                 continue
-                            # collect the result
-                            for n, v in output_data.items():
-                                if n in result:
-                                    v.append(result[n])
-                                else:
-                                    v.append(None)
-
                         logger.debug(f"Deposit result: {output_data}")
                         out.put(output_data)
 

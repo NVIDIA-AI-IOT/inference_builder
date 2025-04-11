@@ -3,7 +3,7 @@ import json
 from typing import Dict, Optional, List, Union
 import numpy as np
 from inferencemodeltoolkit.interfaces.fastapi import FastApiTritonInterface
-import data_model
+from .data_model import {{ request_class }}, {{ response_class }}, {{ streaming_response_class }}
 from lib.utils import get_logger, create_jinja2_env, convert_list
 from config import global_config
 from omegaconf.errors import ConfigKeyError
@@ -18,7 +18,7 @@ jinja2_env = create_jinja2_env()
 class Interface(FastApiTritonInterface):
     def process_request(
             self,
-            request: data_model.{{ request_class }},
+            request: {{ request_class }},
             headers: Dict[str, str]
     ):
         result = json.loads(request.model_dump_json())
@@ -59,11 +59,11 @@ class Interface(FastApiTritonInterface):
 
     def process_response(
         self,
-        request: data_model.{{ request_class }},
+        request: {{ request_class }},
         response: Dict[str, np.ndarray],
         previous_responses: Optional[List[Dict[str, np.ndarray]]],
         headers
-    ) -> Union[data_model.{{ response_class }}, data_model.{{ streaming_response_class }}]:
+    ) -> Union[{{ response_class }}, {{ streaming_response_class }}]:
         logger.debug(f"Processing response {response}")
         type_map = { i.name: i.data_type for i in global_config.output}
 
@@ -92,7 +92,7 @@ class Interface(FastApiTritonInterface):
                 else:
                     streamed[name] = value
             json_string = jinja2_env.from_string(stpl).render(request=request, response=streamed)
-            return data_model.{{ streaming_response_class }}(**json.loads(json_string))
+            return {{ streaming_response_class }}(**json.loads(json_string))
 
         # Formulating aggregated response from all the responses
         responses = previous_responses + [response]  if previous_responses else [response]
@@ -122,7 +122,7 @@ class Interface(FastApiTritonInterface):
                 else:
                     acc[name] = l
         json_string = jinja2_env.from_string(tpl).render(request=request, response=acc)
-        return data_model.{{ response_class }}(**json.loads(json_string))
+        return {{ response_class }}(**json.loads(json_string))
 
 def main():
     interface = Interface(
@@ -135,6 +135,3 @@ def main():
         triton_timeout_s = 60,
     )
     interface.serve()
-
-if __name__ == "__main__":
-    main()

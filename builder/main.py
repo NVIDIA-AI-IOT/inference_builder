@@ -158,8 +158,9 @@ def build_inference(server_type, config, output_dir: Path):
                 output = triton_tpl.render(backends=[backend], top_level=False)
                 with open (target_dir/"model.py", 'w') as o:
                     o.write(output)
-                if "triton" not in t_backends:
-                    t_backends.append("triton")
+            # triton python backend to communicate with triton fastapi server
+            if "triton" not in t_backends:
+                t_backends.append("triton")
             # write the pbtxt
             pbtxt_str = generate_pbtxt(OmegaConf.to_container(model), backend_spec[1] )
             pbtxt_path = triton_model_repo_dir/model.name/"config.pbtxt"

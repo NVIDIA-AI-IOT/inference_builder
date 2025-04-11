@@ -36,6 +36,8 @@ class GenericInference(InferenceBase):
                 backend_class = TritonBackend
             elif backend_spec[0] == 'deepstream':
                 backend_class = DeepstreamBackend
+            elif backend_spec[0] == 'polygraphy':
+                backend_class = PolygraphBackend
             else:
                 raise Exception(f"Backend {model_config.backend} not supported")
             backend_instance = backend_class(model_config=OmegaConf.to_container(model_config))
@@ -110,8 +112,8 @@ class GenericInference(InferenceBase):
                     # collect the output
                     for k, v in data.items():
                         response_data[k] = v
-                    response_data = self._post_process(response_data)
-                    yield response_data
+                response_data = self._post_process(response_data)
+                yield response_data
             except Exception as e:
                 logger.exception(e)
 

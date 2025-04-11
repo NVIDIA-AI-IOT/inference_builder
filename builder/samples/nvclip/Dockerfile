@@ -1,24 +1,4 @@
-FROM gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-blos-dev271 AS ds_stage
-
-FROM "nvcr.io/nvidia/tritonserver:24.08-py3" AS nim_builder_base
-
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/lib /opt/nvidia/deepstream/deepstream-8.0/lib
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/bin /opt/nvidia/deepstream/deepstream-8.0/bin
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.sh /opt/nvidia/deepstream/deepstream-8.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.txt /opt/nvidia/deepstream/deepstream-8.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/README* /opt/nvidia/deepstream/deepstream-8.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.pdf /opt/nvidia/deepstream/deepstream-8.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/service-maker /opt/nvidia/deepstream/deepstream-8.0/service-maker
-
-RUN /opt/nvidia/deepstream/deepstream-8.0/install.sh
-RUN ln -sf deepstream-8.0 /opt/nvidia/deepstream/deepstream || true
-RUN rm -rf /opt/nvidia/deepstream/deepstream-8.0/lib/gst-plugins/libnvdsgst_udp.so \
-    /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstchromaprint.so \
-    /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstmpeg2enc.so /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstmpeg2dec.so \
-    /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstmpg123.so \
-    /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstopenmpt.so
-
-ENV LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream/lib:/opt/tritonserver/lib/
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-blos-dev271" AS nim_builder_base
 
 ENV NIM_DIR_PATH="/opt/nim" \
     PIP_INDEX_URL=https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple \
@@ -33,43 +13,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
         curl -sSL https://bootstrap.pypa.io/get-pip.py -o get-pip.py \
         && python3 get-pip.py \
         && rm get-pip.py; \
-    else \
-        python3 -m pip install --upgrade pip; \
-    fi \
-# Remove vulnerabilities CVE-2022-29501
-    && apt-get purge -y --auto-remove curl \
-        libslurm37 \
-        libpmi2-0 \
-    && apt-get autoremove -y \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    fi
 
-RUN apt update && apt install -y libyaml-cpp-dev libjson-glib-1.0-0 \
-    libgstreamer1.0-dev \
-    libgstreamer-plugins-base1.0-dev \
-    libgstrtspserver-1.0-dev \
-    libglew-dev \
-    libssl-dev \
-    libopencv-dev \
-    freeglut3-dev \
-    libjpeg-dev \
-    libcurl4-gnutls-dev \
-    libjson-glib-dev \
-    libcairo2-dev \
-    libpango1.0-dev  \
-    libfontconfig1-dev \
-    libfreetype6-dev \
-    libgtk-3-dev \
-    libpng-dev \
-    libgles2-mesa-dev \
-    libegl1-mesa-dev \
-    librabbitmq-dev
-# Installing nimlib with pip assumes nimlib can be found at PIP_INDEX_URL.
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python3 -m venv $NIM_DIR_PATH/.venv \
-    && . $NIM_DIR_PATH/.venv/bin/activate \
-    && pip install nimlib==0.1.47 \
+    pip install nimlib[runtime]==0.8.4 \
     && pip install /opt/nvidia/deepstream/deepstream/service-maker/python/pyservicemaker-0.0.1-py3-none-linux_x86_64.whl
+
 # FROM "nvcr.io/nvidia/tritonserver:24.08-py3" AS nim_final
 
 LABEL com.nvidia.nim.base_image="nvcr.io/nvidia/tritonserver:24.08-py3"
@@ -106,15 +55,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     nim_dependency_handler
 
-
-
 WORKDIR $NIM_DIR_PATH
 
-
-# This should be downloaded by nimlib
-COPY NVCLIP_224_700M_ViTH14.json $NIM_DIR_PATH/model_repo/nvclip_clipa_vit_h14_700M_text/1/NVCLIP_224_700M_ViTH14.json
-COPY nvclip_clipa_vit_h14_700M_text.plan $NIM_DIR_PATH/model_repo/nvclip_clipa_vit_h14_700M_text/1/model.plan
-COPY nvclip_clipa_vit_h14_700M_vision.plan $NIM_DIR_PATH/model_repo/nvclip_clipa_vit_h14_700M_vision/1/model.plan
 # Copy data models.
 ADD nvclip.tgz $NIM_DIR_PATH
 
@@ -133,7 +75,7 @@ RUN touch $NIM_DIR_PATH/start_server.sh && \
 
 	# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 	# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
-    python3 /opt/nim/inference.py & tritonserver --model-repository=/opt/nim/model_repo
+    python3 /opt/nim/__main__.py
 #    while true; do sleep 5; done
 EOF
 

@@ -10,8 +10,7 @@ class OpenclipTokenizer:
         self._tokenizer = open_clip.get_tokenizer("NVCLIP_224_700M_ViTH14")
 
     def __call__(self, *args, **kwargs):
-        strs = [s.decode("utf-8") for s in args[0]]
-        return self._tokenizer(strs)
+        return self._tokenizer(args[0])
 
 class VisionPreprocessor:
     name = "nvclip-vision-preprocessor"
@@ -42,9 +41,9 @@ class NvClipPostProcessor:
     def __call__(self, *args, **kwargs):
         text = args[0].tolist()
         images = args[1].tolist()
+        indices = args[2].tolist()
         total_tokens = sum(len(s) for s in text)
         num_images = len(images)
-        indices = [s.decode("utf-8") for s in args[2]]
         embeddings = []
         for index in indices:
             if index == "text":

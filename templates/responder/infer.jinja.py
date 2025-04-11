@@ -1,4 +1,4 @@
-    async def {{ name }}(self, interface, request, body):
+    async def {{ name }}(self, interface, request, body, *args):
         accept = request.headers.get("accept", "")
         streaming = "application/x-ndjson" in accept
         in_data = self.process_request("{{ name }}", body)
