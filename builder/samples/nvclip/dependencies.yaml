@@ -23,7 +23,6 @@ dependencies:
     - name: "numpy"
       version: "1.26.4"
       extra_installer_args: "--force-reinstall"
-    - name: "inferencemodeltoolkit"
     - name: "omegaconf"
       version: "2.3.0"
 

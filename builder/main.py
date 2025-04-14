@@ -190,61 +190,52 @@ def build_inference(server_type, config, output_dir: Path):
 
 def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
     output_dir = output_dir / "server"
-    # generate pydantic data models from swagger spec
+    # generate pydantic data models and inference base class from swagger spec
     tpl_dir = get_resource_path("templates")
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
-    if server_type == "fastapi":
-        fastapi_tpl_dir = get_resource_path("templates/api_server/fastapi/route")
-        command = (
-            f"fastapi-codegen --input {api_spec.name} --output {output_dir} --output-model-type pydantic_v2.BaseModel "
-            f"--template-dir {fastapi_tpl_dir} -m data_model.py --disable-timestamp"
+    api_tpl_dir = get_resource_path(f"templates/api_server/{server_type}/route")
+    command = (
+        f"fastapi-codegen --input {api_spec.name} --output {output_dir} --output-model-type pydantic_v2.BaseModel "
+        f"--template-dir {api_tpl_dir} -m data_model.py --disable-timestamp"
+    )
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise Exception(f"Failed to generate fastapi data models: {result.stderr}")
+
+    responders = []
+    for name, r in config["responders"].items():
+        responder = {
+            "name": name,
+            "operation": r["operation"],
+        }
+        tpl = jinja_env.get_template(f"responder/{name}.jinja.py")
+        responder["implementation"] = tpl.render(**responder)
+        responders.append(responder)
+    # render the responder.py
+    if server_type == "triton":
+        req_cls = [k for k in config["responders"]["infer"]["requests"].keys()]
+        res_cls = [k for k in config["responders"]["infer"]["responses"].keys()]
+        triton_config = {
+            "request_class": req_cls[0],
+            "response_class": res_cls[0],
+            "streaming_response_class": res_cls[1] if len(res_cls) > 1 else res_cls[0]
+        }
+        svr_tpl = jinja_env.get_template(f"api_server/triton/responder.jinja.py")
+        output = svr_tpl.render(
+            service_name=model_name,
+            responders=responders,
+            triton=triton_config
         )
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise Exception(f"Failed to generate fastapi data models: {result.stderr}")
-
-        responders = []
-        for name, r in config["responders"].items():
-            responder = {
-                "name": name,
-                "operation": r["operation"],
-            }
-            tpl = jinja_env.get_template(f"responder/{name}.jinja.py")
-            responder["implementation"] = tpl.render(**responder)
-            responders.append(responder)
-
-        svr_tpl = jinja_env.get_template(f"api_server/{server_type}/responder.jinja.py")
+    elif server_type == "fastapi":
+        svr_tpl = jinja_env.get_template(f"api_server/fastapi/responder.jinja.py")
         output = svr_tpl.render(
             service_name=model_name,
             responders=responders
         )
-        with open(output_dir/"responder.py", 'w') as f:
-            f.write(output)
     else:
-        output_file = output_dir / "data_model.py"
-        with open(api_spec.name, "r") as f:
-            api_schema = f.read()
-            data_generator.generate(
-                api_schema, output=output_file, output_model_type=data_generator.DataModelType.PydanticV2BaseModel
-            )
-        svr_tpl = jinja_env.get_template(f"api_server/{server_type}/inference.jinja.py")
-        responders = { r: v['path'] for r, v in config["responders"].items() }
-        if 'infer' not in responders:
-            raise Exception("Server configuration must contain infer endpoint")
-        req_cls = [k for k in config["responders"]["infer"]["requests"]]
-        res_cls = [k for k in config["responders"]["infer"]["responses"]]
-        output = svr_tpl.render(
-            service_name=model_name,
-            request_class=req_cls[0],
-            response_class=res_cls[0],
-            streaming_response_class=res_cls[0] if len(res_cls) < 2 else res_cls[1],
-            endpoints=responders
-        )
-        with open(output_dir/"inference.py", 'w') as f:
-            f.write(output)
-
-
-
+        raise ValueError(f"Unsupported server type: {server_type}")
+    with open(output_dir/"responder.py", 'w') as f:
+        f.write(output)
 
 def generate_configuration(config, tree):
     def encode_templates(templates):

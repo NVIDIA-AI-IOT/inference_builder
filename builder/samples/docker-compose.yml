@@ -137,7 +137,7 @@ services:
     user: nvs:1000
     build:
       context: changenet
-      target: nim_builder_base
+      target: nim_final
       dockerfile: Dockerfile
     image: nim-changenet
     volumes:

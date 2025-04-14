@@ -17,11 +17,9 @@ output:
     dims: [ -1 ]
 
 server:
-  endpoints:
-    health:
-      path: "/health/live"
+  responders:
     infer:
-      path: /v1/infer
+      operation: inference
       requests:
         DetectionRequest: >
           {
@@ -38,7 +36,7 @@ server:
 
 models:
 - name: trt_changenet
-  backend: "triton/python/polygraphy"
+  backend: "triton/tensorrt"
   max_batch_size: 1
   parameters:
     FORCE_CPU_ONLY_INPUT_TENSORS: "no"
