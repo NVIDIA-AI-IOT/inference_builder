@@ -3,11 +3,10 @@ import base64
 from concurrent.futures import ThreadPoolExecutor
 import os
 from queue import Queue, Empty
-import tempfile
 from abc import ABC, abstractmethod
-import uuid
 from config import global_config
 from .utils import get_logger, split_tensor_in_dict
+from .codec import ImageDecoder
 import custom
 import transformers
 from omegaconf import OmegaConf
@@ -16,8 +15,7 @@ from typing import Dict, List, Tuple, Union
 import numpy as np
 from collections import namedtuple
 import json
-from pyservicemaker import Pipeline
-from pyservicemaker.utils import MediaChunk, MediaExtractor
+from pyservicemaker import Pipeline, as_tensor
 import torch
 
 
@@ -89,24 +87,33 @@ class DataFlow:
         self._outputs = outputs
         self._queue = Queue()
         self._timeout = timeout
+        self._image_decoder = None
+        for config in configs:
+            if config["data_type"] == "TYPE_CUSTOM_IMAGE_BASE64" and not self._image_decoder:
+                self._image_decoder = ImageDecoder(["JPEG", "PNG"])
 
     def _process_base64_image(self, images: np.ndarray):
-        image_list = []
-        with tempfile.TemporaryDirectory() as temp_dir:
-            for image in images:
-                image_id = str(uuid.uuid4())
-                asset_path = os.path.join(temp_dir, image_id)
-                # Shouldn't we decode the bytes directly?
-                if isinstance(image, np.bytes_) or isinstance(image, bytes):
-                    image = image.decode()
-                elif not isinstance(image, np.str_):
-                    logger.error(f"base64 image must be bytes or string: {type(image)}")
-                    continue
-                with open(asset_path, "wb") as f:
-                    f.write(base64.b64decode(image))
-                frame = MediaExtractor(chunks=[MediaChunk(asset_path)])()[0].get()
-                image_list.append(torch.utils.dlpack.from_dlpack(frame.tensor))
-        return image_list
+        if self._image_decoder is None:
+            logger.exception("Image decoder is not sucessfully created")
+            return
+        for image in images:
+            if isinstance(image, np.bytes_) or isinstance(image, bytes):
+                image = image.decode()
+            elif not isinstance(image, np.str_):
+                logger.error(f"base64 image must be bytes or string: {type(image)}")
+                continue
+            data_prefix, data_payload = image.split(",")
+            mime_type = data_prefix.split(";")[0].split(":")[1]
+            format = None
+            if mime_type == "image/jpeg" or mime_type == "image/jpg":
+                format = "JPEG"
+            elif mime_type == "image/png":
+                format = "PNG"
+            else:
+                raise ValueError(f"Unsupported image format: {mime_type}")
+            data_payload = base64.b64decode(data_payload)
+            tensor = as_tensor(np.frombuffer(data_payload, dtype=np.uint8).copy(), format)
+            return self._image_decoder.decode(tensor, format)
 
     def _process_base64_binary(self, inputs: np.ndarray):
         bytes_list = []
@@ -231,7 +238,6 @@ class Processor(ABC):
         self._config = { 'device_id': 0 }
         if 'config' in config:
             self._config.update(config['config'])
-        self._params = config['kwargs'] if 'kwargs' in config else dict()
         self._name = config['name']
         self._processor = None
 
@@ -254,10 +260,6 @@ class Processor(ABC):
     @property
     def config(self):
         return self._config
-
-    @property
-    def params(self):
-        return self._params.copy()
 
     @abstractmethod
     def __call__(self, *args, **kwargs):
@@ -291,7 +293,7 @@ class CustomProcessor(Processor):
             logger.error(f"Failed to create processor {self.name}")
 
     def __call__(self, *args):
-        ret = self._processor(*args, **self.params)
+        ret = self._processor(*args)
         if not isinstance(ret, tuple):
             ret = ret,
         return ret
@@ -423,8 +425,8 @@ class ModelOperator:
                         if isinstance(r, list):
                             for result in r:
                                 result = self._postprocess(result)
-                                if len(result) != len(out.in_names):
-                                    logger.error(f"Not all the expected result is received from model {self._model_name}")
+                                if not all([n in result for n in out.in_names]):
+                                    logger.error(f"Not all the expected result is received from model {self._model_name}:{out.in_names}")
                                     continue
                                 # collect the result
                                 for n, v in output_data.items():
@@ -434,8 +436,8 @@ class ModelOperator:
                                         v.append(None)
                         else:
                             output_data = self._postprocess(r)
-                            if len(output_data) != len(out.in_names):
-                                logger.error(f"Not all the expected result is received from model {self._model_name}")
+                            if not all([n in output_data for n in out.in_names]):
+                                logger.error(f"Not all the expected result is received from model {self._model_name}:{out.in_names}")
                                 continue
                         logger.debug(f"Deposit result: {output_data}")
                         out.put(output_data)

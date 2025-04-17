@@ -304,7 +304,7 @@ python builder/main.py builder/samples/tao/ds_changenet.yaml --server-type fasta
 
 For Grounding DINO and Mask Grouding DINO:
 ```bash
-python builder/main.py builder/samples/tao/ds_gdino.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao - -t
+python builder/main.py builder/samples/tao/ds_gdino.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -t
 ```
 
 Build inference package with validation:

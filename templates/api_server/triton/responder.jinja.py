@@ -1,7 +1,7 @@
 import json
 from .data_model import {{ triton.request_class }}, {{ triton.response_class }}, {{ triton.streaming_response_class }}
 from config import global_config
-from lib.utils import create_jinja2_env, convert_list
+from lib.utils import create_jinja2_env, convert_list, get_logger
 from typing import Dict, Any, Optional, List, Union
 import numpy as np
 import torch
@@ -19,7 +19,6 @@ infer_operation = "{{responder.operation}}"
 {% endfor %}
 
 jinja2_env = create_jinja2_env()
-
 class TritonInferenceHandlerBridge(TritonInferenceHandler):
     def __init__(self, responder):
         super().__init__(
@@ -28,6 +27,7 @@ class TritonInferenceHandlerBridge(TritonInferenceHandler):
              stream_triton=True,
              stream_http=False)
         self._responder = responder
+        self.logger = get_logger(__name__)
 
     def process_request(
             self,
@@ -45,14 +45,14 @@ class TritonInferenceHandlerBridge(TritonInferenceHandler):
         previous_responses: Optional[List[Dict[str, np.ndarray]]],
         headers
     ) -> Union[{{ triton.response_class }}, {{ triton.streaming_response_class }}]:
-        logger.debug(f"Processing response {response}")
+        self.logger.debug(f"Processing response {response}")
         type_map = { i.name: i.data_type for i in global_config.output}
         # Formulating streaming response
         if hasattr(request, 'stream') and request.stream:
             streamed = dict()
             for name, value in response.items():
                 if value is None:
-                    logger.error(f"{name} in response is None")
+                    self.logger.error(f"{name} in response is None")
                     continue
                 expected_type = type_map[name]
                 if isinstance(value, np.ndarray) or isinstance(value, torch.Tensor):
@@ -98,12 +98,16 @@ class TritonInferenceHandlerBridge(TritonInferenceHandler):
 class TritonResponder(ResponderBase):
     def __init__(self, operations, app):
         super().__init__()
-        self._inference = TritonInferenceHandlerBridge()
-        validator = TritonPydanticValidator(self)
+        self._inference = TritonInferenceHandlerBridge(self)
+        validator = TritonPydanticValidator()
         _, additional_responses = validator._validate_pydantic_hints(self._inference)
+        infer_path = operations[infer_operation]
         # override the infer operation
+        app.router.routes = [
+            route for route in app.router.routes if not (getattr(route, "path", None) == infer_path)
+        ]
         app.post(
-            operations[infer_operation],
+            infer_path,
             response_model_exclude_none=True,
             responses=additional_responses,
         )(self._inference._infer)

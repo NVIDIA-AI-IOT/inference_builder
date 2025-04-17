@@ -64,6 +64,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     nim_dependency_handler
 
+# CVCUDA for pre-processing
+RUN wget https://github.com/CVCUDA/CV-CUDA/releases/download/v0.7.0-beta/cvcuda-lib-0.7.0_beta-cuda12-x86_64-linux.deb \
+https://github.com/CVCUDA/CV-CUDA/releases/download/v0.7.0-beta/cvcuda-dev-0.7.0_beta-cuda12-x86_64-linux.deb \
+https://github.com/CVCUDA/CV-CUDA/releases/download/v0.7.0-beta/cvcuda_cu12-0.7.0b0-cp310-cp310-linux_x86_64.whl && dpkg -i *.deb && pip install ./cvcuda_cu12-0.7.0b0-cp310-cp310-linux_x86_64.whl
+
+
+
 FROM nim_builder_base AS nim_final
 
 WORKDIR $NIM_DIR_PATH
@@ -77,8 +84,8 @@ RUN if [ -e "/usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstnvcodec.so" ]; then \
 RUN rm -rf /root/.cache/gstreamer-1.0/
 RUN mkdir /tmp/assets && chmod -R 777 /tmp/assets
 
-ADD changenet.tgz $NIM_DIR_PATH
-COPY ./model.plan $NIM_DIR_PATH/model_repo/changenet/1/model.plan
+ADD changenet.tgz $NIM_DIR_PATH/
+COPY ./model.plan $NIM_DIR_PATH/model_repo/trt_changenet/1/model.plan
 
 RUN groupadd --gid 1000 --non-unique nvs && \
     useradd --create-home --shell /usr/sbin/nologin --uid 1000 --non-unique --gid 1000 nvs && \
@@ -90,6 +97,7 @@ USER nvs:1000
 ENV LD_LIBRARY_PATH /opt/tritonserver/lib:$LD_LIBRARY_PATH
 ENV NVSTREAMMUX_ADAPTIVE_BATCHING=yes
 ENV NIM_DISABLE_TRITON_STARTUP=1
+ENV NIM_HTTP_API_PORT=8003
 
 #  create entrypoint script at location indicated in NIM Playbook
 RUN touch $NIM_DIR_PATH/start_server.sh && \
