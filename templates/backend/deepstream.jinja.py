@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import base64
 import numpy as np
 from abc import ABC, abstractmethod
-
+import yaml
 
 png_data = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGK6HcwNCAAA//8DTgE8HuxwEQAAAABJRU5ErkJggg==")
 jpg_data = base64.b64decode("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCgr/2wBDAQICAgICAgUDAwUKBwYHCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgr/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD+f+iiigAooooAKKKKACiiigD/2Q==")
@@ -311,6 +311,8 @@ class DeepstreamBackend(ModelBackend):
         if "parameters" not in model_config or "infer_config_path" not in model_config["parameters"]:
             raise Exception("Deepstream pipeline requires infer_config_path")
         infer_config_path = model_config["parameters"]['infer_config_path']
+        if not infer_config_path:
+            raise Exception("Deepstream pipeline requires infer_config_path")
         preprocess_config_path = model_config["parameters"]['preprocess_config_path'] if "preprocess_config_path" in model_config["parameters"] else []
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
@@ -336,7 +338,19 @@ class DeepstreamBackend(ModelBackend):
             raise Exception("Deepstream pipeline requires at least one TYPE_CUSTOM_DS_IMAGE or TYPE_CUSTOM_BINARY_URLS input")
         if self._mime_tensor_name is None:
             raise Exception("Deepstream pipeline requires at least one TYPE_CUSTOM_DS_MIME input")
-
+        # override the network dimensions from  the primary inference config
+        try:
+            with open(infer_config_path[0], 'r') as f:
+                primary_infer_config = yaml.safe_load(f)
+            if "property" in primary_infer_config:
+                property = primary_infer_config["property"]
+                if "infer-dims" in property:
+                    infer_dims = [int(dim) for dim in property["infer-dims"].split(";")]
+                    if len(infer_dims) == 3:
+                        d = (infer_dims[0], infer_dims[1]) if "network-input-order" in property and property["network-input-order"] == 1 else (infer_dims[1], infer_dims[2])
+                        logger.info(f"DeepstreamBackend: overriding network dimensions to {d}")
+        except Exception as e:
+            raise Exception(f"Failed to load primary inference config: {e}")
         # construct the input pools, outputs and pipelines
         self._in_pools = {}
         self._outputs = {}
