@@ -3,6 +3,7 @@ services:
     image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-common:rc0
     volumes:
       - '~/.cache/nim:/opt/nim/.cache'
+      - './validation/rtdetr/model_manifest.yaml:/opt/nim/etc/default/model_manifest.yaml:ro'
     ipc: host
     # init: true
     ports:

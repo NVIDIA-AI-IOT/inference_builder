@@ -151,6 +151,8 @@ ENV LD_LIBRARY_PATH /opt/tritonserver/lib:$LD_LIBRARY_PATH
 ENV NVSTREAMMUX_ADAPTIVE_BATCHING=yes
 ENV NIM_DISABLE_TRITON_STARTUP=1
 
+COPY ./LICENSE ./VERSION $NIM_DIR_PATH
+
 #  create entrypoint script at location indicated in NIM Playbook
 RUN touch $NIM_DIR_PATH/start_server.sh && \
     chmod a+rx $NIM_DIR_PATH/start_server.sh && \
@@ -167,8 +169,20 @@ RUN touch $NIM_DIR_PATH/start_server.sh && \
         rm "\$SYMLINK"
         echo "Symlink deleted: \$SYMLINK"
     fi
-    ln -s \${NIM_CACHE_PATH}/model-repo/\${NIM_MODEL_NAME} "\$SYMLINK"
-    python3 __main__.py
+
+    if [ -f "/opt/nim/etc/default/model_manifest.yaml" ]; then
+        echo "Found model_manifest.yaml, pointing to nim model default path /opt/nim/workspace"
+        # # Create workspace directory if it doesn't exist
+        # mkdir -p /opt/nim/workspace
+        # # Point the symlink to workspace directory before running start_server
+        # ln -s /opt/nim/workspace "\$SYMLINK"
+        # # Update all relative paths in config file to absolute paths
+        start_server
+    else
+        echo "No model_manifest.yaml found, using legacy mode with cache path"
+        ln -s \${NIM_CACHE_PATH}/model-repo/\${NIM_MODEL_NAME} "\$SYMLINK"
+        python3 __main__.py
+    fi
 #    while true; do sleep 5; done
 EOF
 
