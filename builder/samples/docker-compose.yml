@@ -169,7 +169,7 @@ services:
     # command: ["-c", "sleep infinity"]
     volumes:
       - '~/.cache/nim:/opt/nim/.cache'
-      - './tao/validation/rtdetr/model_manifest.yaml:/opt/nim/etc/default/model_manifest.yaml:ro'
+      - './tao/validation/cls/model_manifest.yaml:/opt/nim/etc/default/model_manifest.yaml:ro'
     ipc: host
     # init: true
     ports:
@@ -183,6 +183,7 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
-#      DEBUG: 1
-      NIM_MODEL_NAME: fm_rtdetr
+      DEBUG: 1
+      # no need anymore, if mount model_manifest.yaml
+      # NIM_MODEL_NAME: fm_rtdetr
       NGC_API_KEY: ${NGC_API_KEY}
