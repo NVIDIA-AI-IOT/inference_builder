@@ -26,12 +26,22 @@ class ResponderBase:
         except ConfigKeyError:
             raise ValueError("No responders found in the config")
         for rp, value in input_config.items():
-            req_tpls = value.get("requests", None)
-            if req_tpls:
-                self._request_templates[rp] = { k: base64.b64decode(tpl).decode() for k, tpl in req_tpls.items() if tpl}
-            res_tpls = value.get("responses", None)
-            if res_tpls:
-                self._response_templates[rp] = { k: base64.b64decode(tpl).decode() for k, tpl in res_tpls.items() if tpl}
+            req_tpls = value.get("requests", {})
+            for k, tpl in req_tpls.items():
+                if rp not in self._request_templates:
+                    self._request_templates[rp] = {}
+                if isinstance(tpl, list):
+                    self._request_templates[rp][k] = tpl
+                else:
+                    self._request_templates[rp][k] = base64.b64decode(tpl).decode()
+            res_tpls = value.get("responses", {})
+            for k, tpl in res_tpls.items():
+                if rp not in self._response_templates:
+                    self._response_templates[rp] = {}
+                if isinstance(tpl, list):
+                    self._response_templates[rp][k] = tpl
+                else:
+                    self._response_templates[rp][k] = base64.b64decode(tpl).decode()
 
     async def take_action(self, action_name:str, *args):
         action = self._action_map.get(action_name, None)
@@ -61,7 +71,7 @@ class ResponderBase:
                 continue
             if isinstance(value, list):
                 # this is regex filter for fields
-                text = result[key]
+                text = result.pop(key)
                 if not isinstance(text, str):
                     continue
                 regx = value[0]
@@ -71,12 +81,8 @@ class ResponderBase:
                     if len(keys) != len(match):
                         continue
                     for x, y in zip(keys, match):
-                        if x == '-':
-                            # '-' represents replacing
-                            result[key] = text.replace(y, "", 1)
-                        if not x:
-                            continue
-                    result[x].append(y)
+                        if y:
+                            result.setdefault(x, []).append(y)
         return result
 
     def process_response(self, responder: str, request, response: Dict[str, Any]) -> str:

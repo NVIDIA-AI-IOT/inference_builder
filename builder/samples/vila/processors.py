@@ -1,5 +1,26 @@
 import os, json
 import numpy as np
+import transformers
+
+class VilaTokenizer:
+    name = "vila-tokenizer"
+    def __init__(self, config):
+        self._is_encoder = config["is_encoder"]
+        if not self._is_encoder:
+            self._skip_special_tokens = config["skip_special_tokens"]
+        self._tokenizer = transformers.AutoTokenizer.from_pretrained(config["model_path"])
+
+    def __call__(self, *args):
+        if self._is_encoder:
+            msg_strs = [ v.decode() for v in args[0] ]
+            output = self._tokenizer(*msg_strs)
+            return np.array(output["input_ids"])
+        else:
+            ids_list = args[0]
+            text_list = []
+            for ids in ids_list:
+                text_list.append(self._tokenizer.decode(ids, skip_special_tokens=self._skip_special_tokens))
+            return np.array(text_list, dtype=np.string_)
 
 class VilaMuxer:
     name = "vila-muxer"

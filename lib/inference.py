@@ -203,32 +203,6 @@ class ModelBackend(ABC):
     def stop(self):
         logger.info(f'Backend for {self._model_config["name"]} stopped')
 
-class Tokenizer:
-    def __init__(self, config: Dict, check_point_dir, model_path: str):
-        self._type = config['type'] if "type" in config else 'auto'
-        self._model_path = config['model_path'] if 'model_path' in config else model_path
-        self._encoder_config = config["encoder"]
-        self._decoder_config = config["decoder"]
-        self._tokenizer = None
-        if self._type == 'auto':
-            logger.info(f"Loading pretrained tokenizer from {model_path}")
-            self._tokenizer = transformers.AutoTokenizer.from_pretrained(
-                os.path.join(check_point_dir, self._model_path), use_fast=True, use_legacy=False)
-
-    @property
-    def decoder_config(self):
-        return self._decoder_config
-
-    @property
-    def encoder_config(self):
-        return self._encoder_config
-
-    def encode(self, *args):
-        return self._tokenizer(*args)
-
-    def decode(self, *args, **kwargs):
-        return self._tokenizer.decode(args, kwargs)
-
 class Processor(ABC):
     def __init__(self, config: Dict):
         self._name = config['name']
@@ -306,7 +280,6 @@ class ModelOperator:
         self._in: List[DataFlow] = []
         self._out: List[DataFlow] = []
         self._running = False
-        self._tokenizer = None
         self._preprocessors = []
         self._postprocessors = []
         self._model_config = model_config
@@ -353,12 +326,6 @@ class ModelOperator:
         logger.debug(f"Model operator for {self._model_name} started")
 
         # create preprocessors
-        if "tokenizer" in self._model_config:
-            self._tokenizer = Tokenizer(
-                config=self._model_config["tokenizer"],
-                check_point_dir=self._check_point_dir,
-                model_path=self._model_name
-            )
         for kind, processors in [("preprocessors", self._preprocessors), ("postprocessors", self._postprocessors)]:
             if kind in self._model_config:
                 for config in self._model_config[kind]:
@@ -394,14 +361,6 @@ class ModelOperator:
                     continue
                 message = "Completed"
                 logger.debug(f"Input collected: {kwargs}")
-                # apply tokenizer if required
-                if self._tokenizer:
-                    selected = self._tokenizer.encoder_config[0]
-                    value = kwargs.pop(selected)
-                    msg_str = [ v.decode() for v in value ]
-                    tokenized = self._tokenizer.encode(*msg_str)
-                    o_key = self._tokenizer.encoder_config[1]
-                    kwargs[o_key] = np.array(tokenized[o_key])
                 if any([isinstance(v, list) for _, v in kwargs.items()]):
                     # construct multiple inference requests
                     args = split_tensor_in_dict(kwargs)
@@ -450,7 +409,6 @@ class ModelOperator:
                 out.put(Stop(message))
 
     def _preprocess(self, args: List):
-        print(f"preprocess: {args}")
         # go through the preprocess chain
         outcome = args
         for preprocessor in self._preprocessors:
@@ -561,6 +519,7 @@ class InferenceBase:
             for k, v in global_config.routes.items():
                 route = parse_route(k, v)
                 logger.debug(f"Adding route {route}")
+                #neither source nor target model is specified.
                 if not route.model.source and not route.model.target:
                     # this is a direct passthrough from input to output, we can use a standalone dataflow
                     if not route.data.source:
@@ -570,6 +529,7 @@ class InferenceBase:
                     dataflow = DataFlow(configs, route.data.target if route.data.target else route.data.source)
                     self._inputs.append(dataflow)
                     self._outputs.append(dataflow)
+                #only target model is specified.
                 elif route.model.target:
                     operator = next((o for o in self._operators if o.model_name == route.model.target), None)
                     if operator is None:
@@ -593,13 +553,18 @@ class InferenceBase:
                             configs = [OmegaConf.to_container(c) for c in global_config.input]
                         self._inputs.append(operator.bind_input(configs, route.data.target))
                         pass
+                #only source model is specified.
                 elif route.model.source:
                     # this is the top level output
                     operator = next((o for o in self._operators if o.model_name == route.model.source), None)
                     if operator is None:
                         logger.error(f"Model {route.model.source} in the routes not found")
                         continue
-                    self._outputs.append(operator.export_output(route.data.source, route.data.target))
+                    configs = [OmegaConf.to_container(c) for c in global_config.output]
+                    output_names = [c['name'] for c in configs]
+                    dataflow = DataFlow(configs, output_names)
+                    self._outputs.append(dataflow)
+                    operator.import_output(dataflow)
                 else:
                     logger.warning("Empty route entry")
         elif  len(self._operators) == 1:

@@ -11,18 +11,9 @@
 ################################################################################
 
 
-FROM gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:7.1.0-triton-blos-dev125 AS ds_stage
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-blos-dev271" AS ds_stage
 
 RUN apt update && apt install -y --no-install-recommends cmake git-lfs
-
-RUN cd /opt/nvidia/deepstream/deepstream/sources \
-    && git clone -b v1.1.11 --depth 1 https://github.com/NVIDIA-AI-IOT/deepstream_python_apps.git \
-    && cd deepstream_python_apps \
-    && git submodule update --init \
-    && mkdir -p bindings/build \
-    && cd bindings/build \
-    && cmake .. && make -j8 \
-    && pip install ./pyds-1.1.11-py3-none*.whl
 
 # Final docker base
 # 24.06 does not work with DS7.0, back to 24.05
@@ -50,23 +41,21 @@ RUN apt update && apt install -y --no-install-recommends python3-gi \
 
 RUN apt remove libslurm37 libpmi2-0 -y
 
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/lib /opt/nvidia/deepstream/deepstream-7.1/lib
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/bin /opt/nvidia/deepstream/deepstream-7.1/bin
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/*.sh /opt/nvidia/deepstream/deepstream-7.1/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/*.txt /opt/nvidia/deepstream/deepstream-7.1/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/README* /opt/nvidia/deepstream/deepstream-7.1/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/*.pdf /opt/nvidia/deepstream/deepstream-7.1/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-7.1/service-maker /opt/nvidia/deepstream/deepstream-7.1/service-maker
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/lib /opt/nvidia/deepstream/deepstream-8.0/lib
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/bin /opt/nvidia/deepstream/deepstream-8.0/bin
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.sh /opt/nvidia/deepstream/deepstream-8.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.txt /opt/nvidia/deepstream/deepstream-8.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/README* /opt/nvidia/deepstream/deepstream-8.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.pdf /opt/nvidia/deepstream/deepstream-8.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/service-maker /opt/nvidia/deepstream/deepstream-8.0/service-maker
 
-RUN /opt/nvidia/deepstream/deepstream-7.1/install.sh
-RUN ln -sf deepstream-7.1 /opt/nvidia/deepstream/deepstream || true
-RUN rm -rf /opt/nvidia/deepstream/deepstream-7.1/lib/gst-plugins/libnvdsgst_udp.so \
+RUN /opt/nvidia/deepstream/deepstream-8.0/install.sh
+RUN ln -sf deepstream-8.0 /opt/nvidia/deepstream/deepstream || true
+RUN rm -rf /opt/nvidia/deepstream/deepstream-8.0/lib/gst-plugins/libnvdsgst_udp.so \
     /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstchromaprint.so \
     /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstmpeg2enc.so /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstmpeg2dec.so \
     /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstmpg123.so \
     /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstopenmpt.so
-
-RUN --mount=type=bind,from=ds_stage,source=/opt/nvidia/deepstream/deepstream/sources/deepstream_python_apps/bindings/build,target=/tmp/ds-bindings-build pip install /tmp/ds-bindings-build/pyds*whl --no-deps
 
 ENV LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream/lib:/opt/tritonserver/lib/
 
@@ -80,18 +69,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends rapidjson-dev p
 
 FROM base_stage AS dev_base
 
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install nimlib[runtime]==0.8.4 inferencemodeltoolkit==1.0.11 --extra-index-url https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple
+
 # VILA dependencies
 RUN pip uninstall transformer-engine opencv -y
 RUN pip install git+https://github.com/bfshi/scaling_on_scales.git \
     flash-attn \
     transformers==4.36.2 \
     cupy-cuda12x==12.3.0 \
+    grpcio==1.67.1 \
     --no-build-isolation --no-cache-dir \
     --extra-index-url https://pypi.nvidia.com
-
-# fasttritonapi dependencies
-RUN pip install tritonclient==2.45.0 inferencemodeltoolkit==0.2.27 ipdb \
-    --no-cache-dir --pre --extra-index-url https://urm.nvidia.com/artifactory/api/pypi/hw-dl-algo-bermuda-pypi/simple
 
 RUN pip install /opt/nvidia/deepstream/deepstream/service-maker/python/pyservicemaker-0.0.1-py3-none-linux_x86_64.whl
 RUN pip install omegaconf==2.3.0
@@ -127,9 +116,11 @@ ENV MODEL_NAME="vila"
 # orignal model dir
 ENV VILA_MODEL_NAME="vila1.5-13b"
 
+# fasttritonapi port
+ENV NIM_HTTP_API_PORT=8003
+
 # CVE
 RUN pip install aiohttp==3.9.4 pyarrow==16.1.0 --no-cache-dir --pre
-RUN apt update && apt install -y --no-install-recommends openssh-client=1:8.9p1-3ubuntu0.10
 
 FROM dev_base AS api_server
 
@@ -151,13 +142,8 @@ ENV CHECKPOINTS_DIR=/workspace/checkpoints
 ENV NVCF_METER_EVENT=AIPlayground_Inference
 
 
-ADD ./lib /workspace/lib
-ADD ./custom /workspace/custom
-ADD ./model_repo /workspace/model_repo
+ADD ./vila.tgz /workspace/
 ADD ./server_run.sh /workspace/
-ADD ./inference.py /workspace/
-ADD ./data_model.py /workspace/
-ADD ./config.py /workspace/
 
 
 ENV PYTHONPATH="/workspace/VILA:/workspace:${PYTHONPATH}"

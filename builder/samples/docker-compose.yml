@@ -19,7 +19,7 @@ services:
     image: nim-vila:0.7.0
     volumes:
       # correct the below mapping for your vila checkpoints
-      - '/opt/models/via-models/vila/checkpoints/optimized:/config/models/vila'
+      - '~/.cache/nim/model-repo/vila/optimized/:/config/models/vila'
 
     ipc: host
     # init: true

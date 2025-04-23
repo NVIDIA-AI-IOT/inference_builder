@@ -58,7 +58,7 @@ export WORLD_SIZE=$world_size
 
 if [ $world_size -eq 1 ]; then
     command="tritonserver --model-repository=/workspace/model_repo --exit-timeout-secs=2 --http-header-forward-pattern '.*' --grpc-header-forward-pattern '.*' --log-verbose=$TRITION_VERBOSE --log-warning=true --log-error=true --log-info=true"
-    python3 inference.py & eval "$command"
+    python3 __main__.py & eval "$command"
 else
     command='mpirun --allow-run-as-root'
     for i in $(seq 0 "$(($world_size-1))"); do
@@ -71,6 +71,6 @@ else
         fi
         command="$command"" -n 1 tritonserver --model-repository=/workspace/model_repo --exit-timeout-secs=2 --model-control-mode=explicit --load-model=${loads} --backend-config=python,shm-region-prefix-name=prefix${i}_ --http-header-forward-pattern '.*' --grpc-header-forward-pattern '.*' --log-verbose=$TRITION_VERBOSE --log-warning=true --log-error=true --log-info=true :";
     done
-    python3 inference.py & eval "$command"
+    python3 __main__.py & eval "$command"
 fi
 
