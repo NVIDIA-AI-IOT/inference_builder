@@ -19,5 +19,5 @@
                     response = self.process_response("infer", request, result)
                 return 200, response
         except Exception as e:
-            self.logger.error(f"Inference failed: {e}")
+            self.logger.error(f"Inference failed: {type(e).__name__}: {e}")
             return 500, str(e)
