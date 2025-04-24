@@ -410,10 +410,14 @@ class ModelOperator:
                     continue
                 # execute inference backend and collect result
                 for r in self._backend(*args, **kwargs):
+                    if not self._out:
+                        logger.error(f"No output data flow is bound to model {self._model_name}, please check the route configuration")
+                        continue
                     # iterate the result list and postprocess each of them
                     for out in self._out:
                         output_data = {n : [] for n in out.in_names}
                         if isinstance(r, list):
+                            # we get a batch
                             for result in r:
                                 result = self._postprocess(result)
                                 if not all([n in result for n in out.in_names]):
@@ -642,7 +646,9 @@ class InferenceBase:
                         configs = [OmegaConf.to_container(c) for c in global_config.output]
                     if route.data.source and route.data.source != [c['name'] for c in configs]:
                         logger.warning(f"Source and target are different for the output of {operator.model_name}, remember to add top level postprocessor")
-                        self._outputs.append(DataFlow(configs=None, tensor_names=[(i, i) for i in route.data.source]))
+                        dataflow = DataFlow(configs=None, tensor_names=[(i, i) for i in route.data.source])
+                        operator.import_output(dataflow)
+                        self._outputs.append(dataflow)
                     else:
                         self._outputs.append(operator.bind_output(configs))
                 else:
