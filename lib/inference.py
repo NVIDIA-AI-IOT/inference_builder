@@ -643,16 +643,17 @@ class InferenceBase:
                         logger.error(f"Model {route.model.source} in the routes not found")
                         continue
                     if route.data.target:
+                        configs = [OmegaConf.to_container(c) for c in global_config.output if c.name in route.data.target]
+                        self._outputs.append(operator.bind_output(configs, route.data.source))
+                    else:
                         configs = [OmegaConf.to_container(c) for c in global_config.output if c.name in route.data.source]
-                    else:
-                        configs = [OmegaConf.to_container(c) for c in global_config.output]
-                    if route.data.source and route.data.source != [c['name'] for c in configs]:
-                        logger.warning(f"Source and target are different for the output of {operator.model_name}, remember to add top level postprocessor")
-                        dataflow = DataFlow(configs=None, tensor_names=[(i, i) for i in route.data.source])
-                        operator.import_output(dataflow)
-                        self._outputs.append(dataflow)
-                    else:
-                        self._outputs.append(operator.bind_output(configs))
+                        if route.data.source == [c['name'] for c in configs]:
+                            self._outputs.append(operator.bind_output(configs))
+                        else:
+                            logger.warning(f"Output of {operator.model_name} is not compatible with top level output, check the route or consider adding a postprocessor")
+                            dataflow = DataFlow(configs=None, tensor_names=[(i, i) for i in route.data.source])
+                            operator.import_output(dataflow)
+                            self._outputs.append(dataflow)
                 else:
                     logger.warning("Empty route entry")
         elif  len(self._operators) == 1:
