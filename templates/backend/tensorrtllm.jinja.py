@@ -19,8 +19,8 @@ def trt_dtype_to_torch(dtype):
 
 class TensorRTLLMBackend(ModelBackend):
     """Python TensorRT Backend"""
-    def __init__(self, model_config:Dict, device_id: int=0):
-        super().__init__(model_config, device_id)
+    def __init__(self, model_config:Dict, model_home: str, device_id: int=0):
+        super().__init__(model_config, model_home, device_id)
         self._model_name = model_config["name"]
         self._output_names = [o['name'] for o in model_config['output']]
         self._device = f"cuda:{device_id}"

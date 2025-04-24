@@ -292,8 +292,8 @@ class MetadataOutput(BaseTensorOutput):
 
 class DeepstreamBackend(ModelBackend):
     """Deepstream backend using pyservicemaker"""
-    def __init__(self, model_config:Dict, device_id: int=0):
-        super().__init__(model_config, device_id)
+    def __init__(self, model_config:Dict, model_home: str, device_id: int=0):
+        super().__init__(model_config, model_home, device_id)
         self._max_batch_size = model_config["max_batch_size"]
         self._model_name = model_config["name"]
         self._output_names = [o['name'] for o in model_config['output']]
@@ -340,7 +340,10 @@ class DeepstreamBackend(ModelBackend):
             raise Exception("Deepstream pipeline requires at least one TYPE_CUSTOM_DS_MIME input")
         # override the network dimensions from  the primary inference config
         try:
-            with open(infer_config_path[0], 'r') as f:
+            primary_infer_config_path = infer_config_path[0]    
+            if not os.path.isabs(primary_infer_config_path):
+                primary_infer_config_path = os.path.join(self._model_home, primary_infer_config_path)
+            with open(primary_infer_config_path, 'r') as f:
                 primary_infer_config = yaml.safe_load(f)
             if "property" in primary_infer_config:
                 property = primary_infer_config["property"]
@@ -379,9 +382,15 @@ class DeepstreamBackend(ModelBackend):
             probe = Probe('tensor_retriver', output)
             flow = flow.inject(in_pool.image_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=1000, live_source=False, width=d[1], height=d[0])
             for config in preprocess_config_path:
-                flow = flow.preprocess(config, None if not require_extra_input else lambda: self._in_pools[media].generic_input.generate())
+                config_file = config
+                if not os.path.isabs(config):
+                    config_file = os.path.join(self._model_home, config)
+                flow = flow.preprocess(config_file, None if not require_extra_input else lambda: self._in_pools[media].generic_input.generate())
             for config in infer_config_path:
-                flow = flow.infer(config, with_triton, batch_size=self._max_batch_size)
+                config_file = config
+                if not os.path.isabs(config):
+                    config_file = os.path.join(self._model_home, config)
+                flow = flow.infer(config_file, with_triton, batch_size=self._max_batch_size)
             flow = flow.attach(probe).render(RenderMode.DISCARD, enable_osd=False)
             pipeline.start()
             # warm up

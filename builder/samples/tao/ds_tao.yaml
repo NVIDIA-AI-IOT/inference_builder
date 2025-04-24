@@ -1,4 +1,5 @@
 name: "tao"
+model_repo: "/opt/nim/.cache/model-repo"
 
 input:
 - name: image
@@ -124,4 +125,4 @@ models:
     dims: [ -1 ]
   parameters:
     infer_config_path:
-      - /opt/nim/.cache/model-repo/tao/nvdsinfer_config.yaml
+      - nvdsinfer_config.yaml

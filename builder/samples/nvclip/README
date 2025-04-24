@@ -4,9 +4,9 @@ Before generating usable nvclip NIM, we need optimized tensorrt engines in hand.
 
 The following files must be present in the cache directory:
 
-- NVCLIP_224_700M_ViTH14.json
-- nvclip_clipa_vit_h14_700M_text.plan
-- nvclip_clipa_vit_h14_700M_vision.plan
+- nvclip_clipa_vit_h14_700M_text/VCLIP_224_700M_ViTH14.json
+- nvclip_clipa_vit_h14_700M_text/model.plan
+- nvclip_clipa_vit_h14_700M_vision/model.plan
 
 Build the NIM inference flow:
 

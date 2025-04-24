@@ -6,7 +6,7 @@ Prepare the TRT engine file following instruction from https://gitlab-master.nvi
 Build the NIM inference flow:
 
 cd builder
-python main.py samples/changenet/trt_changenet.yaml -a samples/changenet/openapi.yaml -c samples/changenet/processors.py -o samples -t
+python main.py samples/changenet/trt_changenet.yaml -a samples/changenet/openapi.yaml -c samples/changenet/processors.py -o samples/changenet -t
 
 Build and run the docker image:
 

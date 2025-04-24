@@ -2,9 +2,9 @@
 
 class TritonBackend(ModelBackend):
     """Triton Python Backend"""
-    def __init__(self, model_config: Dict):
-        logger.debug(f"model_config: {model_config}")
-        super().__init__(model_config)
+    def __init__(self, model_config: Dict, model_home: str):
+        logger.debug(f"model_config: {model_config}, model_home: {model_home}")
+        super().__init__(model_config, model_home)
         self._model_name = model_config["name"]
         self._input_names = [i['name'] for i in model_config['input']]
         self._output_names = [o['name'] for o in model_config['output']]
@@ -84,9 +84,9 @@ from tritonclient.utils import *
 
 class TritonBackend(ModelBackend):
     """Triton Python Backend"""
-    def __init__(self, model_config: Dict):
+    def __init__(self, model_config: Dict, model_home: str):
         logger.debug(f"model_config: {model_config}")
-        super().__init__(model_config)
+        super().__init__(model_config, model_home)
         self._model_name = model_config["name"]
         self._input_names = [i['name'] for i in model_config['input']]
         self._output_names = [o['name'] for o in model_config['output']]

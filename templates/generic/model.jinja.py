@@ -25,8 +25,9 @@ class GenericInference(InferenceBase):
 
 
     def initialize(self, *args):
-        logger.info(f"CHECKPOINTS_DIR: {CHECKPOINTS_DIR}")
-        super().initialize(check_point_dir=CHECKPOINTS_DIR)
+        model_repo = global_config.model_repo
+        logger.info(f"Model Repository: {model_repo}")
+        super().initialize(model_repo)
         for operator in self._operators:
             model_config = next((m for m in global_config.models if m.name == operator.model_name), None)
             backend_spec = model_config.backend.split('/')
@@ -40,7 +41,10 @@ class GenericInference(InferenceBase):
                 backend_class = PolygraphBackend
             else:
                 raise Exception(f"Backend {model_config.backend} not supported")
-            backend_instance = backend_class(model_config=OmegaConf.to_container(model_config))
+            backend_instance = backend_class(
+                model_config=OmegaConf.to_container(model_config),
+                model_home=os.path.join(model_repo, operator.model_name)
+            )
             self._submit(operator, backend_instance)
         # post processing:
         self._processors = []
@@ -49,7 +53,7 @@ class GenericInference(InferenceBase):
             for config in configs:
                 if config["kind"] == "custom":
                     self._processors.append(
-                        CustomProcessor(config, CHECKPOINTS_DIR, global_config.name)
+                        CustomProcessor(config, model_repo)
                     )
 
         # thread executor for async bridge

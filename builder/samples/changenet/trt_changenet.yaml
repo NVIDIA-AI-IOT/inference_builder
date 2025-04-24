@@ -1,4 +1,5 @@
 name: "changenet"
+model_repo: /opt/nim/model_repo/
 
 input:
   - name: "reference_image"

@@ -219,13 +219,18 @@ inbound_dataflow_mapping = {
 }
 class ModelBackend(ABC):
     """Interface for standardizing the model backend """
-    def __init__(self, model_config: Dict, device_id=0):
+    def __init__(self, model_config: Dict, model_home: str, device_id=0):
         self._model_config = model_config
+        self._model_home = model_home
         self._device_id = device_id
 
     @property
     def device_id(self):
         return self._device_id
+
+    @property
+    def model_home(self):
+        return self._model_home
 
     @abstractmethod
     def __call__(self, *args, **kwargs):
@@ -235,7 +240,7 @@ class ModelBackend(ABC):
         logger.info(f'Backend for {self._model_config["name"]} stopped')
 
 class Processor(ABC):
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, model_home: str):
         self._name = config['name']
         self._kind = config['kind'] if 'kind' in config else 'auto'
         self._input = config['input'] if 'input' in config else []
@@ -245,7 +250,7 @@ class Processor(ABC):
             self._config.update(config['config'])
         self._name = config['name']
         self._processor = None
-
+        self._model_home = model_home
     @property
     def name(self):
         return self._name
@@ -266,19 +271,21 @@ class Processor(ABC):
     def config(self):
         return self._config
 
+    @property
+    def model_home(self):
+        return self._model_home
+
     @abstractmethod
     def __call__(self, *args, **kwargs):
         pass
 
 class AutoProcessor(Processor):
     """AutoPrrocessor loads the preprocessor from pretrained"""
-    def __init__(self, config: Dict, check_point_dir: str, model_path: str):
-        super().__init__(config)
-        if "model_path" in config:
-            model_path = config["model_path"]
-        self._processor = transformers.AutoProcessor.from_pretrained(os.path.join(check_point_dir, model_path))
+    def __init__(self, config: Dict, model_home: str):
+        super().__init__(config, model_home)
+        self._processor = transformers.AutoProcessor.from_pretrained(model_home)
         if self._processor is None:
-            logger.error(f"Failed to load AutoProcessor from {model_path}")
+            logger.error(f"Failed to load AutoProcessor from {model_home}")
 
     def __call__(self, *args):
         # TODO value parser should be configurable
@@ -286,11 +293,9 @@ class AutoProcessor(Processor):
 
 class CustomProcessor(Processor):
     """CustomProcessor loads the processor from custom module"""
-    def __init__(self, config: Dict, check_point_dir: str, model_path: str):
-        super().__init__(config)
-        if "model_path" not in self.config:
-            self.config["model_path"] = model_path
-        self.config["model_path"] = os.path.join(check_point_dir, self.config["model_path"])
+    def __init__(self, config: Dict, model_home: str):
+        super().__init__(config, model_home)
+        self.config["model_home"] = model_home
         self._processor = custom.create_instance(self.name, self.config)
         if self._processor is not None:
             logger.info(f"Custom processor {self._processor.name} created")
@@ -305,9 +310,9 @@ class CustomProcessor(Processor):
 
 class ModelOperator:
     """An model operator runs a single model"""
-    def __init__(self, model_config:Dict, check_point_dir: str):
+    def __init__(self, model_config:Dict, model_repo: str):
         self._model_name = model_config["name"]
-        self._check_point_dir = check_point_dir
+        self._model_home = os.path.join(model_repo, self._model_name)
         self._in: List[DataFlow] = []
         self._out: List[DataFlow] = []
         self._running = False
@@ -372,8 +377,7 @@ class ModelOperator:
                         processors.append(
                             ProcessorClass(
                                 config=config,
-                                check_point_dir=self._check_point_dir,
-                                model_path=self._model_name
+                                model_home=self._model_home
                             )
                         )
                     else:
@@ -513,7 +517,7 @@ class ModelOperator:
 
 class InferenceBase:
     """The base model that drives the inference flow"""
-    def initialize(self, check_point_dir: str):
+    def initialize(self, model_repo: str):
         def parse_route(i1, i2) -> Route:
             m1 = ''
             m2 = ''
@@ -547,10 +551,15 @@ class InferenceBase:
         self._outputs: List[DataFlow] = []
         self._input_config = OmegaConf.to_container(global_config.input)
         self._output_config = OmegaConf.to_container(global_config.output)
+        self._model_repo = model_repo
+
+        if not os.path.exists(self._model_repo):
+            logger.error(f"Model repository {self._model_repo} does not exist")
+            raise Exception(f"Model repository {self._model_repo} does not exist")
 
         # set up the inference flow
         for model_config in global_config.models:
-            self._operators.append(ModelOperator(OmegaConf.to_container(model_config), check_point_dir))
+            self._operators.append(ModelOperator(OmegaConf.to_container(model_config), self._model_repo))
 
         if hasattr(global_config, "routes"):
             # go through the routing table

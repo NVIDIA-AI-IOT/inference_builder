@@ -6,7 +6,7 @@ class OpenclipTokenizer:
     name = "openclip-tokenizer"
     def __init__(self, config):
         import open_clip
-        open_clip.add_model_config(config["model_path"])
+        open_clip.add_model_config(config["model_home"])
         self._tokenizer = open_clip.get_tokenizer("NVCLIP_224_700M_ViTH14")
 
     def __call__(self, *args, **kwargs):

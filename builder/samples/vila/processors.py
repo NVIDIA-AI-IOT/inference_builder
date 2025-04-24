@@ -8,7 +8,7 @@ class VilaTokenizer:
         self._is_encoder = config["is_encoder"]
         if not self._is_encoder:
             self._skip_special_tokens = config["skip_special_tokens"]
-        self._tokenizer = transformers.AutoTokenizer.from_pretrained(config["model_path"])
+        self._tokenizer = transformers.AutoTokenizer.from_pretrained(config["model_home"])
 
     def __call__(self, *args):
         if self._is_encoder:
@@ -25,8 +25,8 @@ class VilaTokenizer:
 class VilaMuxer:
     name = "vila-muxer"
     def __init__(self, config):
-        model_path = config["model_path"]
-        llm_config_path = os.path.join(model_path, "fp16", "1-gpu", "config.json")
+        model_home = config["model_home"]
+        llm_config_path = os.path.join(model_home, "fp16", "1-gpu", "config.json")
         with open(llm_config_path, "r") as f:
             config = json.load(f)
             self.vocab_size = config["pretrained_config"]["vocab_size"]
@@ -43,9 +43,9 @@ class VilaMuxer:
 class VilaVisionEncoderProcessor:
     name = "vila-preprocessor"
     def __init__(self, config):
-        model_path = config["model_path"]
+        model_home = config["model_home"]
         from llava.model.multimodal_encoder.siglip.image_processing_siglip import SiglipImageProcessor
-        self._preprocessor = SiglipImageProcessor.from_pretrained(model_path)
+        self._preprocessor = SiglipImageProcessor.from_pretrained(model_home)
 
     def __call__(self, *args, **kwargs):
         return self._preprocessor(*args)['pixel_values'][0],
