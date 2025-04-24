@@ -101,8 +101,10 @@ class DataFlow:
         processed = tensor
         if self._inbound:
             if data_type == "TYPE_CUSTOM_BINARY_URLS":
+                logger.debug(f"DataFlow _process_custom_data: {data_type}")
                 processed = [input for input in tensor]
             elif data_type == "TYPE_CUSTOM_BINARY_BASE64":
+                logger.debug(f"DataFlow _process_custom_data: {data_type}")
                 processed = []
                 for input in tensor:
                     if isinstance(input, np.bytes_) or isinstance(input, bytes):
@@ -150,7 +152,6 @@ class DataFlow:
             if self._inbound or self._outbound:
                 config = self.get_config(i_name)
                 if config and not config["data_type"] in np_datatype_mapping and isinstance(tensor, np.ndarray):
-                    logger.debug(f"Processing custom data type: {config['data_type']}")
                     collected[o_name] = self._process_custom_data(tensor, config["data_type"])
                 else:
                     collected[o_name] = tensor
@@ -183,9 +184,10 @@ class ImageInputDataFlow(DataFlow):
         self._image_decoder = ImageDecoder(["JPEG", "PNG"])
 
     def _process_custom_data(self, images: np.ndarray, data_type: str):
+        logger.debug(f"ImageInputDataFlow _process_custom_data: {data_type}")
         if self._image_decoder is None:
             return Error("Image decoder is not sucessfully created")
-        if data_type == "TYPE_CUSTOM_BASE64_IMAGE":
+        if data_type == "TYPE_CUSTOM_IMAGE_BASE64":
             return self._process_base64_image(images)
         else:
             return super()._process_custom_data(images, data_type)

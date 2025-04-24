@@ -191,7 +191,7 @@ models:
 routes: {
   ':["prompt", "request_output_len", "temperature", "streaming"]': 'vila1.5-13b',
   ':["images"]': "visionenc",
-  "visionenc": 'vila1.5-13b:',
+  'visionenc:["features"]': 'vila1.5-13b:',
   'vila1.5-13b:["text"]': ':["text"]'
 }
 
