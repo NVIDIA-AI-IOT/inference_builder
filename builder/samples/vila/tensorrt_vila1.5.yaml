@@ -197,12 +197,3 @@ routes: {
   'visionenc:["features"]': 'vila1.5-13b:',
   'vila1.5-13b:["text"]': ':["text"]'
 }
-
-# endpoint specification for server
-endpoints:
-  infer: "/inference"
-  health: "/health/live"
-
-# environment specification
-environment:
-  tensorrt: 9.3.0
