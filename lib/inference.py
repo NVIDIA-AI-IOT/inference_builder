@@ -245,12 +245,12 @@ class Processor(ABC):
         self._kind = config['kind'] if 'kind' in config else 'auto'
         self._input = config['input'] if 'input' in config else []
         self._output = config['output'] if 'output' in config else []
-        self._config = { 'device_id': 0 }
+        self._config = { 'device_id': 0, 'model_home': model_home }
         if 'config' in config:
             self._config.update(config['config'])
         self._name = config['name']
         self._processor = None
-        self._model_home = model_home
+
     @property
     def name(self):
         return self._name
@@ -270,10 +270,6 @@ class Processor(ABC):
     @property
     def config(self):
         return self._config
-
-    @property
-    def model_home(self):
-        return self._model_home
 
     @abstractmethod
     def __call__(self, *args, **kwargs):
@@ -295,7 +291,6 @@ class CustomProcessor(Processor):
     """CustomProcessor loads the processor from custom module"""
     def __init__(self, config: Dict, model_home: str):
         super().__init__(config, model_home)
-        self.config["model_home"] = model_home
         self._processor = custom.create_instance(self.name, self.config)
         if self._processor is not None:
             logger.info(f"Custom processor {self._processor.name} created")

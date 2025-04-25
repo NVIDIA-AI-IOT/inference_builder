@@ -1,4 +1,5 @@
 name: vila
+model_repo: "/config/models/vila"
 
 # top level inference input specification
 input:
@@ -134,7 +135,7 @@ models:
         dims: [ -1 ]
     parameters:
       gpt_model_type: "inflight_fused_batching"
-      gpt_model_path: "${engine_dir}"
+      gpt_model_path: "/config/models/vila/vila1.5-13b/fp16/1-gpu/"
     preprocessors:
       - kind: "custom"
         name: "vila-tokenizer"
@@ -168,6 +169,8 @@ models:
         force_cpu: true
     parameters:
       FORCE_CPU_ONLY_INPUT_TENSORS: "no"
+      # use absolute path due to the non-standard file structure of VILA 1.5
+      tensorrt_engine: "/config/models/vila/vila1.5-13b/fp16/1-gpu/visual_engines/visual_encoder.engine"
     instance_group:
       - count: 1
         kind: KIND_GPU
@@ -178,9 +181,9 @@ models:
         input: ["images"]
         output: ["images"]
         config:
-          model_path: "vila1.5-13b"
-    # only required if backend is tensorrt
-    tensorrt_engine: "vila1.5-13b/fp16/1-gpu/visual_engines/visual_encoder.engine"
+          # override the model home directory due to the non-standard file structure of VILA 1.5
+          model_home: "/config/models/vila/vila1.5-13b/"
+    
 
 
 # route map

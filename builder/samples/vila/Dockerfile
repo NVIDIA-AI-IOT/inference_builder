@@ -103,8 +103,7 @@ ENV CUDA_MODULE_LOADING=LAZY
 ENV PYTHONUNBUFFERED=1
 
 # Install VILA
-ADD ./VILA/llava /workspace/VILA/llava
-ADD ./VILA/demo_trt_llm /workspace/VILA/demo_trt_llm
+RUN git clone https://github.com/NVlabs/VILA.git && cd VILA && git checkout vila1.5
 
 RUN site_pkg_path=$(python3 -c 'import site; print(site.getsitepackages()[0])') && echo "site_pkg_path: $site_pkg_path" && cp -rv /workspace/VILA/llava/train/transformers_replace/* $site_pkg_path/transformers/
 #RUN cd /workspace/VILA/demo_trt_llm && sh apply_patch.sh
@@ -138,7 +137,6 @@ RUN rm -rf /usr/local/nvm/versions/node \
 #     /opt/nvidia/deepstream/deepstream-7.0/lib/gst-plugins/libnvdsgst_inferserver.so \
 #     /opt/nvidia/deepstream/deepstream-7.0/lib/gst-plugins/libnvdsgst_osd.so
 
-ENV CHECKPOINTS_DIR=/workspace/checkpoints
 ENV NVCF_METER_EVENT=AIPlayground_Inference
 
 
@@ -153,7 +151,6 @@ CMD bash /workspace/server_run.sh
 
 
 FROM dev_base AS trt_optimize
-ENV CHECKPOINTS_DIR=/workspace/checkpoints
 
 ADD ./build_visual_engine.py /workspace/VILA/demo_trt_llm/build_visual_engine.py
 ADD ./build_visual_engine_from_onnx.py /workspace/VILA/demo_trt_llm/build_visual_engine_from_onnx.py

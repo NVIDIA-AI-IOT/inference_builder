@@ -29,7 +29,9 @@ class TensorRTLLMBackend(ModelBackend):
         logger.debug(f"TensorRTBackend created for {self._model_name} to generate {self._output_names}")
         if "tensorrt_engine" not in model_config:
             raise("PolygraphBackend requires a path to tensorrt_engine")
-        engine_file = model_config["tensorrt_engine"]
+        engine_file = model_config["parameters"]["tensorrt_engine"]
+        if not os.path.isabs(engine_file):
+            engine_file = os.path.join(self._model_home, engine_file)
         logger.info(f"Loading TensorRT Engine from {engine_file}...")
         with open(engine_file, 'rb') as f:
             engine_buffer = f.read()

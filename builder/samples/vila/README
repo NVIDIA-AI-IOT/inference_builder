@@ -1,9 +1,5 @@
-Before generating usable vila NIM, we need the optimized checkpoints in hand. Please follow the instruction from Wind (https://gitlab-master.nvidia.com/dl/JoC/ai_foundation_models/-/blob/wind-dev/vila-0.7.0/llm/vila/README.md?ref_type=heads) to create the trt engine for Vila 1.5 and correct the volume mapping in docker-composer.yml accordingly. (The folder containing the optimized TRT engine is referered as CHECKPOINTS_DIR)
-
-Get the llava (Why don't integrate it into the container image?):
-
-cd builder/samples/vila
-git clone https://github.com/NVlabs/VILA.git && cd VILA && git checkout vila1.5
+Before generating usable vila NIM, we need the optimized checkpoints in hand. Please follow the instruction from Wind (https://gitlab-master.nvidia.com/dl/JoC/ai_foundation_models/-/blob/wind-dev/vila-0.7.0/llm/vila/README.md?ref_type=heads) to create the trt engine for Vila 1.5 and correct the volume mapping in docker-composer.yml accordingly. 
+And make sure the folder containing the optimized TRT engine is mapped to the volume and the path is configured as 'model_repo' in the yaml configuration for generating the NIM..
 
 Build the NIM inference flow:
 

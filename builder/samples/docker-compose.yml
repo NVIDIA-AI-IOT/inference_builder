@@ -34,8 +34,7 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
-      # DEBUG: 1
-      CHECKPOINTS_DIR: /config/models/vila
+      DEBUG: 0
   nim-nvclip:
     build:
       context: nvclip
@@ -81,7 +80,7 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
-      DEBUG: 1
+      DEBUG: 0
   nim-tao:
     user: nvs:1000
     build:
