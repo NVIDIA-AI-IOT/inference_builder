@@ -112,6 +112,7 @@ RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x
 ARG GITLAB_TOKEN
 ENV DS_TAO_APPS_REPO=https://oauth2:${GITLAB_TOKEN}@gitlab-master.nvidia.com/DeepstreamSDK/deepstream_tao_apps.git
 ENV DS_TAO_APPS_TAG="main"
+ARG CACHE_BUSTER=unique_value_to_bypass_docker_cache
 RUN mkdir ds_tao_apps_src && \
    cd ds_tao_apps_src && \
    echo "$PWD Pulling DS TAO apps repo..." && \
