@@ -340,7 +340,7 @@ class DeepstreamBackend(ModelBackend):
             raise Exception("Deepstream pipeline requires at least one TYPE_CUSTOM_DS_MIME input")
         # override the network dimensions from  the primary inference config
         try:
-            primary_infer_config_path = infer_config_path[0]    
+            primary_infer_config_path = infer_config_path[0]
             if not os.path.isabs(primary_infer_config_path):
                 primary_infer_config_path = os.path.join(self._model_home, primary_infer_config_path)
             with open(primary_infer_config_path, 'r') as f:
@@ -380,7 +380,8 @@ class DeepstreamBackend(ModelBackend):
             # build the inference flow
             flow = Flow(pipeline)
             probe = Probe('tensor_retriver', output)
-            flow = flow.inject(in_pool.image_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=1000, live_source=False, width=d[1], height=d[0])
+            batch_timeout = 1000 * self._max_batch_size
+            flow = flow.inject(in_pool.image_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=batch_timeout, live_source=False, width=d[1], height=d[0])
             for config in preprocess_config_path:
                 config_file = config
                 if not os.path.isabs(config):
@@ -390,7 +391,11 @@ class DeepstreamBackend(ModelBackend):
                 config_file = config
                 if not os.path.isabs(config):
                     config_file = os.path.join(self._model_home, config)
-                flow = flow.infer(config_file, with_triton, batch_size=self._max_batch_size)
+                engine_file = self._generate_engine_name(config_file, device_id, self._max_batch_size)
+                if engine_file:
+                    flow = flow.infer(config_file, with_triton, batch_size=self._max_batch_size, model_engine_file=engine_file)
+                else:
+                    flow = flow.infer(config_file, with_triton, batch_size=self._max_batch_size)
             flow = flow.attach(probe).render(RenderMode.DISCARD, enable_osd=False)
             pipeline.start()
             # warm up
@@ -444,31 +449,31 @@ class DeepstreamBackend(ModelBackend):
             elif media != current_media:
                 raise Exception(f"Mixed media types are not supported in a single batch, got {media} and {current_media}")
 
-            # submit the data to the pipeline which supports the media type
-            indices = self._in_pools[media].submit(in_data_list)
-            # collect the results
-            while True:
-                #TODO: timeout should be runtime configurable
-                results = self._outputs[media].collect(indices, timeout=3)
-                if results is None:
-                    logger.info("DeepstreamBackend: No more data from this batch")
-                    break
-                out_data_list = []
-                for result, pass_through_data in zip(results, pass_through_list):
-                    if pass_through_data:
-                        result.update(pass_through_data)
+        # submit the data to the pipeline which supports the media type
+        indices = self._in_pools[media].submit(in_data_list)
+        # collect the results
+        while True:
+            #TODO: timeout should be runtime configurable
+            results = self._outputs[media].collect(indices, timeout=3)
+            if results is None:
+                logger.info("DeepstreamBackend: No more data from this batch")
+                break
+            out_data_list = []
+            for result, pass_through_data in zip(results, pass_through_list):
+                if pass_through_data:
+                    result.update(pass_through_data)
 
-                    out_data = dict()
-                    for o in self._output_names:
-                        if o in result:
-                            out_data[o] = result[o]
-                        else:
-                            out_data[o] = None
-                    out_data_list.append(out_data)
-                yield out_data_list
-                # No consecutive inference results for image
-                if media == "image":
-                    break
+                out_data = dict()
+                for o in self._output_names:
+                    if o in result:
+                        out_data[o] = result[o]
+                    else:
+                        out_data[o] = None
+                out_data_list.append(out_data)
+            yield out_data_list
+            # No consecutive inference results for image
+            if media == "image":
+                break
 
     def stop(self):
         for input in self._in_pools.values():
@@ -477,3 +482,32 @@ class DeepstreamBackend(ModelBackend):
             pipeline.stop()
         for pipeline in self._pipelines.values():
             pipeline.join()
+
+    def _generate_engine_name(self, config_path: str, device_id: int, batch_size: int):
+        def network_mode_to_string(network_mode: int):
+            if network_mode == 0:
+                return "fp32"
+            elif network_mode == 1:
+                return "int8"
+            elif network_mode == 2:
+                return "fp16"
+            else:
+                return ""
+        network_mode = "fp16"
+        onnx_file = "model.onnx"
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+            if not "property" in config:
+                return None
+            property = config["property"]
+            if not "onnx-file" in property:
+                return None
+            onnx_file = property["onnx-file"]
+            if "network-mode" in property:
+                mode = network_mode_to_string(property["network-mode"])
+                if mode:
+                    network_mode = mode
+        engine_file = f"{onnx_file}_b{batch_size}_gpu{device_id}_{network_mode}.engine"
+
+
+        return os.path.join(self._model_home, engine_file)
