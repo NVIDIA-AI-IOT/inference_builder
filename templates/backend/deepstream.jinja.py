@@ -435,31 +435,31 @@ class DeepstreamBackend(ModelBackend):
             elif media != current_media:
                 raise Exception(f"Mixed media types are not supported in a single batch, got {media} and {current_media}")
 
-            # submit the data to the pipeline which supports the media type
-            indices = self._in_pools[media].submit(in_data_list)
-            # collect the results
-            while True:
-                #TODO: timeout should be runtime configurable
-                results = self._outputs[media].collect(indices, timeout=3)
-                if results is None:
-                    logger.info("DeepstreamBackend: No more data from this batch")
-                    break
-                out_data_list = []
-                for result, pass_through_data in zip(results, pass_through_list):
-                    if pass_through_data:
-                        result.update(pass_through_data)
+        # submit the data to the pipeline which supports the media type
+        indices = self._in_pools[media].submit(in_data_list)
+        # collect the results
+        while True:
+            #TODO: timeout should be runtime configurable
+            results = self._outputs[media].collect(indices, timeout=3)
+            if results is None:
+                logger.info("DeepstreamBackend: No more data from this batch")
+                break
+            out_data_list = []
+            for result, pass_through_data in zip(results, pass_through_list):
+                if pass_through_data:
+                    result.update(pass_through_data)
 
-                    out_data = dict()
-                    for o in self._output_names:
-                        if o in result:
-                            out_data[o] = result[o]
-                        else:
-                            out_data[o] = None
-                    out_data_list.append(out_data)
-                yield out_data_list
-                # No consecutive inference results for image
-                if media == "image":
-                    break
+                out_data = dict()
+                for o in self._output_names:
+                    if o in result:
+                        out_data[o] = result[o]
+                    else:
+                        out_data[o] = None
+                out_data_list.append(out_data)
+            yield out_data_list
+            # No consecutive inference results for image
+            if media == "image":
+                break
 
     def stop(self):
         for input in self._in_pools.values():
