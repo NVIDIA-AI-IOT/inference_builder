@@ -1,6 +1,6 @@
 specVersion: '2.5.0'
 
-version: 0.0.2
+version: 0.1.1
 
 doc: README.md
 
@@ -10,9 +10,18 @@ description: Description for tao-cv-app
 
 dependencies:
 - ucf.svc.tao-cv:0.0.1
+- ucf.svc.tao-cv-validator:0.0.1
 
 components:
 - name: tao-cv
   type: ucf.svc.tao-cv
   parameters:
     modelName: rtdetr
+
+- name: tao-cv-validator
+  type: ucf.svc.tao-cv-validator
+  parameters:
+    modelName: rtdetr
+
+connections:
+  tao-cv-validator/tao-cv-nim: tao-cv/http-api

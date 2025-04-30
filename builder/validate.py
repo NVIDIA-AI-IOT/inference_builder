@@ -284,10 +284,10 @@ def get_request_template(client_dir: Path) -> Dict:
 
         # Import the request model
         from openapi_client.models.inference_request import InferenceRequest
-        from openapi_client.models.input_inner import InputInner
+        from openapi_client.models.inference_request_input_inner import InferenceRequestInputInner
 
         # Create request using the model class
-        input_data = [InputInner("<image_placeholder>")]  # Create Input instance first
+        input_data = [InferenceRequestInputInner("<image_placeholder>")]  # Create Input instance first
         request = InferenceRequest(
             model='nvidia/nvdino-v2',  # First allowed value from model_validate_enum
             input=input_data
@@ -310,8 +310,15 @@ def get_request_template(client_dir: Path) -> Dict:
             sys.path.remove(str(client_dir))
 
 
-def build_requests(validation_dir: Path, out_dir: Path, client_dir: Path) -> bool:
-    """Build request payloads from template and config."""
+def build_requests(validation_dir: Path, out_dir: Path, client_dir: Path, test_cases_abs_path: bool = False) -> bool:
+    """Build request payloads from template and config.
+
+    Args:
+        validation_dir: Directory containing validation data
+        out_dir: Directory to write generated files
+        client_dir: Directory containing OpenAPI client
+        test_cases_abs_path: Whether to use absolute paths in test_cases.yaml (default: False)
+    """
     try:
         print("\nBuilding request payloads...")
         # Get request template from OpenAPI client models
@@ -340,11 +347,21 @@ def build_requests(validation_dir: Path, out_dir: Path, client_dir: Path) -> boo
             print(f"✓ Generated request for test '{test['name']}': {request_path}")
 
             expected_path = validation_dir / test["expected"]
+
+            # Add to mapping with either absolute or relative paths
+            if test_cases_abs_path:
+                request_path_str = str(request_path.resolve())
+                expected_path_str = str(expected_path.resolve())
+            else:
+                # Make paths relative to validation directory
+                request_path_str = os.path.relpath(request_path, out_dir)
+                expected_path_str = os.path.relpath(expected_path, out_dir)
+
             # Add to mapping
             request_response_map.append({
                 "name": test["name"],
-                "request": str(request_path),
-                "expected": str(expected_path)
+                "request": request_path_str,
+                "expected": expected_path_str
             })
 
         # Write request-response mapping
@@ -378,7 +395,27 @@ def build_test_runner(out_dir: Path) -> bool:
         print(f"✗ Failed to build test runner: {e}")
         return False
 
-def build_validation(openapi_spec_path: Path, validation_dir: Path, use_docker: bool = True) -> bool:
+def copy_test_runner_dep_tree(out_dir: Path) -> bool:
+    """Copy test runner dependency tree."""
+    try:
+        print("\nCopying test runner dependency tree...")
+        # Copy all local dependencies
+        builder_dir = Path(__file__).parent
+        files_to_copy = {
+            builder_dir / "validate.py": out_dir / "validate.py",
+            builder_dir / "utils.py": out_dir / "utils.py",
+            # Add any other dependencies here
+        }
+
+        for src, dest in files_to_copy.items():
+            shutil.copy2(src, dest)
+            print(f"✓ Copied {src.name} to: {dest}")
+        return True
+    except Exception as e:
+        print(f"✗ Failed to copy test runner dependency tree: {e}")
+        return False
+
+def build_validation(openapi_spec_path: Path, validation_dir: Path, use_docker: bool = True, test_cases_abs_path: bool = False) -> bool:
     """Generate validation components."""
     try:
         print("\n=== Building Validator ===")
@@ -396,13 +433,18 @@ def build_validation(openapi_spec_path: Path, validation_dir: Path, use_docker: 
 
         # 2. Build request payloads
         print("\n2. Building request payloads...")
-        if not build_requests(validation_dir, out_dir, client_dir):
+        if not build_requests(validation_dir, out_dir, client_dir, test_cases_abs_path):
             raise Exception("Failed to build requests")
 
         # 3. Generate test runner
         print("\n3. Generating test runner...")
         if not build_test_runner(out_dir):
             raise Exception("Failed to build test runner")
+
+        # 4. Copy test runner deps like validate.py to out_dir (.tmp)
+        print("\n4. Copying validate.py to out_dir...")
+        if not copy_test_runner_dep_tree(out_dir):
+            raise Exception("Failed to copy test runner dependency tree")
 
         print("\n✓ Successfully built all validation components")
         return True

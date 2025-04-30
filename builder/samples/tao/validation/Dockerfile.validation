@@ -1,0 +1,20 @@
+FROM python:3.10-slim
+
+# Install system dependencies if needed
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy requirements and install
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy all validation content (excluding files in .dockerignore)
+COPY . /app/validation/
+
+# Make the validation script executable
+RUN chmod +x /app/validation/run_validation.sh
+
+ENTRYPOINT ["/app/validation/run_validation.sh"]

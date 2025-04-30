@@ -1,5 +1,6 @@
 MS:= \
-    tao-cv
+    tao-cv \
+    tao-cv-validator
 
 all: $(addsuffix _ms,$(MS))
 

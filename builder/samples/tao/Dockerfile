@@ -151,6 +151,8 @@ ENV LD_LIBRARY_PATH /opt/tritonserver/lib:$LD_LIBRARY_PATH
 ENV NVSTREAMMUX_ADAPTIVE_BATCHING=yes
 ENV NIM_DISABLE_TRITON_STARTUP=1
 
+COPY ./LICENSE ./VERSION $NIM_DIR_PATH
+
 #  create entrypoint script at location indicated in NIM Playbook
 RUN touch $NIM_DIR_PATH/start_server.sh && \
     chmod a+rx $NIM_DIR_PATH/start_server.sh && \
@@ -167,8 +169,22 @@ RUN touch $NIM_DIR_PATH/start_server.sh && \
         rm "\$SYMLINK"
         echo "Symlink deleted: \$SYMLINK"
     fi
-    ln -s \${NIM_CACHE_PATH}/model-repo/\${NIM_MODEL_NAME} "\$SYMLINK"
-    python3 __main__.py
+
+    DEFAULT_MANIFEST="/opt/nim/etc/default/model_manifest.yaml"
+    # First check if both manifest options are missing
+    if [ ! -f "\$DEFAULT_MANIFEST" ] && { [ -z "\${NIM_MANIFEST_PATH:-}" ] || [ ! -f "\${NIM_MANIFEST_PATH}" ]; }; then
+        echo "No model manifest found. Using legacy mode with cache path"
+        ln -s \${NIM_CACHE_PATH}/model-repo/\${NIM_MODEL_NAME} "\$SYMLINK"
+        python3 __main__.py
+    else
+        # At least one manifest exists, determine which one for debug message
+        if [ -f "\$DEFAULT_MANIFEST" ]; then
+            echo "Found default model manifest at: \$DEFAULT_MANIFEST"
+        else
+            echo "Found model manifest at NIM_MANIFEST_PATH: \${NIM_MANIFEST_PATH}"
+        fi
+        start_server
+    fi
 #    while true; do sleep 5; done
 EOF
 
