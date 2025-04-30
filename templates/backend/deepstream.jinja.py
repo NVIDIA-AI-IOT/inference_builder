@@ -69,6 +69,7 @@ class ImageTensorInputPool(TensorInputPool):
         self._mime_tensor_name = mime_tensor_name
         self._image_tensor_name = image_tensor_name
         self._generic_input = GenericTensorInput(device_id) if require_extra_input else None
+        self._batch_size = batch_size
 
     @property
     def image_inputs(self):
@@ -111,7 +112,9 @@ class ImageTensorInputPool(TensorInputPool):
                 logger.error(f"Unsupported MIME type {mime_type}")
                 continue
         if self._generic_input:
-            self._generic_input.send(stack_tensors_in_dict(data))
+            data = [data[i:i + self._batch_size] for i in range(0, len(data), self._batch_size)]
+            for d in data:
+                self._generic_input.send(stack_tensors_in_dict(d))
         # batched indices for each input
         return indices
 
