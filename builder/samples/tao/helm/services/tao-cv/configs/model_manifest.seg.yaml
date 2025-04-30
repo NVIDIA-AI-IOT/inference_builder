@@ -1,0 +1,15 @@
+schema_version: '2.0'
+profile_selection_criteria: auto
+model: eevaigoeixww/dev/tao_cv
+release: rc0
+profiles:
+- id: 425dcb3ef646e497d5a50bbd1eb1169c9f33f4253f36669bb428ef250e2447cd
+  tags:
+    gpu: a6000
+  workspace:
+    files:
+      nvdsinfer_config.yaml:
+        uri: ngc://eevaigoeixww/dev/tao_cv:seg.cradiov2_b.engine_b1_fp16_A6000?file=nvdsinfer_config.yaml
+      segformer.onnx_b1_gpu0_fp16.engine:
+        uri: ngc://eevaigoeixww/dev/tao_cv:seg.cradiov2_b.engine_b1_fp16_A6000?file=segformer.onnx_b1_gpu0_fp16.engine
+        checksum: blake3:2e767735aedde9d44365697921a2c87dbc3a8e5aba5ea83fd1a12e474bc949d0

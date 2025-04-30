@@ -63,7 +63,13 @@ def build_target(target: str, model: Optional[str] = None) -> None:
     
     if target_info.needs_processor:
         cmd.extend(["-c", "builder/samples/tao/processors.py"])
-    
+
+    # If running in container, don't launch openapi generator container to build client
+    # eg, in CI, export NO_DOCKER=true
+    no_docker = os.environ.get("NO_DOCKER", "false").lower() == "true"
+    if no_docker:
+        cmd.extend(["--no-docker"])
+
     print(f"Building {target}" + (f" with {model} validation" if model else ""))
     print("="*80 + "\n")
     subprocess.run(cmd, check=True)
