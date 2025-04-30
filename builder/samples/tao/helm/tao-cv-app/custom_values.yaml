@@ -3,9 +3,33 @@ tao-cv:
     tao-cv-deployment:
       containers:
         tao-cv-container:
+          env:
+          - name: NGC_API_KEY
+            valueFrom:
+              secretKeyRef:
+                key: ngc-api-key
+                name: ngc-secret
+          - name: NIM_MODEL_NAME
+            value: rtdetr
           image:
-            repository: nvcr.io/eevaigoeixww/staging/tao_cv_nim
-            tag: ds8.0-triton25.02.1_1
+            repository: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-tao
+            tag: 20250423.test.2
+  imagePullSecrets:
+  - name: gitlab-docker-reg-secret
+  - name: ngc-docker-reg-secret
+tao-cv-validator:
+  applicationSpecs:
+    validator-deployment:
+      containers:
+        validator-container:
           env:
           - name: NIM_MODEL_NAME
             value: rtdetr
+          - name: TEST_HOST
+            value: http://tao-cv-tao-cv-deployment-tao-cv-service:8000
+          image:
+            repository: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-validation
+            tag: "20250423.manual"
+  imagePullSecrets:
+  - name: gitlab-docker-reg-secret
+  - name: ngc-docker-reg-secret

@@ -1,0 +1,8 @@
+services:
+  deployer:
+    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/deployer:latest
+    volumes:
+      - './prepare_deploy.py:/prepare_deploy.py:ro'
+    ipc: host
+    entrypoint: ["/bin/bash"]
+    command: ["-c", "sleep infinity"]
