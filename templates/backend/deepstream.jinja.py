@@ -53,6 +53,18 @@ class GenericTensorInput():
     def send(self, data):
         self.queue.put(data)
 
+class StaticTensorInput():
+    def __init__(self, device_id):
+        self._tensors = {}
+        self._device_id = device_id
+
+    def generate(self):
+        result = {k: as_tensor(v, "").to_gpu(self._device_id) for k, v in self._tensors.items()}
+        return result
+
+    def set(self, data):
+        self._tensors.update(data)
+
 class TensorInputPool(ABC):
     @abstractmethod
     def submit(self, data: List):
@@ -63,7 +75,7 @@ class TensorInputPool(ABC):
 
 class ImageTensorInputPool(TensorInputPool):
 
-    def __init__(self, height, width, formats, batch_size, image_tensor_name, media_url_tensor_name, mime_tensor_name, device_id, require_extra_input=False):
+    def __init__(self, height, width, formats, batch_size, image_tensor_name, media_url_tensor_name, mime_tensor_name, device_id, require_extra_input):
         self._image_inputs = [ImageTensorInput(width, height, format) for format in formats for _ in range(batch_size)]
         self._media_url_tensor_name = media_url_tensor_name
         self._mime_tensor_name = mime_tensor_name
@@ -105,7 +117,7 @@ class ImageTensorInputPool(TensorInputPool):
                         image_tensor_input.send(image_tensor)
                         indices.append(i)
                     else:
-                        logger.error(f"Unable to find tensor input for format {format}")
+                        logger.error(f"image tensor or media url is missing: {item}")
                 else:
                     logger.error(f"Unable to find free slot for format {format}")
             else:
@@ -125,22 +137,31 @@ class ImageTensorInputPool(TensorInputPool):
             self._generic_input.send(Stop())
 
 class BulkVideoInputPool(TensorInputPool):
-    def __init__(self, media_url_tensor_name, mime_tensor_name, infer_config_path, output):
+    def __init__(self, batch_size, media_url_tensor_name, mime_tensor_name, infer_config_path, preprocess_config_path, output, device_id, require_extra_input):
+        self._batch_size = batch_size
         self._media_url_tensor_name = media_url_tensor_name
         self._mime_tensor_name = mime_tensor_name
         self._infer_config_path = infer_config_path
+        self._preprocess_config_path = preprocess_config_path
         self._pipeline = None
         self._output = output
+        self._generic_input = StaticTensorInput(device_id) if require_extra_input else None
+        self._device_id = device_id
 
     def submit(self, data: List):
         try:
             url_list = [item.pop(self._media_url_tensor_name) for item in data]
+            mime_list = [item.pop(self._mime_tensor_name) for item in data]
         except KeyError:
             logger.error(f"Unable to find tensor input for media_url_tensor_name {self._media_url_tensor_name}")
             return []
 
         pipeline = Pipeline(f"deepstream-video-batch")
+        if self._generic_input and data:
+            self._generic_input.set(stack_tensors_in_dict(data))
         flow = Flow(pipeline).batch_capture(url_list)
+        for config in self._preprocess_config_path:
+            flow = flow.preprocess(config, None if not self._generic_input else lambda: self._generic_input.generate())
         for config_path in self._infer_config_path:
             flow = flow.infer(config_path)
         flow = flow.attach(Probe('tensor_retriver', self._output)).render(RenderMode.DISCARD, enable_osd=False)
@@ -382,7 +403,7 @@ class DeepstreamBackend(ModelBackend):
             probe = Probe('tensor_retriver', output)
             flow = flow.inject(in_pool.image_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=1000, live_source=False, width=d[1], height=d[0])
             for config in preprocess_config_path:
-                flow = flow.preprocess(config, None if not require_extra_input else lambda: self._in_pools[media].generic_input.generate())
+                flow = flow.preprocess(config, None if not require_extra_input else lambda: self._in_pools['image'].generic_input.generate())
             for config in infer_config_path:
                 flow = flow.infer(config, with_triton, batch_size=self._max_batch_size)
             flow = flow.attach(probe).render(RenderMode.DISCARD, enable_osd=False)
@@ -410,7 +431,7 @@ class DeepstreamBackend(ModelBackend):
                 output = PreprocessMetadataOutput(self._max_batch_size, self._output_names[0], d)
             else:
                 output = MetadataOutput(self._max_batch_size, self._output_names[0], d)
-            in_pool = BulkVideoInputPool(self._media_url_tensor_name, self._mime_tensor_name, infer_config_path, output)
+            in_pool = BulkVideoInputPool(self._max_batch_size, self._media_url_tensor_name, self._mime_tensor_name, infer_config_path, preprocess_config_path, output, device_id, require_extra_input)
 
             self._in_pools[media] = in_pool
             self._outputs[media] = output
