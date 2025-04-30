@@ -29,7 +29,7 @@
   allow_failure: false  # This makes the job optional for pipeline success
 
 # Deployment test jobs for each flavor
-deploy_test_tao_common:
+deploy_test_common:
   <<: *deploy_test_template
   variables:
     FLAVOR: "tao"
