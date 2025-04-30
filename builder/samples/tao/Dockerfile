@@ -170,18 +170,20 @@ RUN touch $NIM_DIR_PATH/start_server.sh && \
         echo "Symlink deleted: \$SYMLINK"
     fi
 
-    if [ -f "/opt/nim/etc/default/model_manifest.yaml" ]; then
-        echo "Found model_manifest.yaml, pointing to nim model default path /opt/nim/workspace"
-        # # Create workspace directory if it doesn't exist
-        # mkdir -p /opt/nim/workspace
-        # # Point the symlink to workspace directory before running start_server
-        # ln -s /opt/nim/workspace "\$SYMLINK"
-        # # Update all relative paths in config file to absolute paths
-        start_server
-    else
-        echo "No model_manifest.yaml found, using legacy mode with cache path"
+    DEFAULT_MANIFEST="/opt/nim/etc/default/model_manifest.yaml"
+    # First check if both manifest options are missing
+    if [ ! -f "\$DEFAULT_MANIFEST" ] && { [ -z "\${NIM_MANIFEST_PATH:-}" ] || [ ! -f "\${NIM_MANIFEST_PATH}" ]; }; then
+        echo "No model manifest found. Using legacy mode with cache path"
         ln -s \${NIM_CACHE_PATH}/model-repo/\${NIM_MODEL_NAME} "\$SYMLINK"
         python3 __main__.py
+    else
+        # At least one manifest exists, determine which one for debug message
+        if [ -f "\$DEFAULT_MANIFEST" ]; then
+            echo "Found default model manifest at: \$DEFAULT_MANIFEST"
+        else
+            echo "Found model manifest at NIM_MANIFEST_PATH: \${NIM_MANIFEST_PATH}"
+        fi
+        start_server
     fi
 #    while true; do sleep 5; done
 EOF

@@ -1,0 +1,11 @@
+# Dockerfile.deployer
+FROM python:3.10
+
+# Copy and run requirements script
+COPY requirements.deployer.sh /tmp/
+RUN chmod +x /tmp/requirements.deployer.sh && \
+    /tmp/requirements.deployer.sh && \
+    rm -rf /var/lib/apt/lists/*  # Clean up
+
+# rm -rf /var/lib/apt/lists/* removes the cached package lists to reduce image size
+# the installed pacakges can be seen using: `apt list --installed` or `dpkg -l`

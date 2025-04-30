@@ -1,0 +1,18 @@
+schema_version: '2.0'
+profile_selection_criteria: auto
+model: eevaigoeixww/dev/tao_cv
+release: rc0
+profiles:
+- id: 425dcb3ef646e497d5a50bbd1eb1169c9f33f4253f36669bb428ef250e2447cd
+  tags:
+    gpu: a6000
+  workspace:
+    files:
+      model_epoch_049.onnx_b1_gpu0_fp16.engine:
+        uri: ngc://eevaigoeixww/dev/tao_cv:mgdino.engine_b1_fp16_A6000?file=model_epoch_049.onnx_b1_gpu0_fp16.engine
+        checksum: blake3:c08706006419450ef3331d71efe680091495728e56c91ee3119910d492da5096
+      nvdsinfer_config.yaml:
+        uri: ngc://eevaigoeixww/dev/tao_cv:mgdino.engine_b1_fp16_A6000?file=nvdsinfer_config.yaml
+        checksum: blake3:f957d513dff19d30f911d6c83416e61588cb1f652984fc9cd164a4eb72eedad3
+      nvdspreprocess_config.yaml:
+        uri: ngc://eevaigoeixww/dev/tao_cv:mgdino.engine_b1_fp16_A6000?file=nvdspreprocess_config.yaml

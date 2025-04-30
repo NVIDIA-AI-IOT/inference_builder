@@ -30,15 +30,20 @@ def update_model_config_paths():
 
 def setup_tao_config_symlink():
     CACHE_PATH = os.getenv('NIM_CACHE_PATH')
-    SYMLINK = os.path.join(CACHE_PATH, "model-repo/tao")
+    MODEL_REPO_PATH = os.path.join(CACHE_PATH, "model-repo")
+    SYMLINK = os.path.join(MODEL_REPO_PATH, "tao")
     
     # Remove existing symlink if it exists
     if os.path.islink(SYMLINK):
         os.remove(SYMLINK)
         print(f"Symlink deleted: {SYMLINK}")
-    
-    # # Create workspace directory if it doesn't exist
-    # os.makedirs(MODEL_PATH, exist_ok=True)
+
+    # Create model-repo directory if it doesn't exist
+    # when creating a symlink with os.symlink(src, dst),
+    # the parent directory of the destination path (dst) must exist,
+    # but the destination path itself should not exist
+    os.makedirs(MODEL_REPO_PATH, exist_ok=True)
+    print(f"Created directory: {MODEL_REPO_PATH}")
 
     # Create new symlink
     os.symlink(MODEL_PATH, SYMLINK)
