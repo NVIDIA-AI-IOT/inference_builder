@@ -1,0 +1,138 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "TAO Deploy Predictions Format",
+    "description": "Schema for TAO deployment prediction outputs with batched detection results",
+    "type": "object",
+    "properties": {
+      "detection_scores": {
+        "type": "array",
+        "description": "List of batches, each batch contains confidence scores for detections",
+        "items": {
+          "type": "array",
+          "description": "Batch of scores with shape (1, 300)",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "minItems": 300,
+            "maxItems": 300
+          }
+        }
+      },
+      "detection_boxes": {
+        "type": "array",
+        "description": "List of batches, each batch contains bounding box coordinates",
+        "items": {
+          "type": "array",
+          "description": "Batch of boxes with shape (1, 300, 4)",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 4,
+              "maxItems": 4,
+              "description": "Box coordinates in format [x, y, width, height]"
+            },
+            "minItems": 300,
+            "maxItems": 300
+          }
+        }
+      },
+      "detection_classes": {
+        "type": "array",
+        "description": "List of batches, each batch contains class IDs",
+        "items": {
+          "type": "array",
+          "description": "Batch of class IDs with shape (1, 300)",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 300,
+            "maxItems": 300
+          }
+        }
+      },
+      "source_id": {
+        "type": "array",
+        "description": "List of batches, each batch contains image IDs",
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "maxItems": 1
+        }
+      },
+      "image_info": {
+        "type": "array",
+        "description": "List of batches, each batch contains image information",
+        "items": {
+          "type": "array",
+          "description": "Batch of image info with shape (1, 5)",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": ["number", "null"],
+              "description": "[height, width, scale, orig_height, orig_width]"
+            },
+            "minItems": 5,
+            "maxItems": 5
+          }
+        }
+      },
+      "num_detections": {
+        "type": "array",
+        "description": "List of batches, each batch contains fixed number of detections",
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "enum": [100],
+            "description": "Fixed number of detections per image"
+          },
+          "minItems": 1,
+          "maxItems": 1
+        }
+      }
+    },
+    "required": [
+      "detection_scores",
+      "detection_boxes",
+      "detection_classes",
+      "source_id",
+      "image_info",
+      "num_detections"
+    ],
+    "examples": [
+      {
+        "detection_scores": [
+          [[0.9428234, 0.93891287, 0.9360516, 0.0546006]]
+        ],
+        "detection_boxes": [
+          [[[366.95068359, 386.24633789, 17.97363281, 17.46826172],
+            [548.27636719, 32.32040405, 5.94726562, 5.95733643]]]
+        ],
+        "detection_classes": [
+          [[2, 2, 4, 2, 2, 2]]
+        ],
+        "source_id": [
+          [1]
+        ],
+        "image_info": [
+          [[544, 960, null, 540, 960]]
+        ],
+        "num_detections": [
+          [100]
+        ]
+      }
+    ]
+  }
