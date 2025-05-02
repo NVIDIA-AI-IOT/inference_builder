@@ -441,7 +441,7 @@ def save_as_validation_reference(response_data, image_path, text=None):
         except Exception as e:
             print(f"Error saving validation reference text input: {e}")
 
-def main(host , port, model, files, text, dump_response: bool, upload: bool):
+def main(host , port, model, files, text, dump_response: bool, upload: bool, return_response: bool = False):
     if not files:
         print("Need the file path for inference")
         return
@@ -488,6 +488,12 @@ def main(host , port, model, files, text, dump_response: bool, upload: bool):
     # The validation script uses the official client to validate results against openapi spec
     response = requests.post(invoke_url, headers=headers, json=payload)
     infer_time = time.time() - start_time
+
+    if return_response:
+        if response.status_code == 200:
+            return response.json()
+        return None
+
     print(response)
     print(infer_time)
 
