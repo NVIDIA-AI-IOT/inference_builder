@@ -1,6 +1,7 @@
 cookiecutter==1.7.3
 omegaconf==2.3.0
-datamodel_code_generator==0.25.9
+datamodel_code_generator==0.25.6
 jinja2==3.1.4
 protobuf==5.27.3
 semver==3.0.2
+fastapi_code_generator==0.5.2

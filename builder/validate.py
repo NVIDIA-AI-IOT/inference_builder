@@ -11,6 +11,7 @@ from jinja2 import Environment, FileSystemLoader
 from utils import get_resource_path
 import shutil
 import yaml
+from utils import PayloadBuilder
 
 # Common paths - single source of truth
 OUT_DIR = ".tmp"
@@ -244,16 +245,18 @@ def get_test_cases(validation_dir: Path) -> List[Dict[str, str]]:
     supported_formats = {'.jpg', '.jpeg', '.png'}
 
     # Find all image files
-    for file_path in validation_dir.iterdir():
+    for idx, file_path in enumerate(validation_dir.iterdir()):
         if file_path.suffix.lower() in supported_formats:
             image_name = file_path.stem
             expected_path = validation_dir / f"expected.{image_name}.json"
+            text_path = validation_dir / f"{image_name}.txt"
 
             if expected_path.exists():
                 test_cases.append({
-                    "name": image_name,
+                    "name": image_name + f"_{idx}",
                     "input": file_path.name,
-                    "expected": expected_path.name
+                    "text": text_path.name if text_path.exists() else None,
+                    "expected": expected_path.name,
                 })
             else:
                 print(f"Warning: Found image {file_path.name} but missing expected response: {expected_path.name}")
@@ -281,10 +284,10 @@ def get_request_template(client_dir: Path) -> Dict:
 
         # Import the request model
         from openapi_client.models.inference_request import InferenceRequest
-        from openapi_client.models.input import Input
+        from openapi_client.models.input_inner import InputInner
 
         # Create request using the model class
-        input_data = Input(["<image_placeholder>"])  # Create Input instance first
+        input_data = [InputInner("<image_placeholder>")]  # Create Input instance first
         request = InferenceRequest(
             model='nvidia/nvdino-v2',  # First allowed value from model_validate_enum
             input=input_data
@@ -326,7 +329,9 @@ def build_requests(validation_dir: Path, out_dir: Path, client_dir: Path) -> boo
         for test in test_cases:
             request = template.copy()
             image_path = validation_dir / test["input"]
-            request["input"] = [prepare_image_input(image_path)]
+            request["input"] = PayloadBuilder.prepare_image_inputs([image_path])
+            if test["text"]:
+                request["text"] = PayloadBuilder.prepare_text_input_from_file(validation_dir / test["text"])
             
             # write request file
             request_path = out_dir / f"request.{test['name']}.json"
@@ -510,6 +515,10 @@ class CvValidator:
         Returns:
             bool: True if dictionaries match within tolerance
         """
+        # Remove timestamp if present
+        actual.pop('timestamp', None)
+        expected.pop('timestamp', None)
+
         if actual.keys() != expected.keys():
             return False
 

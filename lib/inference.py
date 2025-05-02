@@ -3,12 +3,10 @@ import base64
 from concurrent.futures import ThreadPoolExecutor
 import os
 from queue import Queue, Empty
-import tempfile
 from abc import ABC, abstractmethod
-from typing import Callable
-import uuid
 from config import global_config
 from .utils import get_logger, split_tensor_in_dict
+from .codec import ImageDecoder
 import custom
 import transformers
 from omegaconf import OmegaConf
@@ -17,8 +15,7 @@ from typing import Dict, List, Tuple, Union
 import numpy as np
 from collections import namedtuple
 import json
-from pyservicemaker import Pipeline
-from pyservicemaker.utils import MediaChunk, MediaExtractor
+from pyservicemaker import Pipeline, as_tensor
 import torch
 
 
@@ -39,6 +36,9 @@ np_datatype_mapping = {
     "TYPE_FP32": np.float32,
     "TYPE_FP64": np.float64,
     "TYPE_STRING": np.string_,
+    "TYPE_CUSTOM_DS_IMAGE": np.ubyte,
+    "TYPE_CUSTOM_DS_MIME": np.string_,
+    "TYPE_CUSTOM_DS_PASSTHROUGH": None,
     "TYPE_BF16": None
 }
 
@@ -57,6 +57,9 @@ torch_datatype_mapping = {
     "TYPE_FP32": torch.float32,
     "TYPE_FP64": torch.float64,
     "TYPE_STRING": None,
+    "TYPE_CUSTOM_DS_IMAGE": torch.int8,
+    "TYPE_CUSTOM_DS_MIME": None,
+    "TYPE_CUSTOM_DS_PASSTHROUGH": None,
     "TYPE_BF16": None
 }
 
@@ -78,87 +81,94 @@ Path = namedtuple('Path', ['source', 'target'])
 Route = namedtuple('Route', ['model', 'data'])
 
 class DataFlow:
-    """A single input flow to a model"""
-    def __init__(self, configs: List[Dict], outputs: List[str], timeout=None):
+    """A single data flow from or to a model"""
+    def __init__(
+            self,
+            configs: List[Dict],
+            tensor_names: List[Tuple[str, str]],
+            inbound: bool = False,
+            outbound: bool = False,
+            timeout=None
+        ):
         self._configs = configs
-        self._outputs = outputs
-        self._queue = Queue()
+        self._tensor_names = tensor_names
+        self._inbound = inbound
+        self._outbound = outbound
         self._timeout = timeout
+        self._queue = Queue()
 
-    def _process_base64_image(self, images: np.ndarray):
-        image_list = []
-        with tempfile.TemporaryDirectory() as temp_dir:
-            for image in images:
-                image_id = str(uuid.uuid4())
-                asset_path = os.path.join(temp_dir, image_id)
-                # Shouldn't we decode the bytes directly?
-                if isinstance(image, np.bytes_) or isinstance(image, bytes):
-                    image = image.decode()
-                elif not isinstance(image, np.str_):
-                    logger.error(f"base64 image must be bytes or string: {type(image)}")
-                    continue
-                with open(asset_path, "wb") as f:
-                    f.write(base64.b64decode(image))
-                frame = MediaExtractor(chunks=[MediaChunk(asset_path)])()[0].get()
-                image_list.append(torch.utils.dlpack.from_dlpack(frame.tensor))
-        return image_list
-
-    def _process_base64_binary(self, inputs: np.ndarray):
-        bytes_list = []
-        for input in inputs:
-            if isinstance(input, np.bytes_) or isinstance(input, bytes):
-                input = input.decode()
-            elif not isinstance(input, np.str_):
-                logger.error(f"base64 binary must be bytes or string")
-                continue
-            bytes_list.append(np.frombuffer(base64.b64decode(input), dtype=np.uint8))
-        return bytes_list
+    def _process_custom_data(self, tensor: np.ndarray, data_type: str):
+        processed = tensor
+        if self._inbound:
+            if data_type == "TYPE_CUSTOM_BINARY_URLS":
+                logger.debug(f"DataFlow _process_custom_data: {data_type}")
+                processed = [input for input in tensor]
+            elif data_type == "TYPE_CUSTOM_BINARY_BASE64":
+                logger.debug(f"DataFlow _process_custom_data: {data_type}")
+                processed = []
+                for input in tensor:
+                    if isinstance(input, np.bytes_) or isinstance(input, bytes):
+                        input = input.decode()
+                    elif not isinstance(input, np.str_):
+                        logger.error(f"base64 binary must be bytes or string")
+                        continue
+                    processed.append(np.frombuffer(base64.b64decode(input), dtype=np.uint8))
+        return processed
 
     @property
     def in_names(self):
-        return [ i['name'] for i in self._configs]
+        return [i[0] for i in self._tensor_names]
 
     @property
     def o_names(self):
-        return self._outputs
+        return [i[1] for i in self._tensor_names]
 
-    def get_config(self, name:str) -> Tuple[int, Dict]:
-        for i, config in enumerate(self._configs):
-            if config["name"] == name:
-                return i, config
-        return -1, None
+    def get_config(self, name: str):
+        if not self._configs:
+            return None
+        return next((config for config in self._configs if config["name"] == name), None)
 
     def put(self, item: Union[Dict, Error, Stop]):
         if not item:
+            # empty item is used to signal the end of the data flow
+            logger.info("Data flow ended with empty item")
             self._queue.put(item, timeout=self._timeout)
             return
-        # check data availability
-        for config in self._configs:
-            name = config["name"]
-            optional = "optional" in config and config["optional"]
-            if name not in item and not optional:
-                logger.error(f"{name} is not optional and not found!")
-                return
-        # collect data and put to the queue
-        collected = dict()
-        for name in item:
-            tensor = item[name]
-            idx, cfg = self.get_config(name)
-            o_name = self._outputs[idx]
-            if not cfg:
-                logger.error(f"{name} is not a valid input of the flow")
+        # check input data integrity
+        if self._inbound:
+            for config in self._configs:
+                name = config["name"]
+                optional = "optional" in config and config["optional"]
+                if name not in item and not optional:
+                    logger.error(f"{name} is not optional and not found from the dataflow input configs!")
+                    return
+        # collect data and deposit it to the queue
+        collected = {}
+        for i_name, o_name in self._tensor_names:
+            if i_name not in item:
                 continue
+            tensor = item[i_name]
             # handling custom data type
-            data_type = cfg["data_type"]
-            if  data_type not in np_datatype_mapping and isinstance(tensor, np.ndarray):
-                logger.debug(f"Processing custom type: {data_type}")
-                if data_type == "TYPE_CUSTOM_IMAGE_BASE64":
-                    tensor = self._process_base64_image(tensor)
-                elif data_type == "TYPE_CUSTOM_BINARY_BASE64":
-                    tensor = self._process_base64_binary(tensor)
-            collected[o_name] = tensor
-
-        self._queue.put(collected, timeout=self._timeout)
+            if self._inbound or self._outbound:
+                config = self.get_config(i_name)
+                if config and not config["data_type"] in np_datatype_mapping and isinstance(tensor, np.ndarray):
+                    collected[o_name] = self._process_custom_data(tensor, config["data_type"])
+                else:
+                    collected[o_name] = tensor
+            else:
+                collected[o_name] = tensor
+        # check output data integrity
+        if self._outbound:
+            for config in self._configs:
+                name = config["name"]
+                optional = "optional" in config and config["optional"]
+                if name not in collected and not optional:
+                    logger.error(f"{name} is not optional and not found from the dataflow output configs!")
+                    return
+        if collected:
+            self._queue.put(collected, timeout=self._timeout)
+        else:
+            logger.error(f"No data to deposit to the queue")
 
     def get(self):
         try:
@@ -167,16 +177,60 @@ class DataFlow:
             item = Error("timeout")
         return item
 
+class ImageInputDataFlow(DataFlow):
+    """A data flow for image data"""
+    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], timeout=None):
+        super().__init__(configs, tensor_names, True, False,timeout)
+        self._image_decoder = ImageDecoder(["JPEG", "PNG"])
 
+    def _process_custom_data(self, images: np.ndarray, data_type: str):
+        logger.debug(f"ImageInputDataFlow _process_custom_data: {data_type}")
+        if self._image_decoder is None:
+            return Error("Image decoder is not sucessfully created")
+        if data_type == "TYPE_CUSTOM_IMAGE_BASE64":
+            return self._process_base64_image(images)
+        else:
+            return super()._process_custom_data(images, data_type)
+
+    def _process_base64_image(self, images: np.ndarray):
+        result = []
+        for image in images:
+            if isinstance(image, np.bytes_) or isinstance(image, bytes):
+                image = image.decode()
+            elif not isinstance(image, np.str_):
+                logger.error(f"base64 image must be bytes or string: {type(image)}")
+                continue
+            data_prefix, data_payload = image.split(",")
+            mime_type = data_prefix.split(";")[0].split(":")[1]
+            format = None
+            if mime_type == "image/jpeg" or mime_type == "image/jpg":
+                format = "JPEG"
+            elif mime_type == "image/png":
+                format = "PNG"
+            else:
+                raise ValueError(f"Unsupported image format: {mime_type}")
+            data_payload = base64.b64decode(data_payload)
+            tensor = as_tensor(np.frombuffer(data_payload, dtype=np.uint8).copy(), format)
+            result.append(self._image_decoder.decode(tensor, format))
+        return result
+
+inbound_dataflow_mapping = {
+    "TYPE_CUSTOM_IMAGE_BASE64": ImageInputDataFlow,
+}
 class ModelBackend(ABC):
     """Interface for standardizing the model backend """
-    def __init__(self, model_config: Dict, device_id=0):
+    def __init__(self, model_config: Dict, model_home: str, device_id=0):
         self._model_config = model_config
+        self._model_home = model_home
         self._device_id = device_id
 
     @property
     def device_id(self):
         return self._device_id
+
+    @property
+    def model_home(self):
+        return self._model_home
 
     @abstractmethod
     def __call__(self, *args, **kwargs):
@@ -185,42 +239,15 @@ class ModelBackend(ABC):
     def stop(self):
         logger.info(f'Backend for {self._model_config["name"]} stopped')
 
-class Tokenizer:
-    def __init__(self, config: Dict, check_point_dir, model_path: str):
-        self._type = config['type'] if "type" in config else 'auto'
-        self._model_path = config['model_path'] if 'model_path' in config else model_path
-        self._encoder_config = config["encoder"]
-        self._decoder_config = config["decoder"]
-        self._tokenizer = None
-        if self._type == 'auto':
-            logger.info(f"Loading pretrained tokenizer from {model_path}")
-            self._tokenizer = transformers.AutoTokenizer.from_pretrained(
-                os.path.join(check_point_dir, self._model_path), use_fast=True, use_legacy=False)
-
-    @property
-    def decoder_config(self):
-        return self._decoder_config
-
-    @property
-    def encoder_config(self):
-        return self._encoder_config
-
-    def encode(self, *args):
-        return self._tokenizer(*args)
-
-    def decode(self, *args, **kwargs):
-        return self._tokenizer.decode(args, kwargs)
-
 class Processor(ABC):
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, model_home: str):
         self._name = config['name']
         self._kind = config['kind'] if 'kind' in config else 'auto'
         self._input = config['input'] if 'input' in config else []
         self._output = config['output'] if 'output' in config else []
-        self._config = { 'device_id': 0 }
+        self._config = { 'device_id': 0, 'model_home': model_home }
         if 'config' in config:
             self._config.update(config['config'])
-        self._params = config['kwargs'] if 'kwargs' in config else dict()
         self._name = config['name']
         self._processor = None
 
@@ -244,23 +271,17 @@ class Processor(ABC):
     def config(self):
         return self._config
 
-    @property
-    def params(self):
-        return self._params.copy()
-
     @abstractmethod
     def __call__(self, *args, **kwargs):
         pass
 
 class AutoProcessor(Processor):
     """AutoPrrocessor loads the preprocessor from pretrained"""
-    def __init__(self, config: Dict, check_point_dir: str, model_path: str):
-        super().__init__(config)
-        if "model_path" in config:
-            model_path = config["model_path"]
-        self._processor = transformers.AutoProcessor.from_pretrained(os.path.join(check_point_dir, model_path))
+    def __init__(self, config: Dict, model_home: str):
+        super().__init__(config, model_home)
+        self._processor = transformers.AutoProcessor.from_pretrained(model_home)
         if self._processor is None:
-            logger.error(f"Failed to load AutoProcessor from {model_path}")
+            logger.error(f"Failed to load AutoProcessor from {model_home}")
 
     def __call__(self, *args):
         # TODO value parser should be configurable
@@ -268,11 +289,8 @@ class AutoProcessor(Processor):
 
 class CustomProcessor(Processor):
     """CustomProcessor loads the processor from custom module"""
-    def __init__(self, config: Dict, check_point_dir: str, model_path: str):
-        super().__init__(config)
-        if "model_path" not in self.config:
-            self.config["model_path"] = model_path
-        self.config["model_path"] = os.path.join(check_point_dir, self.config["model_path"])
+    def __init__(self, config: Dict, model_home: str):
+        super().__init__(config, model_home)
         self._processor = custom.create_instance(self.name, self.config)
         if self._processor is not None:
             logger.info(f"Custom processor {self._processor.name} created")
@@ -280,20 +298,19 @@ class CustomProcessor(Processor):
             logger.error(f"Failed to create processor {self.name}")
 
     def __call__(self, *args):
-        ret = self._processor(*args, **self.params)
+        ret = self._processor(*args)
         if not isinstance(ret, tuple):
             ret = ret,
         return ret
 
 class ModelOperator:
     """An model operator runs a single model"""
-    def __init__(self, model_config:Dict, check_point_dir: str):
+    def __init__(self, model_config:Dict, model_repo: str):
         self._model_name = model_config["name"]
-        self._check_point_dir = check_point_dir
+        self._model_home = os.path.join(model_repo, self._model_name)
         self._in: List[DataFlow] = []
         self._out: List[DataFlow] = []
         self._running = False
-        self._tokenizer = None
         self._preprocessors = []
         self._postprocessors = []
         self._model_config = model_config
@@ -310,39 +327,39 @@ class ModelOperator:
     def bind_input(self, configs: List[Dict], targets: List[str]=[]):
         if not targets:
             targets = [i['name'] for i in configs]
-        flow = DataFlow(configs=configs, outputs=targets)
+        flow = None
+        tensor_names = [(i['name'], o) for i, o in zip(configs, targets)]
+        for config in configs:
+            if config["data_type"] in inbound_dataflow_mapping:
+                # customized inbound data flow
+                flow = inbound_dataflow_mapping[config["data_type"]](configs, tensor_names)
+                break
+        if flow is None:
+            tensor_names = [(i['name'], o) for i, o in zip(configs, targets)]
+            flow = DataFlow(configs, tensor_names, inbound=True)
         self._in.append(flow)
         logger.debug(f"Data flow < {flow.in_names} -> {flow.o_names} > connected to model {self._model_name}")
+        return flow
+
+    def bind_output(self, configs: List[Dict], sources: List[str]=[]):
+        if not sources:
+            sources = [i['name'] for i in configs]
+        tensor_names = [(i, o['name']) for i, o in zip(sources, configs)]
+        flow = DataFlow(configs, tensor_names, outbound=True)
+        self._out.append(flow)
+        logger.debug(f"model {self._model_name} connected to Data flow < {flow.in_names} -> {flow.o_names} >")
         return flow
 
     def import_input(self, input: DataFlow):
         self._in.append(input)
 
-    def export_output(self, outputs: List[str]=[], targets: List[str]=[]):
-        if not outputs:
-            outputs = [i["name"] for i in self._model_config["output"]]
-        if not targets:
-            targets = outputs
-        configs = []
-        for output in outputs:
-            cfg = next((o for o in self._model_config["output"] if o["name"] == output), None)
-            if cfg:
-                configs.append(cfg)
-        flow = DataFlow(configs, targets)
-        logger.debug(f"Data flow < {flow.in_names} -> {flow.o_names} > connected to model {self._model_name}")
-        self._out.append(flow)
-        return flow
+    def import_output(self, output: DataFlow):
+        self._out.append(output)
 
     def run(self, model_backend: ModelBackend):
         logger.debug(f"Model operator for {self._model_name} started")
 
         # create preprocessors
-        if "tokenizer" in self._model_config:
-            self._tokenizer = Tokenizer(
-                config=self._model_config["tokenizer"],
-                check_point_dir=self._check_point_dir,
-                model_path=self._model_name
-            )
         for kind, processors in [("preprocessors", self._preprocessors), ("postprocessors", self._postprocessors)]:
             if kind in self._model_config:
                 for config in self._model_config[kind]:
@@ -355,8 +372,7 @@ class ModelOperator:
                         processors.append(
                             ProcessorClass(
                                 config=config,
-                                check_point_dir=self._check_point_dir,
-                                model_path=self._model_name
+                                model_home=self._model_home
                             )
                         )
                     else:
@@ -365,7 +381,7 @@ class ModelOperator:
         self._backend = model_backend
         while True:
             try:
-                # collect input data
+                # collect input data until Stop is received
                 args = []
                 kwargs = dict()
                 for input in self._in:
@@ -376,59 +392,60 @@ class ModelOperator:
                     kwargs.update(data)
                 if not kwargs:
                     continue
+                message = "Completed"
                 logger.debug(f"Input collected: {kwargs}")
-                # apply tokenizer if required
-                if self._tokenizer:
-                    selected = self._tokenizer.encoder_config[0]
-                    value = kwargs.pop(selected)
-                    msg_str = [ v.decode() for v in value ]
-                    tokenized = self._tokenizer.encode(*msg_str)
-                    o_key = self._tokenizer.encoder_config[1]
-                    kwargs[o_key] = np.array(tokenized[o_key])
                 if any([isinstance(v, list) for _, v in kwargs.items()]):
                     # construct multiple inference requests
                     args = split_tensor_in_dict(kwargs)
-                else:
-                    args = [kwargs]
+                    kwargs = {}
                 # call preprocess() before passing args to the backend
-                args = self._preprocess(args)
+                processed = self._preprocess(args if args else [kwargs])
+                if args:
+                    # sequential processed data
+                    args = processed
+                elif kwargs:
+                    # batch processed data
+                    kwargs = processed[0]
+                else:
+                    logger.error(f"Invalid result from preprocess: {args} and {kwargs}")
+                    continue
                 # execute inference backend and collect result
-                for result in self._backend(*args):
-                    if isinstance(result, Error):
-                        logger.error(f"Error in inference: {result}")
-                        break
-                    # collect the result
+                for r in self._backend(*args, **kwargs):
+                    if not self._out:
+                        logger.error(f"No output data flow is bound to model {self._model_name}, please check the route configuration")
+                        continue
+                    # iterate the result list and postprocess each of them
                     for out in self._out:
-                        expected_result = dict()
-                        for n in out.in_names:
-                            if n in result:
-                                expected_result[n] = result[n]
-                        if len(expected_result) != len(out.in_names):
-                            logger.error(f"Not all the expected result is received from model {self._model_name}")
-                            continue
-                        if self._tokenizer:
-                            expected_key = self._tokenizer.decoder_config[0]
-                            value = expected_result.pop(expected_key, None)
-                            if value is not None and isinstance(value, np.ndarray):
-                                # CPU only tokenizer for now
-                                value = value.flatten().tolist()
-                                text = self._tokenizer._tokenizer.decode(value, skip_special_tokens=True)
-                                expected_result[expected_key] = np.array([text], np.string_)
-                            else:
-                                logger.error("Format not supported by tokenizer")
-                    # call postprocess() before depositing the results
-                    expected_result = self._postprocess(expected_result)
-                    logger.debug(f"Deposit result: {expected_result}")
-                    out.put(expected_result)
-                # mark the stop of this inference batch
-                for out in self._out:
-                    out.put(Stop('Done'))
+                        output_data = {n : [] for n in out.in_names}
+                        if isinstance(r, list):
+                            # we get a batch
+                            for result in r:
+                                result = self._postprocess(result)
+                                if not all([n in result for n in out.in_names]):
+                                    logger.error(f"Not all the expected result is received from model {self._model_name}:{out.in_names}")
+                                    continue
+                                # collect the result
+                                for n, v in output_data.items():
+                                    if n in result:
+                                        v.append(result[n])
+                                    else:
+                                        v.append(None)
+                        else:
+                            output_data = self._postprocess(r)
+                            if not all([n in output_data for n in out.in_names]):
+                                logger.error(f"Not all the expected result is received from model {self._model_name}:{out.in_names}")
+                                continue
+                        logger.debug(f"Deposit result: {output_data}")
+                        out.put(output_data)
+
             except Exception as e:
                 logger.exception(e)
+                message = "Error"
+            # notify the end of the current inference cycle
+            for out in self._out:
+                out.put(Stop(message))
 
     def _preprocess(self, args: List):
-        logger.debug(f"Preprocessing data for model {self._model_name}")
-
         # go through the preprocess chain
         outcome = args
         for preprocessor in self._preprocessors:
@@ -495,7 +512,7 @@ class ModelOperator:
 
 class InferenceBase:
     """The base model that drives the inference flow"""
-    def initialize(self, check_point_dir: str):
+    def initialize(self, model_repo: str):
         def parse_route(i1, i2) -> Route:
             m1 = ''
             m2 = ''
@@ -529,38 +546,87 @@ class InferenceBase:
         self._outputs: List[DataFlow] = []
         self._input_config = OmegaConf.to_container(global_config.input)
         self._output_config = OmegaConf.to_container(global_config.output)
+        self._model_repo = model_repo
+
+        if not os.path.exists(self._model_repo):
+            logger.error(f"Model repository {self._model_repo} does not exist")
+            raise Exception(f"Model repository {self._model_repo} does not exist")
 
         # set up the inference flow
         for model_config in global_config.models:
-            self._operators.append(ModelOperator(OmegaConf.to_container(model_config), check_point_dir))
+            self._operators.append(ModelOperator(OmegaConf.to_container(model_config), self._model_repo))
 
         if hasattr(global_config, "routes"):
             # go through the routing table
             for k, v in global_config.routes.items():
                 route = parse_route(k, v)
                 logger.debug(f"Adding route {route}")
+                # neither source nor target model is specified.
                 if not route.model.source and not route.model.target:
-                    # this is a direct passthrough from input to output, we can use a standalone dataflow
-                    if not route.data.source:
-                        logger.error(f"Invalid route: {route}, source is required for a direct pass")
+                    # this is a direct passthrough in the top level, we can use a standalone dataflow
+                    if not route.data.source and not route.data.target:
+                        logger.error(f"Invalid route: {route}, source or target is required for a direct pass")
                         continue
-                    configs = [OmegaConf.to_container(c) for c in global_config.input if c.name in route.data.source]
-                    dataflow = DataFlow(configs, route.data.target if route.data.target else route.data.source)
-                    self._inputs.append(dataflow)
-                    self._outputs.append(dataflow)
+                    dataflow = None
+                    if route.data.source:
+                        s_configs = [OmegaConf.to_container(c) for c in global_config.input if c.name in route.data.source]
+                        if len(configs) != len(route.data.source):
+                            logger.error(f"Not all the sources are found in the input configs, unable to create passthrough dataflow")
+                            continue
+                        tensor_names = route.data.target if route.data.target else route.data.source
+                        for n in tensor_names:
+                            if n not in [c.name for c in global_config.output]:
+                                logger.error(f"Output {n} not found in the output configs, unable to create passthrough dataflow")
+                                continue
+                        tensor_names = [(i['name'], o) for i, o in zip(s_configs, tensor_names)]
+                        dataflow = DataFlow(configs=s_configs, tensor_names=tensor_names, inbound=True)
+                    elif route.data.target:
+                        t_configs = [OmegaConf.to_container(c) for c in global_config.output if c.name in route.data.target]
+                        if len(t_configs) != len(route.data.target):
+                            logger.error(f"Not all the targets are found in the output configs, unable to create passthrough dataflow")
+                            continue
+                        for n in route.data.target:
+                            if n not in [c.name for c in global_config.input]:
+                                logger.error(f"Input {n} not found in the input configs, unable to create passthrough dataflow")
+                                continue
+                        tensor_names = [(i, i) for i in route.data.target]
+                        dataflow = DataFlow(configs=t_configs, tensor_names=tensor_names, outbound=True)
+                    else:
+                        logger.error(f"Invalid route: {route}, source or target is required for a direct pass")
+                        continue
+                    if dataflow is not None:
+                        self._inputs.append(dataflow)
+                        self._outputs.append(dataflow)
                 elif route.model.target:
-                    operator = next((o for o in self._operators if o.model_name == route.model.target), None)
-                    if operator is None:
+                    operator1 = next((o for o in self._operators if o.model_name == route.model.target), None)
+                    if operator1 is None:
                         logger.error(f"Model {route.model.target} in the routes not found")
                         continue
+                    # both source and target model are specified.
                     if route.model.source:
                         # this is the model provides data
                         operator2 = next((o for o in self._operators if o.model_name == route.model.source), None)
                         if operator2 is None:
                             logger.error(f"Model {route.model.source} in the routes not found")
                             continue
-                        o_flow = operator2.export_output(route.data.source, route.data.target)
-                        operator.import_input(o_flow)
+                        flow = None
+                        if route.data.source and route.data.target:
+                            if route.data.source != route.data.target:
+                                logger.error(f"Source and target are different, unable to bind output for model {operator1.model_name}, {route.data.source} -> {route.data.target}")
+                                continue
+                            tensor_names = [(i, o) for i, o in zip(route.data.source, route.data.target)]
+                            flow = DataFlow(configs=None, tensor_names=tensor_names)
+                        elif route.data.source:
+                            tensor_names = [(i, i) for i in route.data.source]
+                            flow = DataFlow(configs=None, tensor_names=tensor_names)
+                        elif route.data.target:
+                            tensor_names = [(i, i) for i in route.data.target]
+                            flow = DataFlow(configs=None, tensor_names=tensor_names)
+                        else:
+                            logger.error(f"Invalid route: {route}, source or target is required for connecting two models, {operator2.model_name} and {operator1.model_name}")
+                            continue
+                        operator2.import_output(flow)
+                        operator1.import_input(flow)
                     else:
                         # this is the top level input
                         if route.data.source:
@@ -569,23 +635,38 @@ class InferenceBase:
                             ]
                         else:
                             configs = [OmegaConf.to_container(c) for c in global_config.input]
-                        self._inputs.append(operator.bind_input(configs, route.data.target))
-                        pass
+                        if route.data.target and route.data.target != [c.name for c in configs]:
+                            logger.error(f"Source and target are different, unable to bind input for model {operator1.model_name}, {route.data.target} vs {configs}")
+                            continue
+                        self._inputs.append(operator1.bind_input(configs, route.data.target))
+                # only source model is specified.
                 elif route.model.source:
                     # this is the top level output
                     operator = next((o for o in self._operators if o.model_name == route.model.source), None)
                     if operator is None:
                         logger.error(f"Model {route.model.source} in the routes not found")
                         continue
-                    self._outputs.append(operator.export_output(route.data.source, route.data.target))
+                    if route.data.target:
+                        configs = [OmegaConf.to_container(c) for c in global_config.output if c.name in route.data.target]
+                        self._outputs.append(operator.bind_output(configs, route.data.source))
+                    else:
+                        configs = [OmegaConf.to_container(c) for c in global_config.output if c.name in route.data.source]
+                        if route.data.source == [c['name'] for c in configs]:
+                            self._outputs.append(operator.bind_output(configs))
+                        else:
+                            logger.warning(f"Output of {operator.model_name} is not compatible with top level output, check the route or consider adding a postprocessor")
+                            dataflow = DataFlow(configs=None, tensor_names=[(i, i) for i in route.data.source])
+                            operator.import_output(dataflow)
+                            self._outputs.append(dataflow)
                 else:
                     logger.warning("Empty route entry")
         elif  len(self._operators) == 1:
             # default flow for single model use case without an explicit route
             operator = self._operators[0]
-            # assume the input names all match the model
+            # direct connection from top level input to the model
             self._inputs.append(operator.bind_input(OmegaConf.to_container(global_config.input)))
-            self._outputs.append(operator.export_output())
+            # direct connection from the model to top level output
+            self._outputs.append(operator.bind_output(OmegaConf.to_container(global_config.output)))
         else:
             logger.error("Unable to set up inference routes")
         self._executor = ThreadPoolExecutor(max_workers=len(self._operators))

@@ -1,4 +1,5 @@
 name: vila
+model_repo: "/config/models/vila"
 
 # top level inference input specification
 input:
@@ -29,11 +30,9 @@ output:
 
 # top level data map from server to inference and vice versa
 server:
-  endpoints:
-    health:
-      path: /health/live
+  responders:
     infer:
-      path: /inference
+      operation: _infer_inference_post
       requests:
       # root template for generating input json from the request
         ChatRequest: >
@@ -45,8 +44,8 @@ server:
             "images": [],
             "streaming": false
           }
-      # optional filters for filtering each field with regex
-        prompt: ['(?P<src_base64_tag><img\ssrc=\"data:image\/(?P<extension>[^;]*);base64,(?P<base64str>[^\"]*)\".*?\/>)', '-', '', 'images']
+      # optional filters for constructing each field with regex
+        prompt: ['(.*?)<img\s+src="(data:image/[^;]+;base64,[^"]+)"[^>]*\/?>', 'prompt', 'images']
       responses:
         ChatCompletion: >
           {
@@ -136,16 +135,26 @@ models:
         dims: [ -1 ]
     parameters:
       gpt_model_type: "inflight_fused_batching"
-      gpt_model_path: "${engine_dir}"
-    tokenizer:
-      type: "auto"
-      encoder: ["prompt", "input_ids"]
-      decoder: ["output_ids", "output_ids"]
+      gpt_model_path: "/config/models/vila/vila1.5-13b/fp16/1-gpu/"
     preprocessors:
+      - kind: "custom"
+        name: "vila-tokenizer"
+        input: ["prompt"]
+        output: ["input_ids"]
+        config:
+          is_encoder: true
       - kind: "custom"
         name: "vila-muxer"
         input: ["input_ids", "features"]
         output: ["input_ids", "input_lengths", "prompt_vocab_size", "prompt_embedding_table"]
+    postprocessors:
+      - kind: "custom"
+        name: "vila-tokenizer"
+        input: ["output_ids"]
+        output: ["text"]
+        config:
+          is_encoder: false
+          skip_special_tokens: true
   - name: "visionenc"
     backend: "triton/python/tensorrtllm"
     max_batch_size: 8
@@ -160,6 +169,8 @@ models:
         force_cpu: true
     parameters:
       FORCE_CPU_ONLY_INPUT_TENSORS: "no"
+      # use absolute path due to the non-standard file structure of VILA 1.5
+      tensorrt_engine: "/config/models/vila/vila1.5-13b/fp16/1-gpu/visual_engines/visual_encoder.engine"
     instance_group:
       - count: 1
         kind: KIND_GPU
@@ -170,9 +181,9 @@ models:
         input: ["images"]
         output: ["images"]
         config:
-          model_path: "vila1.5-13b"
-    # only required if backend is tensorrt
-    tensorrt_engine: "vila1.5-13b/fp16/1-gpu/visual_engines/visual_encoder.engine"
+          # override the model home directory due to the non-standard file structure of VILA 1.5
+          model_home: "/config/models/vila/vila1.5-13b/"
+    
 
 
 # route map
@@ -183,15 +194,6 @@ models:
 routes: {
   ':["prompt", "request_output_len", "temperature", "streaming"]': 'vila1.5-13b',
   ':["images"]': "visionenc",
-  "visionenc": 'vila1.5-13b:',
-  'vila1.5-13b:["output_ids"]': ':["text"]'
+  'visionenc:["features"]': 'vila1.5-13b:',
+  'vila1.5-13b:["text"]': ':["text"]'
 }
-
-# endpoint specification for server
-endpoints:
-  infer: "/inference"
-  health: "/health/live"
-
-# environment specification
-environment:
-  tensorrt: 9.3.0

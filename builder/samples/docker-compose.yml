@@ -9,7 +9,6 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 ################################################################################
-version: '3'
 
 services:
   nim-vila:
@@ -20,7 +19,7 @@ services:
     image: nim-vila:0.7.0
     volumes:
       # correct the below mapping for your vila checkpoints
-      - '/opt/models/via-models/vila/checkpoints/optimized:/config/models/vila'
+      - '~/.cache/nim/model-repo/vila/optimized/:/config/models/vila'
 
     ipc: host
     # init: true
@@ -35,15 +34,15 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
-      # DEBUG: 1
-      CHECKPOINTS_DIR: /config/models/vila
+      DEBUG: 0
   nim-nvclip:
     build:
       context: nvclip
       target: nim_builder_base
       dockerfile: Dockerfile
     image: nim-nvclip
-
+    volumes:
+      - '~/.cache/nim:/opt/nim/.cache'
     ipc: host
     # init: true
     ports:
@@ -58,86 +57,12 @@ services:
               capabilities: [gpu]
     environment:
       NGC_API_KEY: ""
-      DEBUG: 1
-  nim-nvdinov2:
-    user: nvs:1000
-    build:
-      context: nvdinov2
-      target: nim_final
-      dockerfile: Dockerfile
-    image: nim-nvdinov2
-    volumes:
-      - '~/.cache/nim:/opt/nim/.cache'
-    ipc: host
-    # init: true
-    ports:
-      - "8800-8803:8000-8003"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              #count: 1
-              device_ids: ['0']
-              capabilities: [gpu]
-    environment:
-      NIM_MANIFEST_PROFILE: genericx1_0.0.2
-      DEBUG: 1
-#      GST_DEBUG: "*:4"
-      NGC_API_KEY: "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"
-  nim-nvsegformer:
-    user: nvs:1000
-    build:
-      context: nvsegformer
-      target: nim_final
-      dockerfile: Dockerfile
-    image: nim-nvsegformer
-    volumes:
-      - '~/.cache/nim:/opt/nim/.cache'
-    ipc: host
-    # init: true
-    ports:
-      - "8800-8803:8000-8003"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              #count: 1
-              device_ids: ['0']
-              capabilities: [gpu]
-    environment:
-      DEBUG: 0
-#      GST_DEBUG: "*:3"
-  nim-rtdetr:
-    user: nvs:1000
-    build:
-      context: rtdetr
-      target: nim_final
-      dockerfile: Dockerfile
-    image: nim-rtdetr
-    volumes:
-      - '~/.cache/nim:/opt/nim/.cache'
-    ipc: host
-    # init: true
-    ports:
-      - "8800-8803:8000-8003"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              #count: 1
-              device_ids: ['0']
-              capabilities: [gpu]
-    environment:
-      DEBUG: 1
-#      GST_DEBUG: "*:3"
+#      DEBUG: 1
   nim-changenet:
     user: nvs:1000
     build:
       context: changenet
-      target: nim_builder_base
+      target: nim_final
       dockerfile: Dockerfile
     image: nim-changenet
     volumes:
@@ -155,7 +80,7 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
-      DEBUG: 1
+      DEBUG: 0
   nim-tao:
     user: nvs:1000
     build:
@@ -180,5 +105,5 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
-      DEBUG: 1
+#      DEBUG: 1
       NIM_MODEL_NAME: rtdetr

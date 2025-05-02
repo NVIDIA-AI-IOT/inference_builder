@@ -25,8 +25,9 @@ class GenericInference(InferenceBase):
 
 
     def initialize(self, *args):
-        logger.info(f"CHECKPOINTS_DIR: {CHECKPOINTS_DIR}")
-        super().initialize(check_point_dir=CHECKPOINTS_DIR)
+        model_repo = global_config.model_repo
+        logger.info(f"Model Repository: {model_repo}")
+        super().initialize(model_repo)
         for operator in self._operators:
             model_config = next((m for m in global_config.models if m.name == operator.model_name), None)
             backend_spec = model_config.backend.split('/')
@@ -36,9 +37,14 @@ class GenericInference(InferenceBase):
                 backend_class = TritonBackend
             elif backend_spec[0] == 'deepstream':
                 backend_class = DeepstreamBackend
+            elif backend_spec[0] == 'polygraphy':
+                backend_class = PolygraphBackend
             else:
                 raise Exception(f"Backend {model_config.backend} not supported")
-            backend_instance = backend_class(model_config=OmegaConf.to_container(model_config))
+            backend_instance = backend_class(
+                model_config=OmegaConf.to_container(model_config),
+                model_home=os.path.join(model_repo, operator.model_name)
+            )
             self._submit(operator, backend_instance)
         # post processing:
         self._processors = []
@@ -47,7 +53,7 @@ class GenericInference(InferenceBase):
             for config in configs:
                 if config["kind"] == "custom":
                     self._processors.append(
-                        CustomProcessor(config, CHECKPOINTS_DIR, global_config.name)
+                        CustomProcessor(config, model_repo)
                     )
 
         # thread executor for async bridge
@@ -93,9 +99,7 @@ class GenericInference(InferenceBase):
         loop = asyncio.get_event_loop()
         for a_output, output in zip(self._async_outputs, self._outputs):
             self._async_executor.submit(thread_to_async_bridge, output, a_output, loop)
-        stop = False
-        results = []
-        while not stop:
+        while True:
             try:
                 logger.debug("Waiting for tensors from async queue")
                 response_data = dict()
@@ -105,40 +109,17 @@ class GenericInference(InferenceBase):
                     logger.debug(f"Got output data: {data}")
                     if isinstance(data, Error):
                         logger.debug(f"Got Error: {data.message}")
-                        continue
+                        return
                     elif isinstance(data, Stop):
-                        stop = True
-                        continue
+                        logger.debug(f"Got Stop: {data.reason}")
+                        return
                     # collect the output
                     for k, v in data.items():
                         response_data[k] = v
-                    response_data = self._post_process(response_data)
-                    results.append(response_data)
+                response_data = self._post_process(response_data)
+                yield response_data
             except Exception as e:
                 logger.exception(e)
-        if len(results) > 0:
-            # dimension check
-            need_stack = []
-            for k, v in results[0].items():
-                config = next((c for c in self._output_config if c['name'] == k), None)
-                if config is None:
-                    logger.warning(f"Invalid output parsed: {k}")
-                    continue
-                if isinstance(v, np.ndarray) or isinstance(v, torch.Tensor):
-                    # if the output is tensor, need to check if they need to be stacked
-                    dims = config['dims']
-                    if len(dims) == len(v.shape) + 1:
-                        need_stack.append(True)
-                    else:
-                        need_stack.append(False)
-            # combine multiple inference result based on dimensions
-            if all(need_stack):
-                results = stack_tensors_in_dict(results)
-            elif len(results) > 1:
-                results = concat_tensors_in_dict(results)
-            else:
-                results = results[0]
-        return results
 
 
     def finalize(self):
@@ -161,7 +142,11 @@ class GenericInference(InferenceBase):
             for key, value in zip(processor.output, output):
                 processed[key] = value
                 # correct data type
-                data_type = self._output_config["data_type"]
+                output_config = next((c for c in self._output_config if c['name'] == key), None)
+                if output_config is None:
+                    logger.warning(f"Invalid output parsed: {key}")
+                    continue
+                data_type = output_config["data_type"]
                 if isinstance(value, np.ndarray):
                     data_type = np_datatype_mapping[data_type]
                     if value.dtype != data_type:

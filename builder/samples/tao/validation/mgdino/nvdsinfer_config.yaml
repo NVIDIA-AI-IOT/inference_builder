@@ -1,0 +1,22 @@
+class-attrs-all:
+  topk: 300
+  pre-cluster-threshold: 0.4
+property:
+  gie-unique-id: 1
+  net-scale-factor: 0.0078431372549
+  model-engine-file: ./model_epoch_049.onnx_b1_gpu0_fp16.engine
+  onnx-file: ./model_epoch_049.onnx
+  # 0=FP32, 1=INT8, 2=FP16 mode
+  network-mode: 2
+  # 0 detection; 1 cls; 2 seg; 3 instance seg; 100 no pp
+  network-type: 100
+  offsets: 127.5;127.5;127.5
+  output-tensor-meta: 1
+  input-tensor-from-meta: 1
+  infer-dims: 3;544;960
+  custom-lib-path: /opt/nvidia/deepstream/deepstream/lib/libnvds_infercustomparser_tao.so
+  segmentation-threshold: 0.5
+  # process-mode: 1
+  # num-detected-classes: 256
+  # batch-size: 1
+

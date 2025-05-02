@@ -1,7 +1,7 @@
 import argparse
 import tensorrt as trt
 
-def build_engine(onnx_file_path, image_width, image_height, max_batch_size=1):
+def build_engine(onnx_file_path, min_batch_size, opt_batch_size, max_batch_size, max_text_len):
     # Create a TensorRT logger and builder
     TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
     trt.init_libnvinfer_plugins(TRT_LOGGER, namespace="")
@@ -17,24 +17,40 @@ def build_engine(onnx_file_path, image_width, image_height, max_batch_size=1):
                 print(parser.get_error(error))
             return None
 
+    inputs = [network.get_input(i) for i in range(network.num_inputs)]
+    outputs = [network.get_output(i) for i in range(network.num_outputs)]
     # Set builder configurations
     config = builder.create_builder_config()
     config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 2 << 30) # 2GB of workspace
     config.set_flag(trt.BuilderFlag.FP16)
 #    builder.max_batch_size = max_batch_size
     profile = builder.create_optimization_profile()
-    H, W = image_height, image_width
-    opt = max(1, int(max_batch_size/2))
-    for i in range(network.num_inputs):
-        inputT = network.get_input(i)
-        inputT.shape = [-1, 3, H, W]
-        profile.set_shape(
-            inputT.name,
-            min=trt.Dims((1, 3, H, W)),
-            opt=(opt, 3, H, W),
-            max=(max_batch_size, 3, H, W)
-        )
+    for model_input in inputs:
+        print(f"Input {model_input.name} with shape {model_input.shape} and dtype {model_input.dtype}")
+        input_shape = model_input.shape
+        input_name = model_input.name
+        if input_name == 'inputs':
+            real_shape_min = (min_batch_size, *input_shape[1:])
+            real_shape_opt = (opt_batch_size, *input_shape[1:])
+            real_shape_max = (max_batch_size, *input_shape[1:])
+        elif input_name == 'text_token_mask':
+            real_shape_min = (min_batch_size, max_text_len, max_text_len)
+            real_shape_opt = (opt_batch_size, max_text_len, max_text_len)
+            real_shape_max = (max_batch_size, max_text_len, max_text_len)
+        else:
+            real_shape_min = (min_batch_size, max_text_len)
+            real_shape_opt = (opt_batch_size, max_text_len)
+            real_shape_max = (max_batch_size, max_text_len)
+
+        profile.set_shape(input=input_name,
+                                min=real_shape_min,
+                                opt=real_shape_opt,
+                                max=real_shape_max)
+
     config.add_optimization_profile(profile)
+
+    for output in outputs:
+        print(f"Output {output.name} with shape {output.shape} and dtype {output.dtype}")
 
     # Build and return the engine
     print("Building the engine. This might take a while...")
@@ -51,7 +67,7 @@ def main(args):
     onnx_file_path = args.input  # Your ONNX file path
     engine_file_path = args.output  # Output TensorRT engine file
 
-    engine = build_engine(onnx_file_path, args.width, args.height, args.max_batch_size)
+    engine = build_engine(onnx_file_path, args.min_batch_size, args.opt_batch_size, args.max_batch_size, args.max_text_len)
     if engine:
         save_engine(engine, engine_file_path)
         print(f"Engine saved to {engine_file_path}")
@@ -64,12 +80,16 @@ if __name__ == "__main__":
                         type=int,
                         default=1,
                         help="Maximum batch size for input images")
-    parser.add_argument('--height',
+    parser.add_argument('--min-batch-size',
                         type=int,
-                        default=448,
-                        help="Model input height")
-    parser.add_argument('--width',
+                        default=1,
+                        help="Minimum batch size for input images")
+    parser.add_argument('--opt-batch-size',
                         type=int,
-                        default=448,
-                        help="Model input width")
+                        default=1,
+                        help="Optimal batch size for input images")
+    parser.add_argument('--max-text-len',
+                        type=int,
+                        default=256,
+                        help="Maximum text length for input prompt")
     main(parser.parse_args())
