@@ -8,7 +8,6 @@ from config import global_config
 from .utils import get_logger, split_tensor_in_dict
 from .codec import ImageDecoder
 import custom
-import transformers
 from omegaconf import OmegaConf
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Union
@@ -279,6 +278,7 @@ class AutoProcessor(Processor):
     """AutoPrrocessor loads the preprocessor from pretrained"""
     def __init__(self, config: Dict, model_home: str):
         super().__init__(config, model_home)
+        import transformers
         self._processor = transformers.AutoProcessor.from_pretrained(model_home)
         if self._processor is None:
             logger.error(f"Failed to load AutoProcessor from {model_home}")
@@ -454,12 +454,12 @@ class ModelOperator:
                 # initialize the processed as the original values
                 processed = {k: v for k, v in data.items()}
                 if not all([i in data for i in preprocessor.input]):
-                    logger.warning(f"Input settings invalid for the preprocessor: {preprocessor.kind}")
+                    logger.warning(f"Input settings invalid for the preprocessor: {preprocessor.name}")
                     continue
                 input = [processed.pop(i) for i in preprocessor.input]
-                logger.debug(f"{self._model_name} invokes preprocessor {preprocessor.kind} with given input {input}")
+                logger.debug(f"{self._model_name} invokes preprocessor {preprocessor.name} with given input {input}")
                 output = preprocessor(*input)
-                logger.debug(f"{self._model_name} preprocessor {preprocessor.kind} generated output {output}")
+                logger.debug(f"{self._model_name} preprocessor {preprocessor.name} generated output {output}")
                 if not isinstance(output, tuple):
                     logger.error("Return value of a processor must be a tuple")
                     continue

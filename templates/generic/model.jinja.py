@@ -39,6 +39,10 @@ class GenericInference(InferenceBase):
                 backend_class = DeepstreamBackend
             elif backend_spec[0] == 'polygraphy':
                 backend_class = PolygraphBackend
+            elif backend_spec[0] == 'tensorrt_llm':
+                backend_class = TensorrtLlmBackend
+            elif backend_spec[0] == 'dummy':
+                backend_class = DummyBackend
             else:
                 raise Exception(f"Backend {model_config.backend} not supported")
             backend_instance = backend_class(
@@ -116,6 +120,7 @@ class GenericInference(InferenceBase):
                     # collect the output
                     for k, v in data.items():
                         response_data[k] = v
+                # post-process the data from all the outputs
                 response_data = self._post_process(response_data)
                 yield response_data
             except Exception as e:
@@ -127,6 +132,7 @@ class GenericInference(InferenceBase):
 
     def _post_process(self, data: Dict):
         processed = {k: v for k, v in data.items()}
+        print(f"Post-processing data>>>>>>>>>>>>>>>>>>: {processed}")
         for processor in self._processors:
             if not all([i in data for i in processor.input]):
                 logger.warning(f"Input settings invalid for the processor: {processor}")
@@ -157,4 +163,23 @@ class GenericInference(InferenceBase):
                         processed[key]  = value.to(data_type)
                 else:
                     processed[key] = value
+        print(f"Post-processed data>>>>>>>>>>>>>>>>>>: {processed}")
+        # convert numpy and torch tensors to list for server to process
+        for key, value in processed.items():
+            if isinstance(value, list):
+                # this is a batch of data
+                value_list = []
+                for v in value:
+                    if isinstance(v, np.ndarray):
+                        value_list.append(v.tolist())
+                    elif isinstance(v, torch.Tensor):
+                        value_list.append(v.tolist())
+                    else:
+                        value_list.append(v)
+                processed[key] = value_list
+            else:
+                if isinstance(value, np.ndarray):
+                    processed[key] = value.tolist()
+                elif isinstance(value, torch.Tensor):
+                    processed[key] = value.tolist()
         return processed

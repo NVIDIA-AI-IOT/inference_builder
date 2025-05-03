@@ -221,6 +221,8 @@ class TritonPythonModel:
             BackendClass = TensorRTLLMBackend
         elif backend_spec[-1]  == "polygraphy":
             BackendClass = PolygraphBackend
+        elif backend_spec[-1] == "dummy":
+            BackendClass = DummyBackend
         if BackendClass is not None:
             self._model_backend = BackendClass(self._model_config, model_home,self._device_id)
         else:
