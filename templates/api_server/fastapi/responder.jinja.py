@@ -30,8 +30,6 @@ class Responder(ResponderBase):
         return super().process_request(responder, request)
 
     def process_response(self, responder: str, request, response: Dict[str, Any]):
-        self.logger.debug(f"Processing response {response}")
-
         accept = request.headers.get("accept", "")
         streaming = "application/x-ndjson" in accept
         # transform numpy ndarray or tensor to universal value types for inference

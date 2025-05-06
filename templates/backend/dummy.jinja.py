@@ -17,12 +17,7 @@ class DummyBackend(ModelBackend):
         for data in in_data:
             dummy_data = {}
             # validate the input data
-            for name, tensor in data.items():
-                if name not in [i['name'] for i in self._input_config]:
-                    raise ValueError(f"Input {name} not found in the input config")
-                if tensor.shape != tuple([i['dims'] for i in self._input_config if i['name'] == name][0]):
-                    raise ValueError(f"Input {name} has invalid shape")
-            # generate the output data
+            self._valicate_inputs(data)
             for config in self._output_config:
                 name = config['name']
                 data = np.random.randn(*config['dims'])
@@ -30,3 +25,21 @@ class DummyBackend(ModelBackend):
             out_data.append(dummy_data)
         # generate a batch of dummy data
         yield out_data
+
+    def _valicate_inputs(self, data):
+        i_names = [i['name'] for i in self._input_config]
+        i_shapes = {i['name']: i['dims'] for i in self._input_config}
+        i_types = {i['name']: i['data_type'] for i in self._input_config}
+        for name, tensor in data.items():
+            if name not in i_names:
+                raise ValueError(f"Input {name} not found in the input config")
+            if len(tensor.shape) != len(i_shapes[name]):
+                raise ValueError(f"Input {name} has invalid shape: {tensor.shape}")
+            for i, s in enumerate(tensor.shape):
+
+                if i_shapes[name][i] != -1 and s != i_shapes[name][i]:
+                    raise ValueError(f"Input {name} has invalid shape: {tensor.shape}")
+            if isinstance(tensor, np.ndarray) and tensor.dtype != np_datatype_mapping[i_types[name]]:
+                raise ValueError(f"Input {name} has invalid type: {tensor.dtype}")
+            if isinstance(tensor, torch.Tensor) and tensor.dtype != torch_datatype_mapping[i_types[name]]:
+                raise ValueError(f"Input {name} has invalid type: {tensor.dtype}")

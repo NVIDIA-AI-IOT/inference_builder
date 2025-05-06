@@ -421,6 +421,7 @@ class DeepstreamBackend(ModelBackend):
                 output = PreprocessMetadataOutput(self._max_batch_size, self._output_names[0], d)
             else:
                 output = MetadataOutput(self._max_batch_size, self._output_names[0], d)
+            infer_config_path = [os.path.join(self._model_home, config) for config in infer_config_path]
             in_pool = BulkVideoInputPool(self._media_url_tensor_name, self._mime_tensor_name, infer_config_path, output)
 
             self._in_pools[media] = in_pool

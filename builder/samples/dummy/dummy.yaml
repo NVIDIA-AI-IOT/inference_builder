@@ -1,17 +1,28 @@
-# the name will be used to indicate the microservice.
+# the name will be used to identify the microservice.
 name: dummy
 # the root path to the directory containing the model files.
 model_repo: /opt/nim/.cache/model-repo/
 
 # top level inference input specification
 input:
+  # a text input typically for LLM prompts
   - name: "text"
     data_type: TYPE_STRING
     dims: [ -1 ]
     optional: true
+  # base64 encoded image inputs typically for computer vision tasks
   - name: "images"
-    # image data encoded as base64 string
     data_type: TYPE_CUSTOM_IMAGE_BASE64
+    dims: [ -1 ]
+    optional: true
+  # a list of asset ids for image files
+  - name: "image_assets"
+    data_type: TYPE_CUSTOM_IMAGE_ASSETS
+    dims: [ -1 ]
+    optional: true
+  # a list of asset ids for video files
+  - name: "video_assets"
+    data_type: TYPE_CUSTOM_VIDEO_ASSETS
     dims: [ -1 ]
     optional: true
 
@@ -36,20 +47,44 @@ server:
                       {{ item|tojson }}{% if not loop.last %}, {% endif %}
                   {% endfor %}
                 ]
-              {% elif input_items[0] is mapping %}
-                "media_url": [
-                  {% for item in input_items %}
-                    {{ item.path|tojson }}{% if not loop.last %}, {% endif %}
-                  {% endfor %}
-                ]
-              {% endif %}
-              {% if request.text is not none %}
-              ,
+                {% if request.text is not none %}
+                ,
                 "text": [
                   {% for item in request.text %}
                     {{ item|tojson }}{% if not loop.last %}, {% endif %}
                   {% endfor %}
                 ]
+                {% endif %}
+              {% elif input_items[0] is mapping %}
+                {% if input_items[0].contentType.startswith("image/") %}
+                  "image_assets": [
+                    {% for item in input_items %}
+                      {{ item.id|tojson }}{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                  ]
+                  {% if request.text is not none %}
+                  ,
+                  "text": [
+                    {% for item in request.text %}
+                      {{ item|tojson }}{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                  ]
+                  {% endif %}
+                {% elif input_items[0].contentType.startswith("video/") %}
+                  "video_assets": [
+                    {% for item in input_items %}
+                      {{ item.id|tojson }}{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                  ]
+                {% if request.text is not none %}
+                  ,
+                  "text": [
+                    {% for item in request.text %}
+                      {{ item|tojson }}{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                  ]
+                  {% endif %}
+                {% endif %}
               {% endif %}
             {% endif %}
           }
@@ -125,9 +160,16 @@ models:
         input: ["images"]
         output: ["images"]
         config:
-          network_size: [768, 768]
+          network_size: [3, 768, 768]
       - kind: "custom"
         name: "dummy-tokenizer"
         input: ["text"]
         output: ["input_ids", "input_lengths"]
+
+routes: {
+  ':["images", "text"]': 'dummy',
+  ':["image_assets", "text"]': 'dummy:["images", "text"]',
+  ':["video_assets", "text"]': 'dummy:["images", "text"]',
+  'dummy:["output"]': ':'
+}
 

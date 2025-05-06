@@ -96,9 +96,10 @@ class GenericInference(InferenceBase):
                 else:
                     tensor = np.array(tensor)
                 tensors[name] = tensor
-            logger.debug(f"Injecting tensors {tensors}")
-            input.put(tensors)
-            input.put(Stop(reason="end"))
+            if tensors:
+                logger.debug(f"Injecting tensors {tensors}")
+                input.put(tensors)
+                input.put(Stop(reason="end"))
         # fetch result
         loop = asyncio.get_event_loop()
         for a_output, output in zip(self._async_outputs, self._outputs):
@@ -132,7 +133,6 @@ class GenericInference(InferenceBase):
 
     def _post_process(self, data: Dict):
         processed = {k: v for k, v in data.items()}
-        print(f"Post-processing data>>>>>>>>>>>>>>>>>>: {processed}")
         for processor in self._processors:
             if not all([i in data for i in processor.input]):
                 logger.warning(f"Input settings invalid for the processor: {processor}")
@@ -163,7 +163,6 @@ class GenericInference(InferenceBase):
                         processed[key]  = value.to(data_type)
                 else:
                     processed[key] = value
-        print(f"Post-processed data>>>>>>>>>>>>>>>>>>: {processed}")
         # convert numpy and torch tensors to list for server to process
         for key, value in processed.items():
             if isinstance(value, list):
