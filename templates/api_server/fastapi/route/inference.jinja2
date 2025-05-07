@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+#
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+from typing import Any
+{{imports}}
+from contextlib import asynccontextmanager
+from fastapi import Request, HTTPException, FastAPI, APIRouter
+import uvicorn
+from .responder import Responder
+from lib.utils import get_logger
+
+class FastAPIInterface:
+
+    def __init__(self, *args, **kwargs):
+        self.app = FastAPI()
+        self.router = APIRouter()
+        self.responder = Responder()
+        self.logger = get_logger(__name__)
+        self.register_routes()
+        self.app.include_router(self.router)
+
+    def register_routes(self):
+        {% for operation in operations %}
+        self.router.{{operation.type}}("{{operation.path}}")(self.{{operation.function_name}})
+        {% endfor %}
+
+
+    def serve(self, **kwargs):
+        uvicorn.run(self.app, host="0.0.0.0", port=8000)
+
+    {% for operation in operations %}
+    async def {{operation.function_name}}(self, request: Request, {{operation.snake_case_arguments}}) -> {{operation.response}}:
+        self.logger.info("{{operation.function_name}} called")
+        status, response = await self.responder.take_action("{{operation.function_name}}", *locals().values())
+        if status != 200:
+            raise HTTPException(status_code=status, detail=response)
+        self.logger.debug(f"response generated as {response}")
+        return response
+    {% endfor %}
+
+def get_openapi_schema(file_dump=True, pprint=True):
+    """
+    Utility function to get API schema in YAML format.
+    This is used after inference.py has been completed with custom user APIs.
+    """
+    import yaml
+    interface_instance = Interface()
+    schema: dict = interface_instance.get_openapi_schema()
+    if pprint:
+        print(yaml.dump(schema, sort_keys=False))
+    if file_dump:
+        with open("api_spec.yaml", "w+") as file:
+            yaml.dump(schema, file, sort_keys=False)
+
+
+def main():
+    interface = FastAPIInterface()
+    interface.serve()
