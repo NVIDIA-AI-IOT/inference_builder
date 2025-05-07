@@ -176,7 +176,7 @@ When triton is used as the backend, all the [standard triton model parameters](h
 
 Bother custom preprocessors and postpocessors are defined by below specification:
 - kind: The kind of the processor: "custom" or "auto"
-- name: The name of the processor. 
+- name: The name of the processor.
 - input: names of the processor's input in order.
 - output: names of the processor's output in order.
 - config: The configuration of the processor, which is a dictionary and implementation-specific. Two standard keys are supported:
@@ -198,6 +198,8 @@ Input and Output definitions are required both at the top level and model level.
 - data_type: The data type of the input or output. In addition to the [basic data types defined by Triton](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/user_guide/model_configuration.html#datatypes), the project also supports following custom data types:
   - TYPE_CUSTOM_IMAGE_BASE64: For input, the data will be decoded to a image tensor, and for output, the image tensor will be encoded to a base64 string.
   - TYPE_CUSTOM_BINARY_BASE64: For input, the data will be decoded to a byte tensor, and for output, the byte tensor will be encoded to a base64 string.
+  - TYPE_CUSTOM_IMAGE_ASSETS: The data contains strings that identify the uploaded image assets, which are automatically passed to image decoder and converted to image tensors
+  - TYPE_CUSTOM_VIDEO_ASSETS: The data contains strings that identify the uploaded video assets, which are automatically passed to video decoder and converted to image tensors frame by frame.
   - TYPE_BINARY_URLS: For input, the data will be converted to a list and treated as urls, and for output, the list of urls will be converted to a tensor.
   - TYPE_CUSTOM_DS_IMAGE: Encoded image specificially for Deepstream pipeline
   - TYPE_CUSTOM_DS_MIME: Mime type used by Deepstream pipeline to determine the decoder type
