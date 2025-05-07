@@ -79,8 +79,10 @@ class GenericInference(InferenceBase):
                     break
 
         logger.info(f"Received request {request}")
-
-        for input in self._inputs:
+        matched = [[n for n in input.in_names if n in request] for input in self._inputs]
+        reshuffled = sorted(range(len(matched)), key=lambda x: len(matched[x]), reverse=True)
+        for i in reshuffled:
+            input = self._inputs[i]
             # select the tensors for the input
             tensors = { n: request[n] for n in input.in_names if n in request }
             # the tensors need to be transformed to generic type

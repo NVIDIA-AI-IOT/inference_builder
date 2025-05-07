@@ -433,6 +433,40 @@ class SingleFlowCollector(Collector):
     def collect(self):
         return self._data_flow.get()
 
+class AggregationFlowCollector(Collector):
+    """AggregationFlowCollector is a collector aggregating multiple data flows"""
+    def __init__(self, data_flows: List[DataFlow]):
+        self._data_flows = data_flows
+        self._executor = ThreadPoolExecutor(max_workers=1)
+        self._queue = Queue()
+        self._stop_event = threading.Event()
+        self._futures = self._executor.submit(self._collect)
+
+    def collect(self):
+        return self._queue.get()
+
+    def _collect(self):
+        logger.info(f"AggregationFlowCollector starts collecting data")
+        while not self._stop_event.is_set():
+            result = {}
+            completed = []
+            for data_flow in self._data_flows:
+                data = data_flow.get()
+                if isinstance(data, Error) or isinstance(data, Stop):
+                    completed.append(data)
+                    continue
+                else:
+                    result.update(data)
+            self._queue.put(result)
+            if all([isinstance(c, Stop) for c in completed]):
+                self._queue.put(Stop("All data flows completed"))
+            elif any([isinstance(c, Error) for c in completed]):
+                self._queue.put(Error("One or more data flows ended in error"))
+
+    def __del__(self):
+        self._stop_event.set()
+        self._executor.shutdown(wait=True)
+
 class MultiFlowCollector(Collector):
     """MultiFlowCollector is a collector for multiple data flows"""
     def __init__(self, data_flows: List[DataFlow]):
@@ -560,7 +594,7 @@ class ModelOperator:
                         raise Exception("Invalid Processor")
         # backend loop
         self._backend = model_backend
-        collector = SingleFlowCollector(self._in[0]) if len(self._in) == 1 else MultiFlowCollector(self._in)
+        collector = self._create_collector()
         while True:
             try:
                 message = "Completed"
@@ -689,6 +723,20 @@ class ModelOperator:
             for key, value in zip(processor.output, output):
                 processed[key] = value
         return processed
+
+    def _create_collector(self):
+        if len(self._in) == 1:
+            logger.info(f"Single data flow input detected, using single flow collector on model {self._model_name}")
+            return SingleFlowCollector(self._in[0])
+        else:
+            outputs = [set(d.o_names) for d in self._in]
+            intersection = set.intersection(*outputs)
+            if len(intersection) == 0:
+                logger.info(f"Aggregation data flow input detected, using aggregation flow collector on model {self._model_name}")
+                return AggregationFlowCollector(self._in)
+            else:
+                logger.info(f"Multi data flow input detected, using multi flow collector on model {self._model_name}")
+                return MultiFlowCollector(self._in)
 
 class InferenceBase:
     """The base model that drives the inference flow"""
