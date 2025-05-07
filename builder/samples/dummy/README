@@ -1,5 +1,7 @@
 This sample demonstrates how to build a inference pipeline with a dummy backend. The experiment is mainly for testing the basic flow.
 
+The sample configuration supports multiple input types including image data, image assets and video assets in one endpoint
+
 Build the dummy inference flow:
 
 cd builder
