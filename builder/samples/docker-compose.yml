@@ -183,7 +183,7 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
-      DEBUG: 1
+      DEBUG: 0
       # no need anymore, if mount model_manifest.yaml
       NIM_MODEL_NAME: fm_rtdetr  # must-have even it's not in use
       NGC_API_KEY: ${NGC_API_KEY}

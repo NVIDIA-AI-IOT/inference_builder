@@ -1,7 +1,7 @@
 name: "tao"
 
 input:
-- name: image
+- name: images
   data_type: TYPE_CUSTOM_BINARY_BASE64
   dims: [ -1 ]
   optional: true
