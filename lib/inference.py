@@ -304,6 +304,7 @@ class ImageInputDataFlow(DataFlow):
             data_payload = base64.b64decode(data_payload)
             tensor = as_tensor(np.frombuffer(data_payload, dtype=np.uint8).copy(), format)
             result.append(self._image_decoder.decode(tensor, format))
+        logger.debug(f"ImageInputDataFlow._process_base64_image generates {len(result)} tensors")
         return result
 
     def _process_image_assets(self, assets: np.ndarray):
@@ -408,6 +409,8 @@ class CustomProcessor(Processor):
     """CustomProcessor loads the processor from custom module"""
     def __init__(self, config: Dict, model_home: str):
         super().__init__(config, model_home)
+        if not hasattr(custom, "create_instance"):
+            raise Exception("Custom processor module not valid!!")
         self._processor = custom.create_instance(self.name, self.config)
         if self._processor is not None:
             logger.info(f"Custom processor {self._processor.name} created")
@@ -597,7 +600,6 @@ class ModelOperator:
         collector = self._create_collector()
         while True:
             try:
-                message = "Completed"
                 # collect input data until Stop is received
                 data = collector.collect()
                 if isinstance(data, Stop) or isinstance(data, Error):
@@ -641,7 +643,7 @@ class ModelOperator:
                             for result in r:
                                 result = self._postprocess(result)
                                 if not all([n in result for n in out.in_names]):
-                                    logger.error(f"Not all the expected result is received from model {self._model_name}:{out.in_names}")
+                                    logger.error(f"Data received from model {self._model_name} is incomplete, expected: {out.in_names}, received: {result.keys()}. Post-processor missing?")
                                     continue
                                 # collect the result
                                 for n, v in output_data.items():
@@ -650,9 +652,10 @@ class ModelOperator:
                                     else:
                                         v.append(None)
                         else:
+                            # implicit batching
                             output_data = self._postprocess(r)
                             if not all([n in output_data for n in out.in_names]):
-                                logger.error(f"Not all the expected result is received from model {self._model_name}:{out.in_names}")
+                                logger.error(f"Data received from model {self._model_name} is incomplete, expected: {out.in_names}, received: {output_data.keys()}. Post-processor missing?")
                                 continue
                         logger.debug(f"Deposit result: {output_data}")
                         out.put(output_data)
@@ -683,6 +686,8 @@ class ModelOperator:
                     # update as processed
                     for key, value in zip(preprocessor.output, output):
                         processed[key] = value
+                else:
+                    logger.warning(f"Pre-processor {preprocessor.name} skipped because of missing input tensors")
                 result.append(processed)
             # update outcome
             outcome = result
@@ -710,7 +715,7 @@ class ModelOperator:
         processed = {k: v for k, v in data.items()}
         for processor in self._postprocessors:
             if not all([i in data for i in processor.input]):
-                logger.warning(f"Input settings invalid for the processor: {processor}")
+                logger.warning(f"Post-processor {processor.name} skipped because of missing input tensors")
                 continue
             input = [processed.pop(i) for i in processor.input]
             logger.debug(f"Post-processor {processor.name} invoked with given input {input}")
