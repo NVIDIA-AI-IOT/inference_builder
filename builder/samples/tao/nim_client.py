@@ -289,7 +289,7 @@ def parse_labels(raw_labels, label_names=None):
 
     return parsed_labels
 
-def visualize_detections(image_path, masks=None, bboxes=None, labels=None, shape=None):
+def visualize_detections(image_path, masks=None, bboxes=None, labels=None, shape=None, save_path=None):
     """
     Visualize detection results combining masks and bounding boxes
     Args:
@@ -298,6 +298,7 @@ def visualize_detections(image_path, masks=None, bboxes=None, labels=None, shape
         bboxes: Optional list of bounding boxes
         labels: Optional list of string labels
         shape: Required shape that masks/bboxes are based on
+        save_path: Optional path to save the visualized image
     """
     if not shape:
         raise ValueError("Shape parameter is required")
@@ -330,6 +331,13 @@ def visualize_detections(image_path, masks=None, bboxes=None, labels=None, shape
         converted_bboxes = convert_bboxes_to_image_size(bboxes, shape, target_shape)
         result = overlay_bboxes(result, converted_bboxes, labels)
 
+    # Save the result if save_path is provided
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        cv2.imwrite(save_path, result)
+        return True
+
+    # If no save_path, show the result
     cv2.imshow("Inference Results", result)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -441,7 +449,7 @@ def save_as_validation_reference(response_data, image_path, text=None):
         except Exception as e:
             print(f"Error saving validation reference text input: {e}")
 
-def main(host , port, model, files, text, dump_response: bool, upload: bool, return_response: bool = False):
+def main(host, port, model, files, text, dump_response: bool, upload: bool, return_response: bool = False, vis_dir: str = None):
     if not files:
         print("Need the file path for inference")
         return
@@ -489,7 +497,12 @@ def main(host , port, model, files, text, dump_response: bool, upload: bool, ret
     response = requests.post(invoke_url, headers=headers, json=payload)
     infer_time = time.time() - start_time
 
-    if return_response:
+    if return_response and not vis_dir:
+        """
+        1. return_response is True; and
+        2. don't want to dump visualized results
+        the response is returned immediately without visualization
+        """
         if response.status_code == 200:
             return response.json()
         return None
@@ -527,18 +540,34 @@ def main(host , port, model, files, text, dump_response: bool, upload: bool, ret
 
             # Visualize results with whatever data is available
             try:
+                save_path = None
+                if vis_dir:
+                    os.makedirs(vis_dir, exist_ok=True)
+                    save_path = os.path.join(vis_dir, os.path.basename(files[data['index']]))
+
                 visualization_success = visualize_detections(
                     files[data['index']],
                     masks=mask,
                     bboxes=bboxes,
                     labels=parsed_labels,
-                    shape=shape
+                    shape=shape,
+                    save_path=save_path
                 )
-                if visualization_success and prompt_save_reference():
-                    save_as_validation_reference(output, files[data['index']], text)
+
+                if not return_response:
+                    """
+                    1. return_response is False, i.e. not run in other script like evaluation script
+                    2. visualization_success,
+                    interact with prompt_save_reference() call, save the response as a validation reference
+                    """
+                    if visualization_success and prompt_save_reference():
+                        save_as_validation_reference(output, files[data['index']], text)
             except ValueError as e:
                 print(f"Error visualizing results for image {data['index']}: {e}")
                 continue
+
+        if return_response:
+            return response.json()
 
     elif response.status_code == 422:
         print("Unable to process request: 422. Check the payload")
@@ -556,6 +585,7 @@ if __name__ == '__main__':
     parser.add_argument("--text", type=str, help="Extra text to send for inference", nargs='*', default=None)
     parser.add_argument("-u", "--upload", action="store_true", help="Upload files to server", default=False)
     parser.add_argument("--dump-response", action="store_true", default=False, help="Enable dumping response JSON to file")
+    parser.add_argument("--vis-dir", type=str, help="Directory to save visualized images", default=None)
 
     args = parser.parse_args()
-    main(args.host, args.port, args.model, args.file, args.text, args.dump_response, args.upload)
+    main(args.host, args.port, args.model, args.file, args.text, args.dump_response, args.upload, vis_dir=args.vis_dir)

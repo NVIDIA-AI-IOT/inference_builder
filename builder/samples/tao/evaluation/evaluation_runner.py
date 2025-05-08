@@ -4,6 +4,17 @@ import os
 from pathlib import Path
 from typing import Dict, List
 import sys
+import logging
+from tqdm import tqdm
+
+# ---- Logger setup ----
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(levelname)s] %(asctime)s %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+# ----------------------
 
 # Add the project root to the Python path to import nim_client
 current_dir = Path(__file__).parent
@@ -72,7 +83,7 @@ def run_evaluation(config_path: str, image_base_dir: str, host: str, port: str, 
     all_predictions = []
     
     # Process each image in the config
-    for image_entry in config["images"]:
+    for image_entry in tqdm(config["images"], desc="Processing images"):
         image_name = image_entry["file_name"]
         image_id = image_entry["id"]
         target_shape = (image_entry["height"], image_entry["width"])  # Get target shape from config
@@ -81,13 +92,12 @@ def run_evaluation(config_path: str, image_base_dir: str, host: str, port: str, 
         image_path = os.path.join(image_base_dir, image_name)
         
         if not os.path.exists(image_path):
-            print(f"Warning: Image not found: {image_path}")
+            logger.warning(f"Image not found: {image_path}")
             continue
         
-        print(f"Processing image: {image_path}")
+        # logger.info(f"Processing image: {image_path}")  # Optional: comment out to reduce I/O
         
         # Call nim_client with the image
-        # Capture the response by modifying nim_client to return the response
         response = nim_client_main(
             host=host,
             port=port,
@@ -99,9 +109,9 @@ def run_evaluation(config_path: str, image_base_dir: str, host: str, port: str, 
             return_response=True  # New parameter to return response instead of printing
         )
         
-        print(f"Response:\n{response}")
+        # logger.debug(f"Response: {response}")  # Optional: comment out to reduce I/O
         if response is None:
-            print(f"Warning: Failed to get response for {image_path}")
+            logger.warning(f"Failed to get response for {image_path}")
             continue
         
         # Convert to COCO format
@@ -112,7 +122,7 @@ def run_evaluation(config_path: str, image_base_dir: str, host: str, port: str, 
     with open(output_path, 'w') as f:
         json.dump(all_predictions, f, indent=2)
     
-    print(f"Saved predictions to: {output_path}")
+    logger.info(f"Saved predictions to: {output_path}")
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Run evaluation on a set of images')

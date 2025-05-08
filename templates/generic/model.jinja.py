@@ -68,7 +68,7 @@ class GenericInference(InferenceBase):
                 if not item:
                     break
 
-        logger.info(f"Received request {request}")
+        logger.debug(f"Received request {request}")
 
         for input in self._inputs:
             # select the tensors for the input

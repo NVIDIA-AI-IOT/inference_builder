@@ -1,1 +1,4 @@
-python3 evaluation.py --input ../validation/rtdetr/expected.iva_0010_02_1280_0_181016_007207.json --image-id 1 --output coco_predictions.test.json
+Usage:
+```python
+python3 combined_eval.py --val-json=/home/byin/tao-deploy/.tmp/val2017_vehicle.50.json --image-dir=/media/scratch.metropolis3/yuw/datasets/coco/val2017 --output=/tmp/coco/tao_pred_coco2017_vehicle.50.json --host 10.111.53.46 --dump-vis-path=/tmp/tao/vis
+```
