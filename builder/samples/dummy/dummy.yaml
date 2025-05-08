@@ -1,7 +1,8 @@
 # the name will be used to identify the microservice.
 name: dummy
 # the root path to the directory containing the model files.
-model_repo: /opt/nim/.cache/model-repo/
+model_repo: /workspace/.cache/model-repo/
+# model_repo: /opt/nim/.cache/model-repo/
 
 # top level inference input specification
 input:
