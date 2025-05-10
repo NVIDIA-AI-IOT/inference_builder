@@ -51,7 +51,7 @@ class ImageOutput(BufferRetriever):
         try:
             data = self._output.get(timeout=self._timeout)
         except Empty:
-            logger.error("ImageOutput timeout, failed to get tensor")
+            logger.error("ImageOutput timeout, failed to decode the image, input data may be corrupted")
             return None
         return data
 

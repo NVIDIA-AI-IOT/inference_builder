@@ -809,8 +809,7 @@ class InferenceBase:
                         tensor_names = route.data.target if route.data.target else route.data.source
                         for n in tensor_names:
                             if n not in [c.name for c in global_config.output]:
-                                logger.error(f"Output {n} not found in the output configs, unable to create passthrough dataflow")
-                                continue
+                                logger.warning(f"Not all the sources are found in the input configs, consider adding a postprocessor to generate the missing tensors")
                         tensor_names = [(i['name'], o) for i, o in zip(s_configs, tensor_names)]
                         dataflow = DataFlow(configs=s_configs, tensor_names=tensor_names, inbound=True)
                     elif route.data.target:
