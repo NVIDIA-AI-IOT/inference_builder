@@ -127,7 +127,7 @@ class COCOEvaluator:
         coco_eval = COCOeval(self.coco_gt, coco_dt, self.ann_type)
         image_ids = list(set(pred['image_id'] for pred in predictions))
         coco_eval.params.imgIds = sorted(image_ids)
-        coco_eval.params.useCats = 0
+        # coco_eval.params.useCats = 0
         
         coco_eval.evaluate()
         coco_eval.accumulate()
