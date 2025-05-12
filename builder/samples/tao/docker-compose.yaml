@@ -1,6 +1,6 @@
 services:
   tao-cv:
-    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-tao:20250423.test
+    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-tao:ddd13060b329506d18db27da780757a8a448f39c
     volumes:
       - '~/.cache/nim:/opt/nim/.cache'
       # - './validation/rtdetr/model_manifest.yaml:/opt/configs/model_manifest.rtdetr.yaml:ro'
@@ -17,7 +17,47 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
-      DEBUG: 1
+      DEBUG: 0
       NIM_MODEL_NAME: fm_rtdetr
       # NGC_API_KEY: ${NGC_API_KEY}
       # NIM_MANIFEST_PATH: /opt/configs/model_manifest.rtdetr.yaml
+  tao-cv-gdino:
+    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-gdino:3568b77692c2760677000cc40fe6676bbd1b13dd
+    volumes:
+      - '~/.cache/nim:/opt/nim/.cache'
+      # - './validation/rtdetr/model_manifest.yaml:/opt/configs/model_manifest.rtdetr.yaml:ro'
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              #count: 1
+              device_ids: ['0']
+              capabilities: [gpu]
+    environment:
+      DEBUG: 0
+      NIM_MODEL_NAME: gdino
+  tao-cv-changenet:
+    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-changenet:81afec762416a4d6a3f4b179a14b64b6a331e4c5
+    volumes:
+      - '~/.cache/nim:/opt/nim/.cache'
+      # - './validation/rtdetr/model_manifest.yaml:/opt/configs/model_manifest.rtdetr.yaml:ro'
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              #count: 1
+              device_ids: ['0']
+              capabilities: [gpu]
+    environment:
+      DEBUG: 0
+      NIM_MODEL_NAME: changenet
