@@ -435,6 +435,7 @@ class DeepstreamBackend(ModelBackend):
         in_data_list = args if args else [kwargs]
         media = None
         pass_through_list = [dict() for _ in range(len(in_data_list))]
+        explicit_batch = True if args else False
 
         # analyze the input batch
         for data, pass_through_data in zip(in_data_list, pass_through_list):
@@ -471,7 +472,7 @@ class DeepstreamBackend(ModelBackend):
                     else:
                         out_data[o] = None
                 out_data_list.append(out_data)
-            yield out_data_list
+            yield out_data_list if explicit_batch else out_data_list[0]
             # No consecutive inference results for image
             if media == "image":
                 break

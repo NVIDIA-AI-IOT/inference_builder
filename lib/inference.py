@@ -556,7 +556,7 @@ class ModelOperator:
             # customized inbound data flow
             flow = inbound_dataflow_mapping[image_tensor_type](configs, tensor_names, image_tensor_type)
         self._in.append(flow)
-        logger.debug(f"Data flow < {flow.in_names} -> {flow.o_names} > connected to model {self._model_name}")
+        logger.info(f"Data flow < {flow.in_names} -> {flow.o_names} > connected to model {self._model_name}")
         return flow
 
     def bind_output(self, configs: List[Dict], sources: List[str]=[]):
@@ -565,7 +565,7 @@ class ModelOperator:
         tensor_names = [(i, o['name']) for i, o in zip(sources, configs)]
         flow = DataFlow(configs, tensor_names, outbound=True)
         self._out.append(flow)
-        logger.debug(f"model {self._model_name} connected to Data flow < {flow.in_names} -> {flow.o_names} >")
+        logger.info(f"model {self._model_name} connected to Data flow < {flow.in_names} -> {flow.o_names} >")
         return flow
 
     def import_input(self, input: DataFlow):
@@ -622,10 +622,10 @@ class ModelOperator:
                     logger.error(f"Empty result from preprocess: {args} and {kwargs}")
                     continue
                 if args:
-                    # sequential processed data
+                    # explicitly batched data
                     args = processed
                 elif kwargs:
-                    # batch processed data
+                    # implicitly batched data
                     kwargs = processed[0]
                 else:
                     logger.error(f"Invalid result from preprocess: {args} and {kwargs}")
@@ -806,21 +806,19 @@ class InferenceBase:
                         if len(s_configs) != len(route.data.source):
                             logger.error(f"Not all the sources are found in the input configs, unable to create passthrough dataflow")
                             continue
-                        tensor_names = route.data.target if route.data.target else route.data.source
-                        for n in tensor_names:
-                            if n not in [c.name for c in global_config.output]:
-                                logger.warning(f"Not all the sources are found in the input configs, consider adding a postprocessor to generate the missing tensors")
-                        tensor_names = [(i['name'], o) for i, o in zip(s_configs, tensor_names)]
+                        o_tensor_names = route.data.target if route.data.target else route.data.source
+                        if any(n not in [c.name for c in global_config.output] for n in o_tensor_names):
+                            logger.warning(f"Not all the output tensors from {o_tensor_names} are found in the output configs, consider adding a postprocessor to generate the missing tensors")
+                        tensor_names = [(i['name'], o) for i, o in zip(s_configs, o_tensor_names)]
                         dataflow = DataFlow(configs=s_configs, tensor_names=tensor_names, inbound=True)
                     elif route.data.target:
                         t_configs = [OmegaConf.to_container(c) for c in global_config.output if c.name in route.data.target]
                         if len(t_configs) != len(route.data.target):
                             logger.error(f"Not all the targets are found in the output configs, unable to create passthrough dataflow")
                             continue
-                        for n in route.data.target:
-                            if n not in [c.name for c in global_config.input]:
-                                logger.error(f"Input {n} not found in the input configs, unable to create passthrough dataflow")
-                                continue
+                        if any(n not in [c.name for c in global_config.input] for n in route.data.target):
+                            logger.error(f"Not all the targets are found in the input configs, unable to create passthrough dataflow")
+                            continue
                         tensor_names = [(i, i) for i in route.data.target]
                         dataflow = DataFlow(configs=t_configs, tensor_names=tensor_names, outbound=True)
                     else:
@@ -887,7 +885,7 @@ class InferenceBase:
                         if route.data.source == [c['name'] for c in configs]:
                             self._outputs.append(operator.bind_output(configs))
                         else:
-                            logger.warning(f"Output of {operator.model_name} is not compatible with top level output, check the route or consider adding a postprocessor")
+                            logger.warning(f"Output of {operator.model_name} is not compatible with top level output, be sure to add a top level postprocessor")
                             dataflow = DataFlow(configs=None, tensor_names=[(i, i) for i in route.data.source])
                             operator.import_output(dataflow)
                             self._outputs.append(dataflow)
@@ -902,6 +900,10 @@ class InferenceBase:
             self._outputs.append(operator.bind_output(OmegaConf.to_container(global_config.output)))
         else:
             logger.error("Unable to set up inference routes")
+        if len(self._inputs) == 0 or len(self._outputs) == 0:
+            error = "Either input or output is empty, inference pipeline is not complete"
+            logger.error(error)
+            raise Exception(error)
         self._executor = ThreadPoolExecutor(max_workers=len(self._operators))
         self._future = None
         # sanity check on vision pipeline
