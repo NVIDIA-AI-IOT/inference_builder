@@ -431,7 +431,6 @@ class DeepstreamBackend(ModelBackend):
 
 
     def __call__(self, *args, **kwargs):
-        logger.debug(f"DeepstreamBackend {self._model_name} triggerred with  {args if args else kwargs}")
         in_data_list = args if args else [kwargs]
         media = None
         pass_through_list = [dict() for _ in range(len(in_data_list))]

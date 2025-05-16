@@ -11,7 +11,6 @@ class DummyBackend(ModelBackend):
         logger.info(f"DummyBackend created for {self._model_name} to generate {[o['name'] for o in self._output_config]}")
 
     def __call__(self, *args, **kwargs):
-        logger.debug(f"DummyBackend {self._model_name} triggerred with  {args if args else kwargs}")
         in_data = list(args) if args else [kwargs]
         out_data = []
         for data in in_data:

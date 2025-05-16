@@ -11,7 +11,6 @@ class TritonBackend(ModelBackend):
         logger.debug(f"TritonBackend created for {self._model_name} with inputs {self._input_names} and outputs {self._output_names}")
 
     def __call__(self, *args, **kwargs):
-        logger.debug(f"TritonBackend {self._model_name} triggered with {args if args else kwargs}")
         in_data_list = args if args else [kwargs]
         input_config = self._model_config["input"]
         # to determine if we need to stack the input, TODO: below logic needs be more generic
@@ -93,7 +92,6 @@ class TritonBackend(ModelBackend):
         logger.debug(f"TritonBackend created for {self._model_name} with inputs {self._input_names} and outputs {self._output_names}")
 
     def __call__(self, *args, **kwargs):
-        logger.debug(f"TritonBackend {self._model_name} triggered with {args if args else kwargs}")
         in_data_list = args if args else [kwargs]
         input_config = self._model_config["input"]
         # to determine if we need to stack the input, TODO: below logic needs be more generic

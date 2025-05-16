@@ -1,0 +1,190 @@
+# the name will be used to identify the microservice.
+name: "qwen"
+# the root path to the directory containing the model files.
+model_repo: "/opt/nim/.cache/model-repo/qwen/optimized"
+# model_repo: /opt/nim/.cache/model-repo/
+
+# top level inference input specification
+input:
+  # a text input typically for LLM prompts
+  - name: "text"
+    data_type: TYPE_STRING
+    dims: [ -1 ]
+  - name: "request_output_len"
+    data_type: TYPE_INT32
+    dims: [ 1 ]
+  # base64 encoded images
+  - name: "images"
+    data_type: TYPE_CUSTOM_IMAGE_BASE64
+    dims: [ -1 ]
+    optional: true
+
+# top level inference output specification
+output:
+  # generated text
+  - name: "text"
+    data_type: TYPE_STRING
+    dims: [ -1 ]
+
+server:
+  responders:
+    infer:
+      operation: create_chat_completion_v1_chat_completions_post
+      requests:
+        NIMLLMChatCompletionRequest: >
+          {
+            "text": [
+                {% for item in request.messages %}
+                    {% if item.role == "user" %}
+                        {% for content in item.content %}
+                            {% if content.type == "text" %} {{ (content.text+"\n")|tojson }} {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                {% if not loop.last %}, {% endif %}
+                {% endfor %}
+            ],
+            "images": [
+                {% for item in request.messages %}
+                    {% if item.role == "user" %}
+                        {% for content in item.content %}
+                            {% if content.type == "image_url" %} {{ content.image_url.url|tojson }} {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                {% if not loop.last %}, {% endif %}
+                {% endfor %}
+            ],
+            "request_output_len": {{ request.max_tokens }}
+          }
+      responses:
+        NIMLLMChatCompletionResponse: >
+          {
+            "id": "{{ request._id }}",
+            "choices":
+              [
+                {% for text in response.text %}
+                {
+                  "index": {{ loop.index0 }},
+                  "message": { "role": "assistant", "content": {{ text|tojson }} },
+                  "finish_reason": "stop"
+                }
+                {% if not loop.last %}, {% endif %}
+                {% endfor %}
+              ],
+            "model": "qwen-vl-chat",
+            "usage": {"completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0}
+          }
+models:
+  - name: "llm"
+    backend: "triton/tensorrtllm"
+    max_batch_size: 1
+    model_transaction_policy:
+      decoupled: True
+    input:
+      - name: "input_ids"
+        data_type: TYPE_INT32
+        dims: [ -1 ]
+        allow_ragged_batch: true
+      - name: "input_lengths"
+        data_type: TYPE_INT32
+        dims: [ 1 ]
+      - name: "request_output_len"
+        data_type: TYPE_INT32
+        dims: [ 1 ]
+      - name: "temperature"
+        data_type: TYPE_FP32
+        dims: [ 1 ]
+        reshape: { shape: [ ] }
+        optional: true
+      - name: "runtime_top_p"
+        data_type: TYPE_FP32
+        dims: [ 1 ]
+        reshape: { shape: [ ] }
+        optional: true
+      - name: "prompt_vocab_size"
+        data_type: TYPE_UINT32
+        dims: [ 1 ]
+        reshape: { shape: [ ] }
+        optional: true
+      - name: "prompt_embedding_table"
+        data_type: TYPE_FP16
+        dims: [ -1, -1 ]
+        optional: true
+        allow_ragged_batch: true
+      - name: "streaming"
+        data_type: TYPE_BOOL
+        dims: [ 1 ]
+        optional: true
+      - name: "end_id"
+        data_type: TYPE_INT32
+        dims: [ 1 ]
+        reshape: { shape: [ ] }
+        optional: true
+      - name: "pad_id"
+        data_type: TYPE_INT32
+        dims: [ 1 ]
+        reshape: { shape: [ ] }
+        optional: true
+    output:
+      - name: "output_ids"
+        data_type: TYPE_INT32
+        dims: [ -1, -1 ]
+      - name: "sequence_length"
+        data_type: TYPE_INT32
+        dims: [ -1 ]
+    parameters:
+      gpt_model_type: "inflight_fused_batching"
+      gpt_model_path: "/opt/nim/.cache/model-repo/qwen/optimized/llm/"
+    preprocessors:
+      - kind: "custom"
+        name: "qwen-tokenizer"
+        input: ["text"]
+        output: ["input_ids"]
+        config:
+          is_encoder: true
+          tokenizer_path: "/opt/nim/.cache/model-repo/qwen/baseline/Qwen-VL-Chat/"
+      - kind: "custom"
+        name: "qwen-vision-muxer"
+        input: ["input_ids", "features"]
+        output: ["input_ids", "input_lengths", "prompt_vocab_size", "prompt_embedding_table"]
+    postprocessors:
+      - kind: "custom"
+        name: "qwen-tokenizer"
+        input: ["output_ids"]
+        output: ["text"]
+        config:
+          is_encoder: false
+          skip_special_tokens: true
+          tokenizer_path: "/opt/nim/.cache/model-repo/qwen/baseline/Qwen-VL-Chat/"
+  - name: "visionenc"
+    backend: "triton/python/tensorrtllm"
+    max_batch_size: 8
+    input:
+      - name: "input"
+        data_type: TYPE_FP32
+        dims: [-1, 3, -1, -1]
+    output:
+      - name: "output"
+        data_type: TYPE_FP32
+        dims: [-1, -1]
+        force_cpu: true
+    parameters:
+      FORCE_CPU_ONLY_INPUT_TENSORS: "no"
+      tensorrt_engine: "model.plan"
+    instance_group:
+      - count: 1
+        kind: KIND_GPU
+        gpus: [0]
+    preprocessors:
+      - kind: "custom"
+        name: "qwen-visual-processor"
+        input: ["images"]
+        output: ["input"]
+        config:
+          image_size: 448
+routes: {
+  ':["text", "request_output_len"]': 'llm',
+  ':["images"]': 'visionenc',
+  'visionenc:["output"]': 'llm:["features"]',
+  'llm:["text"]': ':["text"]'
+}
+

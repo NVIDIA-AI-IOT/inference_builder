@@ -1,0 +1,7 @@
+This example demonstrates how to build an inference service for the Qwen family of VLM models using the Inference Builder tool. We use the combination of Nvidia Triton Inference Server and TensorRT LLM backends in our inference configuration: trtllm_qwen.yaml.
+
+Before running the generated inference pipeline within a Triton Inference Server container image using TensorRT-LLM backends, you must first generate the engine files as instructed in the TensorRT-LLM documentation (https://nvidia.github.io/TensorRT-LLM/overview.html)
+
+Build the infernece package:
+
+python builder/main.py builder/samples/qwen/trtllm_qwen.yaml --api-spec builder/samples/qwen/openapi.yaml -o builder/samples/qwen/ -c builder/samples/qwen/processors.py --server-type triton -t

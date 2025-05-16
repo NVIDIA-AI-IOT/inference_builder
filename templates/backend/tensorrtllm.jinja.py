@@ -1,8 +1,10 @@
 from typing import List
 from lib.inference import ModelBackend
+import tensorrt_llm
 from tensorrt_llm.runtime import ModelRunner, Session, TensorInfo
 import tensorrt as trt
 import numpy
+import os
 
 def trt_dtype_to_torch(dtype):
     '''
@@ -17,12 +19,25 @@ def trt_dtype_to_torch(dtype):
     else:
         raise TypeError("%s is not supported" % dtype)
 
+def get_trt_dtype(dtype):
+    if dtype == torch.float16:
+        return trt.float16
+    elif dtype == torch.float32:
+        return trt.float32
+    elif dtype == torch.int32:
+        return trt.int32
+    else:
+        raise TypeError("%s is not supported" % dtype)
+
 class TensorRTLLMBackend(ModelBackend):
     """Python TensorRT Backend"""
     def __init__(self, model_config:Dict, model_home: str, device_id: int=0):
         super().__init__(model_config, model_home, device_id)
+        if os.environ.get("DEBUG"):
+            tensorrt_llm.logger.set_level("debug")
         self._model_name = model_config["name"]
         self._output_names = [o['name'] for o in model_config['output']]
+        self._input_dtype  = { i['name']: torch_datatype_mapping[i['data_type']] for i in model_config['input']}
         self._device = f"cuda:{device_id}"
         self._stream = torch.cuda.Stream(self._device)
         torch.cuda.set_stream(self._stream)
@@ -39,19 +54,24 @@ class TensorRTLLMBackend(ModelBackend):
         logger.info("TensorRT Engine loaded")
 
     def __call__(self, *args, **kwargs):
-        logger.debug(f"TensorRTBackend {self._model_name} triggerred with  {args if args else kwargs}")
+        # TensorRT LLM uses implicit batching, so we need to stack the input tensors
+        in_data = stack_tensors_in_dict(args) if args else dict(kwargs)
+        tensor_infos = []
+        for key in in_data:
+            tensor = in_data[key]
+            if isinstance(tensor, numpy.ndarray):
+                tensor = torch.from_numpy(tensor).to(self._device)
+            if not isinstance(tensor, torch.Tensor):
+                logger.error(f"Input tensor must be a numpy array or a torch tensor, but got {type(tensor)}")
+                return
+            dtype = self._input_dtype[key]
+            in_data[key] = tensor.to(dtype=dtype)
+            tensor_infos.append(TensorInfo(key, get_trt_dtype(dtype), tensor.shape))
+        output_info = self._trt_session.infer_shapes(tensor_infos)
+        trt_out = { t.name: torch.empty(tuple(t.shape), dtype=trt_dtype_to_torch(t.dtype), device=tensor.device) for t in output_info }
+        ok = self._trt_session.run(in_data, trt_out, self._stream.cuda_stream)
+        assert ok, "Runtime execution failed for vision encoder session"
+        self._stream.synchronize()
+        # TODO associate trt output names with triton output names
+        yield trt_out
 
-        in_data_list = args if args else [kwargs]
-        for item in in_data_list:
-            for key in item:
-                tensor = item[key]
-                if isinstance(tensor, numpy.ndarray):
-                    tensor = torch.from_numpy(tensor).unsqueeze(0).half().to(self._device)
-                trt_in = {'input': tensor}
-                output_info = self._trt_session.infer_shapes([TensorInfo('input', trt.DataType.HALF, tensor.shape)])
-                trt_out = { t.name: torch.empty(tuple(t.shape), dtype=trt_dtype_to_torch(t.dtype), device=tensor.device) for t in output_info }
-                ok = self._trt_session.run(trt_in, trt_out, self._stream.cuda_stream)
-                assert ok, "Runtime execution failed for vision encoder session"
-                self._stream.synchronize()
-                # TODO associate trt output names with triton output names
-                yield {self._output_names[0]: trt_out['output']}

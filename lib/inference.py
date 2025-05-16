@@ -46,10 +46,10 @@ np_datatype_mapping = {
 torch_datatype_mapping = {
     "TYPE_INVALID": None,
     "TYPE_BOOL": torch.bool,
-    "TYPE_UINT8": torch.int8,
-    "TYPE_UINT16": torch.int16,
-    "TYPE_UINT32": torch.int32,
-    "TYPE_UINT64": torch.int64,
+    "TYPE_UINT8": torch.uint8,
+    "TYPE_UINT16": torch.uint16,
+    "TYPE_UINT32": torch.uint32,
+    "TYPE_UINT64": torch.uint64,
     "TYPE_INT8": torch.int8,
     "TYPE_INT16": torch.int16,
     "TYPE_INT32": torch.int32,
@@ -631,9 +631,14 @@ class ModelOperator:
                     logger.error(f"Invalid result from preprocess: {args} and {kwargs}")
                     continue
                 # execute inference backend and collect result
+                logger.debug(f"Model {self._model_name} invokes backend {self._backend.__class__.__name__} with {args if args else kwargs}")
                 for r in self._backend(*args, **kwargs):
+                    logger.debug(f"Model {self._model_name} generated result from backend {self._backend.__class__.__name__}: {r}")
                     if not self._out:
                         logger.error(f"No output data flow is bound to model {self._model_name}, please check the route configuration")
+                        continue
+                    if isinstance(r, Error):
+                        logger.error(f"Error from model {self._model_name}: {r}")
                         continue
                     # iterate the result list and postprocess each of them
                     for out in self._out:
@@ -697,7 +702,7 @@ class ModelOperator:
                 value = data[key]
                 i_config = next((i for i in self._model_config['input'] if i["name"] == key), None)
                 if i_config is None:
-                    logger.warning(f"Unexpected data: {key}")
+                    logger.warning(f"Unexpected data: {key} from preprocessed")
                     continue
                 else:
                     data_type = i_config["data_type"]
@@ -841,9 +846,6 @@ class InferenceBase:
                             continue
                         flow = None
                         if route.data.source and route.data.target:
-                            if route.data.source != route.data.target:
-                                logger.error(f"Source and target are different, unable to bind output for model {operator1.model_name}, {route.data.source} -> {route.data.target}")
-                                continue
                             tensor_names = [(i, o) for i, o in zip(route.data.source, route.data.target)]
                             flow = DataFlow(configs=None, tensor_names=tensor_names)
                         elif route.data.source:
