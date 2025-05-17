@@ -1,4 +1,4 @@
-    async def {{ name }}(self, interface, request):
+    async def {{ name }}(self, request):
         try:
             assets = self._asset_manager.list_assets()
         except Exception as e:

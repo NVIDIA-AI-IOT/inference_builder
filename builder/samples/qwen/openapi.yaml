@@ -900,15 +900,16 @@ components:
       title: NIMLicenseInfoResponse
     NIMVLMChatCompletionContentPartImage:
       properties:
-        image_url:
-          $ref: '#/components/schemas/ImageURL'
+        image:
+          type: string
+          title: Image
         type:
           type: string
-          const: image_url
+          const: image
           title: Type
       type: object
       required:
-      - image_url
+      - image
       - type
       title: NIMVLMChatCompletionContentPartImage
     NIMVLMChatCompletionContentPartText:
@@ -928,7 +929,7 @@ components:
       title: NIMVLMChatCompletionContentPartText
     NIMVLMChatCompletionContentPartVideo:
       properties:
-        video_url:
+        video:
           $ref: '#/components/schemas/VideoURL'
         start_offset:
           anyOf:
@@ -942,7 +943,7 @@ components:
           title: Duration
         type:
           type: string
-          const: video_url
+          const: video
           title: Type
       type: object
       title: NIMVLMChatCompletionContentPartVideo

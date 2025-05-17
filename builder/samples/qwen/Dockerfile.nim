@@ -18,7 +18,7 @@ ENV NVIDIA_DRIVER_CAPABILITIES $NVIDIA_DRIVER_CAPABILITIES,video
 RUN apt update && apt install -y --no-install-recommends gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
     libyaml-cpp-dev libgstrtspserver-1.0-0 libjsoncpp25 libgles2 pkg-config
 
-    COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/lib /opt/nvidia/deepstream/deepstream-8.0/lib
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/lib /opt/nvidia/deepstream/deepstream-8.0/lib
 COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/bin /opt/nvidia/deepstream/deepstream-8.0/bin
 COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.sh /opt/nvidia/deepstream/deepstream-8.0/
 COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.txt /opt/nvidia/deepstream/deepstream-8.0/
@@ -28,6 +28,13 @@ COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/service-maker /opt/nv
 
 RUN /opt/nvidia/deepstream/deepstream-8.0/install.sh
 RUN ln -sf deepstream-8.0 /opt/nvidia/deepstream/deepstream || true
+
+RUN --mount=type=cache,target=/root/.cache/pip pip install qwen-vl-utils[decord]==0.0.8
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install git+https://github.com/huggingface/transformers accelerate
+
+
+
 
 ENV NIM_DIR_PATH="/opt/nim" \
     PIP_INDEX_URL=https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple \
@@ -80,7 +87,7 @@ RUN touch /opt/nim/start_server.sh && \
     set -eu
 	# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 	# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
-    python3 /opt/nim/__main__.py & tritonserver --model-repository=/opt/nim/model_repo
+    python3 /opt/nim/__main__.py
 #    while true; do sleep 5; done
 EOF
 

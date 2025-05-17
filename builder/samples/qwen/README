@@ -4,4 +4,4 @@ Before running the generated inference pipeline within a Triton Inference Server
 
 Build the infernece package:
 
-python builder/main.py builder/samples/qwen/trtllm_qwen.yaml --api-spec builder/samples/qwen/openapi.yaml -o builder/samples/qwen/ -c builder/samples/qwen/processors.py --server-type triton -t
+python builder/main.py builder/samples/qwen/pytorch_qwen.yaml --api-spec builder/samples/qwen/openapi.yaml -o builder/samples/qwen/ -c builder/samples/qwen/processors.py --server-type nim -t

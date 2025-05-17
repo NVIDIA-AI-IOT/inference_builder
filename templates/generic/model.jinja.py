@@ -43,6 +43,8 @@ class GenericInference(InferenceBase):
                 backend_class = TensorrtLlmBackend
             elif backend_spec[0] == 'dummy':
                 backend_class = DummyBackend
+            elif backend_spec[0] == 'pytorch':
+                backend_class = PytorchBackend
             else:
                 raise Exception(f"Backend {model_config.backend} not supported")
             backend_instance = backend_class(
@@ -110,9 +112,8 @@ class GenericInference(InferenceBase):
             try:
                 logger.debug("Waiting for tensors from async queue")
                 response_data = dict()
-                done, _ = await asyncio.wait([ao.get() for ao in self._async_outputs], return_when=asyncio.ALL_COMPLETED)
-                for f in done:
-                    data = f.result()
+                results = await asyncio.gather(*(ao.get() for ao in self._async_outputs))
+                for data in results:
                     logger.debug(f"Got output data: {data}")
                     if isinstance(data, Error):
                         logger.debug(f"Got Error: {data.message}")

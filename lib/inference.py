@@ -576,7 +576,6 @@ class ModelOperator:
 
     def run(self, model_backend: ModelBackend):
         logger.debug(f"Model operator for {self._model_name} started")
-
         # create preprocessors
         for kind, processors in [("preprocessors", self._preprocessors), ("postprocessors", self._postprocessors)]:
             if kind in self._model_config:
@@ -587,12 +586,14 @@ class ModelOperator:
                     elif config["kind"] == "custom":
                         ProcessorClass = CustomProcessor
                     if ProcessorClass is not None:
+                        logger.info(f"Adding {ProcessorClass.__name__} to {kind}")
                         processors.append(
                             ProcessorClass(
                                 config=config,
                                 model_home=self._model_home
                             )
                         )
+                        logger.info(f"Added {ProcessorClass.__name__} to {kind}")
                     else:
                         raise Exception("Invalid Processor")
         # backend loop
@@ -617,7 +618,8 @@ class ModelOperator:
                     args = split_tensor_in_dict(kwargs)
                     kwargs = {}
                 # call preprocess() before passing args to the backend
-                processed = self._preprocess(args if args else [kwargs])
+                processed, passthrough_tensors = self._preprocess(args if args else [kwargs])
+                in_names = [i["name"] for i in self._model_config["input"]]
                 if not processed:
                     logger.error(f"Empty result from preprocess: {args} and {kwargs}")
                     continue
@@ -645,7 +647,11 @@ class ModelOperator:
                         output_data = {n : [] for n in out.in_names}
                         if isinstance(r, list):
                             # we get a batch
-                            for result in r:
+                            if len(passthrough_tensors) == 1:
+                                passthrough_tensors = passthrough_tensors*len(r)
+                            for i, result in enumerate(r):
+                                if passthrough_tensors:
+                                    result.update(passthrough_tensors[i])
                                 result = self._postprocess(result)
                                 if not all([n in result for n in out.in_names]):
                                     logger.error(f"Data received from model {self._model_name} is incomplete, expected: {out.in_names}, received: {result.keys()}. Post-processor missing?")
@@ -658,6 +664,8 @@ class ModelOperator:
                                         v.append(None)
                         else:
                             # implicit batching
+                            if passthrough_tensors:
+                                r.update(passthrough_tensors[0])
                             output_data = self._postprocess(r)
                             if not all([n in output_data for n in out.in_names]):
                                 logger.error(f"Data received from model {self._model_name} is incomplete, expected: {out.in_names}, received: {output_data.keys()}. Post-processor missing?")
@@ -696,14 +704,16 @@ class ModelOperator:
                 result.append(processed)
             # update outcome
             outcome = result
-        # correct the data type
+        # correct the data type and extract the passthrough tensors
+        passthrough_tensors = []
         for data in outcome:
+            passthrough_tensor = {}
             for key in data:
                 value = data[key]
                 i_config = next((i for i in self._model_config['input'] if i["name"] == key), None)
                 if i_config is None:
-                    logger.warning(f"Unexpected data: {key} from preprocessed")
-                    continue
+                    logger.info(f"{key} from preprocessed is not found in the model input config, adding it as a passthrough tensor")
+                    passthrough_tensor[key] = value
                 else:
                     data_type = i_config["data_type"]
                     if isinstance(value, np.ndarray):
@@ -714,7 +724,10 @@ class ModelOperator:
                         data_type = torch_datatype_mapping[data_type]
                         if value.dtype != data_type:
                             data[key] = value.to(data_type)
-        return outcome
+            for key in passthrough_tensor:
+                data.pop(key)
+            passthrough_tensors.append(passthrough_tensor)
+        return outcome, passthrough_tensors
 
     def _postprocess(self, data: Dict):
         processed = {k: v for k, v in data.items()}
