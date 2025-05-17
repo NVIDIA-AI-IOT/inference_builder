@@ -20,7 +20,10 @@ class QwenVLProcessor:
             return_tensors="pt",
         )
         inputs = inputs.to("cuda")
-        return inputs["input_ids"], inputs["attention_mask"], inputs["pixel_values"], inputs["image_grid_thw"], max_new_tokens, inputs["input_ids"]
+        if "pixel_values" in inputs:
+            return inputs["input_ids"], inputs["attention_mask"], inputs["pixel_values"], inputs["image_grid_thw"], None, None, max_new_tokens, inputs["input_ids"]
+        else:
+            return inputs["input_ids"], inputs["attention_mask"], None, None, inputs["pixel_values_videos"], inputs["video_grid_thw"], max_new_tokens, inputs["input_ids"]
 
 class QwenVLTokenizer:
     name = "qwen-vl-tokenizer"
@@ -30,8 +33,6 @@ class QwenVLTokenizer:
     def __call__(self, *args):
         generated_ids = args[0]
         input_ids = args[1]
-        print(f"generated_ids: {generated_ids}")
-        print(f"input_ids: {input_ids}")
         generated_ids_trimmed = [
             out_ids[len(in_ids) :] for in_ids, out_ids in zip(input_ids, generated_ids.unsqueeze(0))
         ]

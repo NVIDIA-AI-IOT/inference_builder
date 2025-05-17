@@ -576,6 +576,7 @@ class ModelOperator:
 
     def run(self, model_backend: ModelBackend):
         logger.debug(f"Model operator for {self._model_name} started")
+
         # create preprocessors
         for kind, processors in [("preprocessors", self._preprocessors), ("postprocessors", self._postprocessors)]:
             if kind in self._model_config:
@@ -586,14 +587,12 @@ class ModelOperator:
                     elif config["kind"] == "custom":
                         ProcessorClass = CustomProcessor
                     if ProcessorClass is not None:
-                        logger.info(f"Adding {ProcessorClass.__name__} to {kind}")
                         processors.append(
                             ProcessorClass(
                                 config=config,
                                 model_home=self._model_home
                             )
                         )
-                        logger.info(f"Added {ProcessorClass.__name__} to {kind}")
                     else:
                         raise Exception("Invalid Processor")
         # backend loop
@@ -698,7 +697,8 @@ class ModelOperator:
                         continue
                     # update as processed
                     for key, value in zip(preprocessor.output, output):
-                        processed[key] = value
+                        if value is not None:
+                            processed[key] = value
                 else:
                     logger.warning(f"Pre-processor {preprocessor.name} skipped because of missing input tensors")
                 result.append(processed)

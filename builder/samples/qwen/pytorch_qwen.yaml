@@ -45,7 +45,40 @@ server:
             "model": "qwen-vl",
             "usage": {"completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0}
           }
-
+    add_file:
+      operation: add_media_file
+      responses:
+        AddFileResponse: >
+          {
+            "data": {
+              "id": {{response.id|tojson}},
+              "path": {{response.path|tojson}},
+              "size": {{response.size|tojson}},
+              "duration": {{response.duration|tojson}},
+              "contentType": {{response.mime_type|tojson}}
+            }
+          }
+    del_file:
+      operation: delete_media_file
+      responses:
+        DeleteFileResponse: >
+          {
+            "deleted": {{response.status|tojson}}
+          }
+    list_files:
+      operation: list_media_files
+      responses:
+        ListFilesResponse: >
+          {
+            "data": [
+              {% for item in response.assets %} {
+                "id": {{item.id|tojson}},
+                "path": {{item.path|tojson}},
+                "size": {{item.size|tojson}},
+                "contentType": {{item.mime_type|tojson}}
+              } {% if not loop.last %}, {% endif %} {% endfor %}
+            ]
+          }
 models:
   - name: "Qwen2.5-VL-7B-Instruct"
     backend: "pytorch"
@@ -59,9 +92,19 @@ models:
       - name: "pixel_values"
         data_type: TYPE_FP32
         dims: [-1, -1]
+        optional: true
       - name: "image_grid_thw"
         data_type: TYPE_INT64
         dims: [-1, -1]
+        optional: true
+      - name: "pixel_values_videos"
+        data_type: TYPE_FP32
+        dims: [-1, -1]
+        optional: true
+      - name: "video_grid_thw"
+        data_type: TYPE_INT64
+        dims: [-1, -1]
+        optional: true
       - name: "max_new_tokens"
         data_type: TYPE_INT32
         dims: [1]
@@ -73,7 +116,7 @@ models:
       - kind: "custom"
         name: "qwen-vl-processor"
         input: ["messages", "max_new_tokens"]
-        output: ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "max_new_tokens", "input_ids_copy"]
+        output: ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw", "max_new_tokens", "input_ids_copy"]
     postprocessors:
       - kind: "custom"
         name: "qwen-vl-tokenizer"

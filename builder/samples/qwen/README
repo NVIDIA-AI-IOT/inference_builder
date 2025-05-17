@@ -1,7 +1,57 @@
-This example demonstrates how to build an inference service for the Qwen family of VLM models using the Inference Builder tool. We use the combination of Nvidia Triton Inference Server and TensorRT LLM backends in our inference configuration: trtllm_qwen.yaml.
+This example demonstrates how to build an inference pipeline and package it to a NIM for the Qwen family of VLM models using the Inference Builder tool.
 
-Before running the generated inference pipeline within a Triton Inference Server container image using TensorRT-LLM backends, you must first generate the engine files as instructed in the TensorRT-LLM documentation (https://nvidia.github.io/TensorRT-LLM/overview.html)
+Two configurations are provided, allowing you to choose based on your specific software and hardware environment:
 
-Build the infernece package:
+1. pytorch_qwen.yaml: leveraging the transformer APIs and fits all the models
+2. trtllm_qwen.yaml: leveraging TensroRT LLM APIs for better performance
+
+How to Build the inference code:
+
+First you must follow the top level README.md to set up the enviroment, and then run
 
 python builder/main.py builder/samples/qwen/pytorch_qwen.yaml --api-spec builder/samples/qwen/openapi.yaml -o builder/samples/qwen/ -c builder/samples/qwen/processors.py --server-type nim -t
+
+How to Run the inference pipeline within a NIM:
+
+The sample folder already contains all the ingredients for building a NIM, you only need to run
+
+cd builder/samples
+docker compose up --build nim-qwen
+
+How to adapt the generated inference package to your own NIM environment:
+
+1. All the prerequisites listed in the dependencies.yaml be copied to your dependencies.
+2. The latest transformers(pip install git+https://github.com/huggingface/transformers accelerate) and qwen utils(pip install qwen-vl-utils[decord]==0.0.8) be installed in your Dockerfile
+3. Your model checkpoints are downloaded in /opt/nim/.cache/model-repo, or you can modify the "model_repo" in the yaml configuration file and rebuild the inference package.
+4. Add the inference package to the contaienr image (ADD qwen.tgz $NIM_DIR_PATH)
+5. Set the entry point as "python /opt/nim/__main__.py" (assuming NIM_DIR_PATH == "/opt/nim")
+6. If you're using a different OpenAPI specification in your NIM, you must modify the request/response mapping templates in your yaml configuration and rebuild the inference package.
+
+There is a OpenAI client included in the sample for testing the NIM.
+
+For image input, you can use a URL:
+
+python.py client.py https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg
+
+For video input, you need to first upload a test video file:
+
+curl -X 'POST' \
+  'http://10.176.228.212:8803/v1/files' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: multipart/form-data' \
+  -F 'file=@its_1920_30s.mp4;type=video/mp4'
+
+You'll get a response 200 with a json body:
+{
+  "data": {
+    "id": "577a9f11-2b24-4db8-82c8-2601e0c2b6e4",
+    "path": "/tmp/assets/577a9f11-2b24-4db8-82c8-2601e0c2b6e4/its_1920_30s.mp4",
+    "size": 3472221,
+    "duration": 30000000000,
+    "contentType": "video/mp4"
+  }
+}
+
+Run the client.py with the returned video path:
+
+python client.py --video-path /tmp/assets/577a9f11-2b24-4db8-82c8-2601e0c2b6e4/its_1920_30s.mp4
