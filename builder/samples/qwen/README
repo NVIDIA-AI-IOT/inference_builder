@@ -1,4 +1,7 @@
-This example demonstrates how to build an inference pipeline and package it to a NIM for the Qwen family of VLM models using the Inference Builder tool.
+This example demonstrates how to build an inference pipeline and package it to a NIM for the Qwen family of VLM models using the Inference Builder tool. Following models have been tested:
+- Qwen/Qwen2.5-VL-3B-Instruct
+- Qwen/Qwen2.5-VL-7B-Instruct
+- Qwen/Qwen2.5-VL-32B-Instruct
 
 Two configurations are provided, allowing you to choose based on your specific software and hardware environment:
 
@@ -16,7 +19,7 @@ How to Run the inference pipeline within a NIM:
 The sample folder already contains all the ingredients for building a NIM, you only need to run
 
 cd builder/samples
-docker compose up --build nim-qwen
+docker compose up nim-qwen --build
 
 How to adapt the generated inference package to your own NIM environment:
 
