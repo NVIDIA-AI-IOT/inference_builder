@@ -12,6 +12,8 @@
 FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev97" AS ds_stage
 
 FROM nvcr.io/nvidia/tritonserver:25.04-trtllm-python-py3 AS inference_base
+# Replace the base image with local built trtllm image for using tensorrtllm/pytorch backend
+# FROM tensorrt_llm/release:latest AS inference_base
 
 ENV NVIDIA_DRIVER_CAPABILITIES $NVIDIA_DRIVER_CAPABILITIES,video
 
@@ -29,12 +31,10 @@ COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/service-maker /opt/nv
 RUN /opt/nvidia/deepstream/deepstream-8.0/install.sh
 RUN ln -sf deepstream-8.0 /opt/nvidia/deepstream/deepstream || true
 
+# Comment out the following lines if using local built trtllm image
 RUN --mount=type=cache,target=/root/.cache/pip pip install qwen-vl-utils[decord]==0.0.8
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install git+https://github.com/huggingface/transformers accelerate
-
-
-
 
 ENV NIM_DIR_PATH="/opt/nim" \
     PIP_INDEX_URL=https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple \

@@ -1,5 +1,4 @@
-import base64
-from io import BytesIO
+import time
 import argparse
 from openai import OpenAI
 
@@ -40,18 +39,21 @@ if __name__ == '__main__':
                     },
                     {
                         "type": "video",
-                        "video": f"file://{video_path}"
+                        "video": f"{video_path}"
                     }
                 ]
             }
         ]
 
     client = OpenAI(base_url="http://0.0.0.0:8803/v1", api_key="not-used")
+    start_time = time.time()
     chat_response = client.chat.completions.create(
         model="nvidia/vila",
         messages=messages,
         max_tokens=512,
         stream=False
     )
+    infer_time = time.time() - start_time
+    print(f"Inference time: {infer_time} seconds")
     assistant_message = chat_response.choices[0].message
     print(assistant_message)

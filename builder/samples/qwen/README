@@ -24,11 +24,12 @@ docker compose up nim-qwen --build
 How to adapt the generated inference package to your own NIM environment:
 
 1. All the prerequisites listed in the dependencies.yaml be copied to your dependencies.
-2. The latest transformers(pip install git+https://github.com/huggingface/transformers accelerate) and qwen utils(pip install qwen-vl-utils[decord]==0.0.8) be installed in your Dockerfile
-3. Your model checkpoints are downloaded in /opt/nim/.cache/model-repo, or you can modify the "model_repo" in the yaml configuration file and rebuild the inference package.
-4. Add the inference package to the contaienr image (ADD qwen.tgz $NIM_DIR_PATH)
-5. Set the entry point as "python /opt/nim/__main__.py" (assuming NIM_DIR_PATH == "/opt/nim")
-6. If you're using a different OpenAPI specification in your NIM, you must modify the request/response mapping templates in your yaml configuration and rebuild the inference package.
+2. The latest transformers(pip install git+https://github.com/huggingface/transformers accelerate) and qwen utils(pip install qwen-vl-utils[decord]==0.0.8) be installed in your Dockerfile if you choose transforms pytorch backend (pytorch_qwen.yaml).
+3. Build your tensrortllm image and use it as base image if you want to use tensorrtllm/pytorch backend (trtllm_qwen.yaml) since some newer models are not supported in older tensorrtllm container images pulled from the repository.
+4. Your model checkpoints are downloaded in /opt/nim/.cache/model-repo. You can also use your preferred model folder by modifying the "model_repo" in the yaml configuration file and rebuild the inference package.
+5. Add the inference package to the contaienr image (ADD qwen.tgz $NIM_DIR_PATH)
+6. Set the entry point as "python /opt/nim/__main__.py" (assuming NIM_DIR_PATH == "/opt/nim")
+7. If you're using a different OpenAPI specification in your NIM, you must modify the request/response mapping templates accordingly in the yaml configuration and rebuild the inference package.
 
 There is a OpenAI client included in the sample for testing the NIM.
 
@@ -39,7 +40,7 @@ python.py client.py https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/asse
 For video input, you need to first upload a test video file:
 
 curl -X 'POST' \
-  'http://10.176.228.212:8803/v1/files' \
+  'http://localhost:8803/v1/files' \
   -H 'accept: application/json' \
   -H 'Content-Type: multipart/form-data' \
   -F 'file=@its_1920_30s.mp4;type=video/mp4'

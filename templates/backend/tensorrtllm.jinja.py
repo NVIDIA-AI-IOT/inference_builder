@@ -1,11 +1,11 @@
-from typing import List
+from typing import List, Dict
 from lib.inference import ModelBackend
 import tensorrt_llm
-from tensorrt_llm.runtime import ModelRunner, Session, TensorInfo
+from tensorrt_llm.runtime import Session, TensorInfo
 import tensorrt as trt
 import numpy
 import os
-
+import json
 def trt_dtype_to_torch(dtype):
     '''
     Convert TRT data type to PyTorch data type
@@ -29,33 +29,19 @@ def get_trt_dtype(dtype):
     else:
         raise TypeError("%s is not supported" % dtype)
 
-class TensorRTLLMBackend(ModelBackend):
-    """Python TensorRT Backend"""
-    def __init__(self, model_config:Dict, model_home: str, device_id: int=0):
-        super().__init__(model_config, model_home, device_id)
-        if os.environ.get("DEBUG"):
-            tensorrt_llm.logger.set_level("debug")
-        self._model_name = model_config["name"]
-        self._output_names = [o['name'] for o in model_config['output']]
-        self._input_dtype  = { i['name']: torch_datatype_mapping[i['data_type']] for i in model_config['input']}
-        self._device = f"cuda:{device_id}"
-        self._stream = torch.cuda.Stream(self._device)
+class TensorRTSession:
+    def __init__(self, stream, device, engine_file, input_dtype):
+        self._stream = stream
+        self._device = device
+        self._input_dtype = input_dtype
         torch.cuda.set_stream(self._stream)
-        logger.debug(f"TensorRTBackend created for {self._model_name} to generate {self._output_names}")
-        if "tensorrt_engine" not in model_config:
-            raise("PolygraphBackend requires a path to tensorrt_engine")
-        engine_file = model_config["parameters"]["tensorrt_engine"]
-        if not os.path.isabs(engine_file):
-            engine_file = os.path.join(self._model_home, engine_file)
         logger.info(f"Loading TensorRT Engine from {engine_file}...")
         with open(engine_file, 'rb') as f:
             engine_buffer = f.read()
             self._trt_session = Session.from_serialized_engine(engine_buffer)
         logger.info("TensorRT Engine loaded")
 
-    def __call__(self, *args, **kwargs):
-        # TensorRT LLM uses implicit batching, so we need to stack the input tensors
-        in_data = stack_tensors_in_dict(args) if args else dict(kwargs)
+    def infer(self, in_data: Dict):
         tensor_infos = []
         for key in in_data:
             tensor = in_data[key]
@@ -63,7 +49,7 @@ class TensorRTLLMBackend(ModelBackend):
                 tensor = torch.from_numpy(tensor).to(self._device)
             if not isinstance(tensor, torch.Tensor):
                 logger.error(f"Input tensor must be a numpy array or a torch tensor, but got {type(tensor)}")
-                return
+                return {}
             dtype = self._input_dtype[key]
             in_data[key] = tensor.to(dtype=dtype)
             tensor_infos.append(TensorInfo(key, get_trt_dtype(dtype), tensor.shape))
@@ -73,5 +59,125 @@ class TensorRTLLMBackend(ModelBackend):
         assert ok, "Runtime execution failed for vision encoder session"
         self._stream.synchronize()
         # TODO associate trt output names with triton output names
-        yield trt_out
+        return trt_out
+
+
+class TensorRTLLMBackend(ModelBackend):
+    """Python TensorRT Backend"""
+    def __init__(self, model_config:Dict, model_home: str, device_id: int=0):
+        super().__init__(model_config, model_home, device_id)
+        self._model_name = model_config["name"]
+        self._output_names = [o['name'] for o in model_config['output']]
+        self._device = f"cuda:{device_id}"
+        self._stream = torch.cuda.Stream(self._device)
+        self._params = model_config["parameters"]
+        llm_backend = model_config["backend"].split("/")[-1]
+        if llm_backend == "pytorch":
+            from tensorrt_llm import SamplingParams
+            from tensorrt_llm._torch import LLM
+            from tensorrt_llm._torch.pyexecutor.config import PyTorchConfig
+            from tensorrt_llm.llmapi import (EagleDecodingConfig, KvCacheConfig,
+                                            MTPDecodingConfig)
+            from tensorrt_llm.inputs import (INPUT_FORMATTER_MAP, default_image_loader, default_video_loader)
+            in_names = [i['name'] for i in model_config['input']]
+            if "max_tokens" not in in_names or "temperature" not in in_names or "top_p" not in in_names or "top_k" not in in_names:
+                raise ValueError("max_tokens, temperature, top_p, and top_k must be provided for tensorrtllmpytorch backend")
+            self._trt_session = None
+            pytorch_config = PyTorchConfig(
+                enable_overlap_scheduler=self._params.get("enable_overlap_scheduler", False),
+                kv_cache_dtype=self._params.get("kv_cache_dtype", "auto"),
+                attn_backend=self._params.get("attn_backend", "TRTLLM"),
+                use_cuda_graph=self._params.get("use_cuda_graph", False),
+                load_format=self._params.get("load_format", "auto"),
+                print_iter_log=self._params.get("print_iter_log", False),
+                torch_compile_enabled=self._params.get("use_torch_compile", False),
+                torch_compile_piecewise_cuda_graph=self._params.get("use_piecewise_cuda_graph", False),
+                moe_backend=self._params.get("moe_backend", "CUTLASS"),
+                enable_trtllm_decoder=self._params.get("enable_trtllm_decoder", False)
+            )
+            kv_cache_config = KvCacheConfig(
+                enable_block_reuse=not self._params.get("disable_kv_cache_reuse", False),
+                free_gpu_memory_fraction=self._params.get("kv_cache_fraction", None),
+            )
+
+            spec_decode_algo = self._params.get("spec_decode_algo", None)
+            if spec_decode_algo is not None:
+                spec_decode_algo = spec_decode_algo.upper()
+
+            if spec_decode_algo == 'MTP':
+                spec_config = MTPDecodingConfig(
+                    num_nextn_predict_layers=self._params.get("spec_decode_nextn", 1),
+                    use_relaxed_acceptance_for_thinking=self._params.get("use_relaxed_acceptance_for_thinking", False),
+                    relaxed_topk=self._params.get("relaxed_topk", 1),
+                    relaxed_delta=self._params.get("relaxed_delta", 0.0))
+            elif spec_decode_algo == "EAGLE3":
+                spec_config = EagleDecodingConfig(
+                    max_draft_len=self._params.get("spec_decode_nextn", 1),
+                    pytorch_eagle_weights_path=self._params.get("eagle_model_dir", None))
+            else:
+                spec_config = None
+            self._llm = LLM(
+                model=self._model_home,
+                max_model_len=self._params.get("max_model_len", 1024),
+                max_batch_size=model_config.get("max_batch_size", 1),
+                max_num_tokens=self._params.get("max_num_tokens", 1024),
+                pytorch_backend_config=pytorch_config,
+                kv_cache_config=kv_cache_config,
+                tensor_parallel_size=self._params.get("tp_size", 1),
+                pipeline_parallel_size=self._params.get("pp_size", 1),
+                enable_attention_dp=self._params.get("enable_attention_dp", False),
+                moe_expert_parallel_size=self._params.get("moe_ep_size", -1),
+                moe_tensor_parallel_size=self._params.get("moe_tp_size", -1),
+                moe_cluster_parallel_size=self._params.get("moe_cluster_size", -1),
+                enable_chunked_prefill=self._params.get("enable_chunked_prefill", False),
+                speculative_config=spec_config
+            )
+            self._sample_params_cls = SamplingParams
+            self._modality = self._params.get("modality", None)
+            self._model_type = json.load(open(os.path.join(self._llm._hf_model_dir, 'config.json')))['model_type']
+            self._default_image_loader = default_image_loader
+            self._default_video_loader = default_video_loader
+            self._input_formatter = INPUT_FORMATTER_MAP[self._model_type]
+            logger.debug(f"TensorRTLLMBackend with pytorch created for {self._model_name} to generate {self._output_names}")
+        else:
+            self._llm = None
+            if "tensorrt_engine" not in model_config:
+                raise("TensorRTLLM backend requires a path to tensorrt_engine")
+            engine_file = model_config["parameters"]["tensorrt_engine"]
+            if not os.path.isabs(engine_file):
+                engine_file = os.path.join(self._model_home, engine_file)
+            input_dtype  = { i['name']: torch_datatype_mapping[i['data_type']] for i in model_config['input']}
+            self._trt_session = TensorRTSession(self._stream, self._device, engine_file, input_dtype)
+            logger.debug(f"TensorRTBackend created for {self._model_name} to generate {self._output_names}")
+
+    def __call__(self, *args, **kwargs):
+        if self._llm is not None:
+            prompts = [i["prompts"] for i in args] if args else [kwargs["prompts"]]
+            media = [i["media"] for i in args] if args else [kwargs["media"]]
+            params = args[0] if args else kwargs
+            sample_params = self._sample_params_cls(
+                max_tokens=params.get("max_tokens", 1024),
+                temperature=params.get("temperature", 0.7),
+                top_p=params.get("top_p", 0.95),
+                top_k=params.get("top_k", 0)
+            )
+            inputs = []
+            if self._modality == "video":
+                num_frames = params.get("num_frames", 1)
+                inputs = self._default_video_loader(prompts, media, num_frames=num_frames)
+            elif self._modality == "image":
+                inputs = self._default_image_loader(prompts, media)
+            inputs = self._input_formatter(self._model_home, inputs)
+            results = self._llm.generate(inputs, sample_params)
+            yield [{"outputs": r} for r in results]
+        elif self._trt_session is not None:
+            # TensorRT LLM uses implicit batching, so we need to stack the input tensors
+            in_data = stack_tensors_in_dict(args) if args else dict(kwargs)
+            yield self._trt_session.infer(in_data)
+        else:
+            raise Exception("TensorRTLLM backend is not correctly initialized")
+
+
+
+
 

@@ -40,16 +40,17 @@ np_datatype_mapping = {
     "TYPE_CUSTOM_DS_IMAGE": np.ubyte,
     "TYPE_CUSTOM_DS_MIME": np.string_,
     "TYPE_CUSTOM_DS_PASSTHROUGH": None,
-    "TYPE_BF16": None
+    "TYPE_BF16": None,
+    "TYPE_CUSTOM_OBJECT": None
 }
 
 torch_datatype_mapping = {
     "TYPE_INVALID": None,
     "TYPE_BOOL": torch.bool,
     "TYPE_UINT8": torch.uint8,
-    "TYPE_UINT16": torch.uint16,
-    "TYPE_UINT32": torch.uint32,
-    "TYPE_UINT64": torch.uint64,
+    "TYPE_UINT16": torch.int16,
+    "TYPE_UINT32": torch.int32,
+    "TYPE_UINT64": torch.int64,
     "TYPE_INT8": torch.int8,
     "TYPE_INT16": torch.int16,
     "TYPE_INT32": torch.int32,
@@ -61,7 +62,8 @@ torch_datatype_mapping = {
     "TYPE_CUSTOM_DS_IMAGE": torch.int8,
     "TYPE_CUSTOM_DS_MIME": None,
     "TYPE_CUSTOM_DS_PASSTHROUGH": None,
-    "TYPE_BF16": None
+    "TYPE_BF16": None,
+    "TYPE_CUSTOM_OBJECT": None
 }
 
 @dataclass
