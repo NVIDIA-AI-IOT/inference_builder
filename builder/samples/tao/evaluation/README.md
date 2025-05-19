@@ -1,14 +1,16 @@
-## Helper to get a subset from the complete set
+## Detection
+
+### Helper to get a subset from the complete set
 ```python
 python3 create_debug_subset.py /media/scratch.metropolis3/yuw/datasets/coco/annotations/instances_val2017.json /tmp/val2017_vehicle.50.json --supercategory vehicle --num_images 50
 ```
 
-## Eval usage:
+### Eval usage:
 ```python
-python3 combined_eval.py --val-json=/tmp/val2017_vehicle.50.json --image-dir=/media/scratch.metropolis3/yuw/datasets/coco/val2017 --output=/tmp/tao/pred_val2017_vehicle.50.json --host 10.111.53.46 --dump-vis-path=/tmp/tao/vis_val2017_vehicle.50
+python3 detection_eval.py --val-json=/tmp/val2017_vehicle.50.json --image-dir=/media/scratch.metropolis3/yuw/datasets/coco/val2017 --output=/tmp/tao/pred_val2017_vehicle.50.json --host 10.111.53.46 --dump-vis-path=/tmp/tao/vis_val2017_vehicle.50
 ```
 
-## COCO Prediction schema
+### COCO Prediction schema
 ```json
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -59,4 +61,29 @@ python3 combined_eval.py --val-json=/tmp/val2017_vehicle.50.json --image-dir=/me
       "required": ["image_id", "bbox", "score", "category_id"]
     }
   }
+```
+
+## Semantic Segmentation
+
+### Usage
+```python
+python3 semantic_segmentation_eval.py --config .seg/experiment.yaml --host 127.0.0.1 --port 8800
+```
+
+### --config is tao-deploy experiment.yaml config, we only need to dataset section
+```yaml
+# Example config YAML structure:
+dataset:
+  segment:
+    root_dir: /path/to/dataset
+    validation_split: val
+    palette:
+      - label_id: 0
+        mapping_class: background
+        rgb: [0, 0, 0]
+        seg_class: background
+      - label_id: 1
+        mapping_class: foreground
+        rgb: [255, 255, 255]
+        seg_class: foreground
 ```
