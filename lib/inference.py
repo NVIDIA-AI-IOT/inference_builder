@@ -1,14 +1,14 @@
-
 import base64
 from concurrent.futures import ThreadPoolExecutor
 import os
+import types
+import threading
 from queue import Queue, Empty
 from abc import ABC, abstractmethod
 from config import global_config
 from .utils import get_logger, split_tensor_in_dict
 from .codec import ImageDecoder
 import custom
-import transformers
 from omegaconf import OmegaConf
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Union
@@ -16,8 +16,9 @@ import numpy as np
 from collections import namedtuple
 import json
 from pyservicemaker import Pipeline, as_tensor
+from pyservicemaker.utils import MediaExtractor, MediaChunk
 import torch
-
+from .asset_manager import AssetManager
 
 logger = get_logger(__name__)
 
@@ -115,6 +116,20 @@ class DataFlow:
                     processed.append(np.frombuffer(base64.b64decode(input), dtype=np.uint8))
         return processed
 
+    def _is_collected_valid(self, collected: Dict):
+        if not collected:
+            logger.info(f"No data collected from the dataflow: {self.in_names}")
+            return False
+        # check output data integrity
+        if self._outbound:
+            for config in self._configs:
+                name = config["name"]
+                optional = "optional" in config and config["optional"]
+                if name not in collected and not optional:
+                    logger.error(f"{name} is not optional and not found from the dataflow output configs!")
+                    return False
+        return True
+
     @property
     def in_names(self):
         return [i[0] for i in self._tensor_names]
@@ -130,8 +145,7 @@ class DataFlow:
 
     def put(self, item: Union[Dict, Error, Stop]):
         if not item:
-            # empty item is used to signal the end of the data flow
-            logger.info("Data flow ended with empty item")
+            # pass Error or Stop to the downstream
             self._queue.put(item, timeout=self._timeout)
             return
         # check input data integrity
@@ -158,17 +172,27 @@ class DataFlow:
             else:
                 collected[o_name] = tensor
         # check output data integrity
-        if self._outbound:
-            for config in self._configs:
-                name = config["name"]
-                optional = "optional" in config and config["optional"]
-                if name not in collected and not optional:
-                    logger.error(f"{name} is not optional and not found from the dataflow output configs!")
-                    return
-        if collected:
-            self._queue.put(collected, timeout=self._timeout)
+        if not self._is_collected_valid(collected):
+            logger.warning(f"Invalid data collected from the dataflow: {self.in_names}, data: {collected}, ignored")
+            return
+
+        #  deposit the collected data to the queue
+        generators = {}
+        values = {}
+        for k, v in collected.items():
+            if isinstance(v, types.GeneratorType):
+                generators[k] = v
+            else:
+                values[k] = v
+        if generators:
+            keys = list(generators.keys())
+            generators = list(generators.values())
+            for vs in zip(*generators):
+                result = dict(zip(keys, vs))
+                result.update(values)
+                self._queue.put(result, timeout=self._timeout)
         else:
-            logger.error(f"No data to deposit to the queue")
+            self._queue.put(values, timeout=self._timeout)
 
     def get(self):
         try:
@@ -177,20 +201,87 @@ class DataFlow:
             item = Error("timeout")
         return item
 
+class VideoInputDataFlow(DataFlow):
+    """A data flow for video data"""
+    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=None):
+        super().__init__(configs, tensor_names, True, False, timeout)
+        self._media_extractor = None
+        self._video_tensor_type = key_tensor_type
+
+    def _process_custom_data(self, tensor: np.ndarray, data_type: str):
+        logger.debug(f"VideoInputDataFlow._process_custom_data: {data_type}")
+        if data_type == "TYPE_CUSTOM_VIDEO_ASSETS":
+            return self._process_video_assets(tensor)
+        else:
+            return super()._process_custom_data(tensor, data_type)
+
+    def _is_collected_valid(self, collected: Dict):
+        result = super()._is_collected_valid(collected)
+        if not result:
+            return False
+        return any([isinstance(v, types.GeneratorType) for k, v in collected.items()])
+
+    def _process_video_assets(self, assets: np.ndarray):
+        urls = []
+        duration = -1
+        for asset in assets:
+            asset_manager = AssetManager()
+            asset = asset_manager.get_asset(asset)
+            if asset:
+                urls.append(asset.path)
+                if duration == -1:
+                    duration = asset.duration
+                elif duration != asset.duration:
+                    logger.error(f"Batched video assets must have the same duration!")
+                    return
+        if not urls:
+            logger.error(f"No video assets found: {assets}")
+            return
+        self._media_extractor = MediaExtractor([MediaChunk(url, duration=duration) for url in urls])
+        qs = self._media_extractor()
+        try:
+            while True:
+                data = []
+                for q in qs:
+                    frame = q.get(timeout=1.0)
+                    if frame is None:
+                        logger.info(f"Duration reached: {assets}")
+                        break
+                    data.append(frame.tensor)
+                yield data
+        except Empty:
+            logger.info(f"EOS on videos: {assets}")
+        self._media_extractor = None
+
 class ImageInputDataFlow(DataFlow):
     """A data flow for image data"""
-    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], timeout=None):
-        super().__init__(configs, tensor_names, True, False,timeout)
+    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str,timeout=None):
+        super().__init__(configs, tensor_names, True, False, timeout)
         self._image_decoder = ImageDecoder(["JPEG", "PNG"])
+        self._image_tensor_names = []
+        for tensor_name in tensor_names:
+            config = next((c for c in configs if c["name"] == tensor_name[0]), None)
+            if config and config["data_type"] == key_tensor_type:
+                self._image_tensor_names.append(tensor_name[1])
+        if not self._image_tensor_names:
+            raise Exception("Image tensor name not found in the ImageInputDataFlow")
 
     def _process_custom_data(self, images: np.ndarray, data_type: str):
-        logger.debug(f"ImageInputDataFlow _process_custom_data: {data_type}")
+        logger.debug(f"ImageInputDataFlow._process_custom_data: {data_type}")
         if self._image_decoder is None:
             return Error("Image decoder is not sucessfully created")
         if data_type == "TYPE_CUSTOM_IMAGE_BASE64":
             return self._process_base64_image(images)
+        elif data_type == "TYPE_CUSTOM_IMAGE_ASSETS":
+            return self._process_image_assets(images)
         else:
             return super()._process_custom_data(images, data_type)
+
+    def _is_collected_valid(self, collected: Dict):
+        result = super()._is_collected_valid(collected)
+        if not result:
+            return False
+        return all([n in collected for n in self._image_tensor_names])
 
     def _process_base64_image(self, images: np.ndarray):
         result = []
@@ -208,14 +299,40 @@ class ImageInputDataFlow(DataFlow):
             elif mime_type == "image/png":
                 format = "PNG"
             else:
-                raise ValueError(f"Unsupported image format: {mime_type}")
+                logger.error(f"Unsupported image format: {mime_type}")
+                continue
             data_payload = base64.b64decode(data_payload)
             tensor = as_tensor(np.frombuffer(data_payload, dtype=np.uint8).copy(), format)
             result.append(self._image_decoder.decode(tensor, format))
+        logger.debug(f"ImageInputDataFlow._process_base64_image generates {len(result)} tensors")
+        return result
+
+    def _process_image_assets(self, assets: np.ndarray):
+        result = []
+        for asset in assets:
+            asset_manager = AssetManager()
+            asset = asset_manager.get_asset(asset)
+            if not asset:
+                logger.error(f"Asset not found: {asset}")
+                continue
+            format = None
+            if asset.mime_type == "image/jpeg" or asset.mime_type == "image/jpg":
+                format = "JPEG"
+            elif asset.mime_type == "image/png":
+                format = "PNG"
+            else:
+                logger.error(f"Unsupported image format: {asset.mime_type}")
+                continue
+            with open(asset.path, "rb") as f:
+                data = f.read()
+                tensor = as_tensor(np.frombuffer(data, dtype=np.uint8).copy(), format)
+                result.append(self._image_decoder.decode(tensor, format))
         return result
 
 inbound_dataflow_mapping = {
     "TYPE_CUSTOM_IMAGE_BASE64": ImageInputDataFlow,
+    "TYPE_CUSTOM_IMAGE_ASSETS": ImageInputDataFlow,
+    "TYPE_CUSTOM_VIDEO_ASSETS": VideoInputDataFlow,
 }
 class ModelBackend(ABC):
     """Interface for standardizing the model backend """
@@ -279,6 +396,7 @@ class AutoProcessor(Processor):
     """AutoPrrocessor loads the preprocessor from pretrained"""
     def __init__(self, config: Dict, model_home: str):
         super().__init__(config, model_home)
+        import transformers
         self._processor = transformers.AutoProcessor.from_pretrained(model_home)
         if self._processor is None:
             logger.error(f"Failed to load AutoProcessor from {model_home}")
@@ -291,6 +409,8 @@ class CustomProcessor(Processor):
     """CustomProcessor loads the processor from custom module"""
     def __init__(self, config: Dict, model_home: str):
         super().__init__(config, model_home)
+        if not hasattr(custom, "create_instance"):
+            raise Exception("Custom processor module not valid!!")
         self._processor = custom.create_instance(self.name, self.config)
         if self._processor is not None:
             logger.info(f"Custom processor {self._processor.name} created")
@@ -302,6 +422,93 @@ class CustomProcessor(Processor):
         if not isinstance(ret, tuple):
             ret = ret,
         return ret
+
+class Collector(ABC):
+    """Collector is an interface for collecting data from the data flow"""
+    def collect(self):
+        raise NotImplementedError("Not implemented")
+
+class SingleFlowCollector(Collector):
+    """SingleFlowCollector is a collector for a single data flow"""
+    def __init__(self, data_flow: DataFlow):
+        self._data_flow = data_flow
+
+    def collect(self):
+        return self._data_flow.get()
+
+class AggregationFlowCollector(Collector):
+    """AggregationFlowCollector is a collector aggregating multiple data flows"""
+    def __init__(self, data_flows: List[DataFlow]):
+        self._data_flows = data_flows
+        self._executor = ThreadPoolExecutor(max_workers=1)
+        self._queue = Queue()
+        self._stop_event = threading.Event()
+        self._futures = self._executor.submit(self._collect)
+
+    def collect(self):
+        return self._queue.get()
+
+    def _collect(self):
+        logger.info(f"AggregationFlowCollector starts collecting data")
+        while not self._stop_event.is_set():
+            result = {}
+            completed = []
+            for data_flow in self._data_flows:
+                data = data_flow.get()
+                if isinstance(data, Error) or isinstance(data, Stop):
+                    completed.append(data)
+                    continue
+                else:
+                    result.update(data)
+            self._queue.put(result)
+            if all([isinstance(c, Stop) for c in completed]):
+                self._queue.put(Stop("All data flows completed"))
+            elif any([isinstance(c, Error) for c in completed]):
+                self._queue.put(Error("One or more data flows ended in error"))
+
+    def __del__(self):
+        self._stop_event.set()
+        self._executor.shutdown(wait=True)
+
+class MultiFlowCollector(Collector):
+    """MultiFlowCollector is a collector for multiple data flows"""
+    def __init__(self, data_flows: List[DataFlow]):
+        self._data_flows = data_flows
+        self._executor = ThreadPoolExecutor(max_workers=len(data_flows))
+        self._queue = Queue()
+        self._stop_event = threading.Event()
+        self._futures = [self._executor.submit(self._poll, i) for i in range(len(self._data_flows))]
+        self._condition = threading.Condition()
+        self._active_flow = -1
+
+    def collect(self):
+        return self._queue.get()
+
+    def _poll(self, index: int):
+        logger.info(f"Start polling data flow {self._data_flows[index].in_names}")
+        data_flow = self._data_flows[index]
+        while not self._stop_event.is_set():
+            try:
+                data = data_flow.get()
+                with self._condition:
+                    while self._active_flow != index and self._active_flow != -1:
+                        logger.debug(f"Data flow {data_flow.in_names} is waiting for output to be free")
+                        self._condition.wait()
+                    if self._active_flow == -1:
+                        self._active_flow = index
+                if isinstance(data, Error) or isinstance(data, Stop):
+                    logger.error(f"Data flow {data_flow.in_names} ended in: {data}")
+                    self._queue.put(data)
+                    self._active_flow = -1
+                    self._condition.notify_all()
+                else:
+                    self._queue.put(data)
+            except Empty:
+                continue
+
+    def __del__(self):
+        self._stop_event.set()
+        self._executor.shutdown(wait=True)
 
 class ModelOperator:
     """An model operator runs a single model"""
@@ -321,6 +528,14 @@ class ModelOperator:
         return self._model_name
 
     @property
+    def model_config(self):
+        return self._model_config.copy()
+
+    @property
+    def inputs(self):
+        return self._in.copy()
+
+    @property
     def outputs(self):
         return self._out.copy()
 
@@ -329,16 +544,19 @@ class ModelOperator:
             targets = [i['name'] for i in configs]
         flow = None
         tensor_names = [(i['name'], o) for i, o in zip(configs, targets)]
-        for config in configs:
-            if config["data_type"] in inbound_dataflow_mapping:
-                # customized inbound data flow
-                flow = inbound_dataflow_mapping[config["data_type"]](configs, tensor_names)
+        tensor_types = [i['data_type'] for i in configs]
+        image_tensor_type = None
+        for tensor_type in tensor_types:
+            if tensor_type in inbound_dataflow_mapping:
+                image_tensor_type = tensor_type
                 break
-        if flow is None:
-            tensor_names = [(i['name'], o) for i, o in zip(configs, targets)]
+        if image_tensor_type is None:
             flow = DataFlow(configs, tensor_names, inbound=True)
+        else:
+            # customized inbound data flow
+            flow = inbound_dataflow_mapping[image_tensor_type](configs, tensor_names, image_tensor_type)
         self._in.append(flow)
-        logger.debug(f"Data flow < {flow.in_names} -> {flow.o_names} > connected to model {self._model_name}")
+        logger.info(f"Data flow < {flow.in_names} -> {flow.o_names} > connected to model {self._model_name}")
         return flow
 
     def bind_output(self, configs: List[Dict], sources: List[str]=[]):
@@ -347,7 +565,7 @@ class ModelOperator:
         tensor_names = [(i, o['name']) for i, o in zip(sources, configs)]
         flow = DataFlow(configs, tensor_names, outbound=True)
         self._out.append(flow)
-        logger.debug(f"model {self._model_name} connected to Data flow < {flow.in_names} -> {flow.o_names} >")
+        logger.info(f"model {self._model_name} connected to Data flow < {flow.in_names} -> {flow.o_names} >")
         return flow
 
     def import_input(self, input: DataFlow):
@@ -379,32 +597,35 @@ class ModelOperator:
                         raise Exception("Invalid Processor")
         # backend loop
         self._backend = model_backend
+        collector = self._create_collector()
         while True:
             try:
                 # collect input data until Stop is received
-                args = []
-                kwargs = dict()
-                for input in self._in:
-                    data = input.get()
-                    if not data:
-                        # Not data, skip it
-                        continue
-                    kwargs.update(data)
-                if not kwargs:
+                data = collector.collect()
+                if isinstance(data, Stop) or isinstance(data, Error):
+                    # pass the error or stop message downstream
+                    for out in self._out:
+                        logger.debug(f"Passing error or stop message to {out.in_names}")
+                        out.put(data)
                     continue
-                message = "Completed"
-                logger.debug(f"Input collected: {kwargs}")
+                # convert data to args and kwargs based on if explicit batching is required
+                logger.debug(f"Input collected: {data}")
+                args = []
+                kwargs = data
                 if any([isinstance(v, list) for _, v in kwargs.items()]):
                     # construct multiple inference requests
                     args = split_tensor_in_dict(kwargs)
                     kwargs = {}
                 # call preprocess() before passing args to the backend
                 processed = self._preprocess(args if args else [kwargs])
+                if not processed:
+                    logger.error(f"Empty result from preprocess: {args} and {kwargs}")
+                    continue
                 if args:
-                    # sequential processed data
+                    # explicitly batched data
                     args = processed
                 elif kwargs:
-                    # batch processed data
+                    # implicitly batched data
                     kwargs = processed[0]
                 else:
                     logger.error(f"Invalid result from preprocess: {args} and {kwargs}")
@@ -422,7 +643,7 @@ class ModelOperator:
                             for result in r:
                                 result = self._postprocess(result)
                                 if not all([n in result for n in out.in_names]):
-                                    logger.error(f"Not all the expected result is received from model {self._model_name}:{out.in_names}")
+                                    logger.error(f"Data received from model {self._model_name} is incomplete, expected: {out.in_names}, received: {result.keys()}. Post-processor missing?")
                                     continue
                                 # collect the result
                                 for n, v in output_data.items():
@@ -431,19 +652,16 @@ class ModelOperator:
                                     else:
                                         v.append(None)
                         else:
+                            # implicit batching
                             output_data = self._postprocess(r)
                             if not all([n in output_data for n in out.in_names]):
-                                logger.error(f"Not all the expected result is received from model {self._model_name}:{out.in_names}")
+                                logger.error(f"Data received from model {self._model_name} is incomplete, expected: {out.in_names}, received: {output_data.keys()}. Post-processor missing?")
                                 continue
                         logger.debug(f"Deposit result: {output_data}")
                         out.put(output_data)
-
             except Exception as e:
                 logger.exception(e)
-                message = "Error"
-            # notify the end of the current inference cycle
-            for out in self._out:
-                out.put(Stop(message))
+                out.put(Error(str(e)))
 
     def _preprocess(self, args: List):
         # go through the preprocess chain
@@ -453,22 +671,23 @@ class ModelOperator:
             for data in outcome:
                 # initialize the processed as the original values
                 processed = {k: v for k, v in data.items()}
-                if not all([i in data for i in preprocessor.input]):
-                    logger.warning(f"Input settings invalid for the preprocessor: {preprocessor.kind}")
-                    continue
-                input = [processed.pop(i) for i in preprocessor.input]
-                logger.debug(f"{self._model_name} invokes preprocessor {preprocessor.kind} with given input {input}")
-                output = preprocessor(*input)
-                logger.debug(f"{self._model_name} preprocessor {preprocessor.kind} generated output {output}")
-                if not isinstance(output, tuple):
-                    logger.error("Return value of a processor must be a tuple")
-                    continue
-                if len(output) != len(preprocessor.output):
-                    logger.warning(f"Number of preprocessing output doesn't match the configuration, expecting {len(preprocessor.output)}, while getting {len(output)}")
-                    continue
-                # update as processed
-                for key, value in zip(preprocessor.output, output):
-                    processed[key] = value
+                # trigger the preprocessor if all the input tensors are present
+                if all([i in data for i in preprocessor.input]):
+                    input = [processed.pop(i) for i in preprocessor.input]
+                    logger.debug(f"{self._model_name} invokes preprocessor {preprocessor.name} with given input {input}")
+                    output = preprocessor(*input)
+                    logger.debug(f"{self._model_name} preprocessor {preprocessor.name} generated output {output}")
+                    if not isinstance(output, tuple):
+                        logger.error("Return value of a processor must be a tuple")
+                        continue
+                    if len(output) != len(preprocessor.output):
+                        logger.warning(f"Number of preprocessing output doesn't match the configuration, expecting {len(preprocessor.output)}, while getting {len(output)}")
+                        continue
+                    # update as processed
+                    for key, value in zip(preprocessor.output, output):
+                        processed[key] = value
+                else:
+                    logger.warning(f"Pre-processor {preprocessor.name} skipped because of missing input tensors")
                 result.append(processed)
             # update outcome
             outcome = result
@@ -496,7 +715,7 @@ class ModelOperator:
         processed = {k: v for k, v in data.items()}
         for processor in self._postprocessors:
             if not all([i in data for i in processor.input]):
-                logger.warning(f"Input settings invalid for the processor: {processor}")
+                logger.warning(f"Post-processor {processor.name} skipped because of missing input tensors")
                 continue
             input = [processed.pop(i) for i in processor.input]
             logger.debug(f"Post-processor {processor.name} invoked with given input {input}")
@@ -509,6 +728,20 @@ class ModelOperator:
             for key, value in zip(processor.output, output):
                 processed[key] = value
         return processed
+
+    def _create_collector(self):
+        if len(self._in) == 1:
+            logger.info(f"Single data flow input detected, using single flow collector on model {self._model_name}")
+            return SingleFlowCollector(self._in[0])
+        else:
+            outputs = [set(d.o_names) for d in self._in]
+            intersection = set.intersection(*outputs)
+            if len(intersection) == 0:
+                logger.info(f"Aggregation data flow input detected, using aggregation flow collector on model {self._model_name}")
+                return AggregationFlowCollector(self._in)
+            else:
+                logger.info(f"Multi data flow input detected, using multi flow collector on model {self._model_name}")
+                return MultiFlowCollector(self._in)
 
 class InferenceBase:
     """The base model that drives the inference flow"""
@@ -570,25 +803,22 @@ class InferenceBase:
                     dataflow = None
                     if route.data.source:
                         s_configs = [OmegaConf.to_container(c) for c in global_config.input if c.name in route.data.source]
-                        if len(configs) != len(route.data.source):
+                        if len(s_configs) != len(route.data.source):
                             logger.error(f"Not all the sources are found in the input configs, unable to create passthrough dataflow")
                             continue
-                        tensor_names = route.data.target if route.data.target else route.data.source
-                        for n in tensor_names:
-                            if n not in [c.name for c in global_config.output]:
-                                logger.error(f"Output {n} not found in the output configs, unable to create passthrough dataflow")
-                                continue
-                        tensor_names = [(i['name'], o) for i, o in zip(s_configs, tensor_names)]
+                        o_tensor_names = route.data.target if route.data.target else route.data.source
+                        if any(n not in [c.name for c in global_config.output] for n in o_tensor_names):
+                            logger.warning(f"Not all the output tensors from {o_tensor_names} are found in the output configs, consider adding a postprocessor to generate the missing tensors")
+                        tensor_names = [(i['name'], o) for i, o in zip(s_configs, o_tensor_names)]
                         dataflow = DataFlow(configs=s_configs, tensor_names=tensor_names, inbound=True)
                     elif route.data.target:
                         t_configs = [OmegaConf.to_container(c) for c in global_config.output if c.name in route.data.target]
                         if len(t_configs) != len(route.data.target):
                             logger.error(f"Not all the targets are found in the output configs, unable to create passthrough dataflow")
                             continue
-                        for n in route.data.target:
-                            if n not in [c.name for c in global_config.input]:
-                                logger.error(f"Input {n} not found in the input configs, unable to create passthrough dataflow")
-                                continue
+                        if any(n not in [c.name for c in global_config.input] for n in route.data.target):
+                            logger.error(f"Not all the targets are found in the input configs, unable to create passthrough dataflow")
+                            continue
                         tensor_names = [(i, i) for i in route.data.target]
                         dataflow = DataFlow(configs=t_configs, tensor_names=tensor_names, outbound=True)
                     else:
@@ -630,15 +860,16 @@ class InferenceBase:
                     else:
                         # this is the top level input
                         if route.data.source:
-                            configs = [
-                                OmegaConf.to_container(c) for c in global_config.input if c.name in route.data.source
-                            ]
+                            s_configs = []
+                            for s in route.data.source:
+                                c = next((c for c in global_config.input if c.name == s), None)
+                                if c is None:
+                                    logger.error(f"Input {s} not found in the input configs, unable to create dataflow")
+                                    continue
+                                s_configs.append(OmegaConf.to_container(c))
                         else:
-                            configs = [OmegaConf.to_container(c) for c in global_config.input]
-                        if route.data.target and route.data.target != [c.name for c in configs]:
-                            logger.error(f"Source and target are different, unable to bind input for model {operator1.model_name}, {route.data.target} vs {configs}")
-                            continue
-                        self._inputs.append(operator1.bind_input(configs, route.data.target))
+                            s_configs = [OmegaConf.to_container(c) for c in global_config.input]
+                        self._inputs.append(operator1.bind_input(s_configs, route.data.target))
                 # only source model is specified.
                 elif route.model.source:
                     # this is the top level output
@@ -654,7 +885,7 @@ class InferenceBase:
                         if route.data.source == [c['name'] for c in configs]:
                             self._outputs.append(operator.bind_output(configs))
                         else:
-                            logger.warning(f"Output of {operator.model_name} is not compatible with top level output, check the route or consider adding a postprocessor")
+                            logger.warning(f"Output of {operator.model_name} is not compatible with top level output, be sure to add a top level postprocessor")
                             dataflow = DataFlow(configs=None, tensor_names=[(i, i) for i in route.data.source])
                             operator.import_output(dataflow)
                             self._outputs.append(dataflow)
@@ -669,6 +900,10 @@ class InferenceBase:
             self._outputs.append(operator.bind_output(OmegaConf.to_container(global_config.output)))
         else:
             logger.error("Unable to set up inference routes")
+        if len(self._inputs) == 0 or len(self._outputs) == 0:
+            error = "Either input or output is empty, inference pipeline is not complete"
+            logger.error(error)
+            raise Exception(error)
         self._executor = ThreadPoolExecutor(max_workers=len(self._operators))
         self._future = None
         # sanity check on vision pipeline

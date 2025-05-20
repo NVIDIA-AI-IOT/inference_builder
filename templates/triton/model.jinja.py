@@ -126,9 +126,10 @@ class TritonPythonModel(InferenceBase):
                         if len(tensor.shape) == (len(dims)+1):
                             tensor = torch.squeeze(tensor, 0)
                     tensors[name] = tensor
-                logger.debug(f"Injecting tensors {tensors}")
-                input.put(tensors)
-                input.put(Stop(reason="end"))
+                if tensors:
+                    logger.debug(f"Injecting tensors {tensors}")
+                    input.put(tensors)
+                    input.put(Stop(reason="end"))
             # fetch result
             loop = asyncio.get_event_loop()
             for a_output, output in zip(self._async_outputs, self._outputs):
@@ -221,6 +222,8 @@ class TritonPythonModel:
             BackendClass = TensorRTLLMBackend
         elif backend_spec[-1]  == "polygraphy":
             BackendClass = PolygraphBackend
+        elif backend_spec[-1] == "dummy":
+            BackendClass = DummyBackend
         if BackendClass is not None:
             self._model_backend = BackendClass(self._model_config, model_home,self._device_id)
         else:

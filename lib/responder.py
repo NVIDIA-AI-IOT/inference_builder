@@ -63,7 +63,12 @@ class ResponderBase:
         request_class = next(iter(templates.keys()))
         template = templates[request_class]
         json_string = jinja2_env.from_string(template).render(request=result)
-        result = json.loads(json_string)
+        try:
+            result = json.loads(json_string)
+        except Exception as e:
+            self.logger.error(f"Error parsing request template: {e}")
+            self.logger.error(f"Json string: {json_string}")
+            raise e
 
         # template filters on each field
         for key, value in templates.items():

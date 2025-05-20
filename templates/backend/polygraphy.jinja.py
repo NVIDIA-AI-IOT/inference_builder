@@ -30,5 +30,7 @@ class PolygraphBackend(ModelBackend):
         if not all([key in result for key in self._output_names]):
             logger.error(f"Not all the expected output in {self._output_names} are not found in the result")
             return
-        yield { o: result[o] for o in self._output_names}
+        o_data = { o: result[o] for o in self._output_names}
+        logger.debug(f"PolygraphBackend {self._model_name} generated output: {o_data}")
+        yield o_data
 

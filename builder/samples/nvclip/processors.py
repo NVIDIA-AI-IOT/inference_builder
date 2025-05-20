@@ -50,6 +50,6 @@ class NvClipPostProcessor:
                 embeddings.append(text.pop(0))
             elif index == "image":
                 embeddings.append(images.pop(0))
-        return np.array(embeddings), np.array([total_tokens]), np.array([num_images])
+        return np.array(embeddings), np.array(total_tokens), np.array(num_images)
 
 

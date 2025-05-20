@@ -35,6 +35,7 @@ class ImageInput(BufferProvider):
 class ImageOutput(BufferRetriever):
     def __init__(self, max_queue_size: int=1):
         super().__init__()
+        self._timeout = 10
         self._output = Queue(maxsize=max_queue_size)
 
     def consume(self, buffer):
@@ -47,7 +48,11 @@ class ImageOutput(BufferRetriever):
         return 1
 
     def get(self):
-        data = self._output.get()
+        try:
+            data = self._output.get(timeout=self._timeout)
+        except Empty:
+            logger.error("ImageOutput timeout, failed to decode the image, input data may be corrupted")
+            return None
         return data
 
 

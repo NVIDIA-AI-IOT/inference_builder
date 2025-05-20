@@ -107,3 +107,28 @@ services:
     environment:
 #      DEBUG: 1
       NIM_MODEL_NAME: rtdetr
+  dry-run:
+    user: nvs:1000
+    build:
+      context: dummy
+      target: inference_base
+      dockerfile: Dockerfile
+      # used for creating NIM
+#      dockerfile: Dockerfile.nim
+    image: dry-run
+    volumes:
+      - '~/.cache/nim:/workspace/.cache'
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              #count: 1
+              device_ids: ['0']
+              capabilities: [gpu]
+    environment:
+      DEBUG: 1

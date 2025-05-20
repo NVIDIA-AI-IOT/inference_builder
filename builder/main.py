@@ -19,7 +19,7 @@ import os
 import subprocess
 import validate
 
-ALLOWED_SERVER = ["triton", "fastapi"]
+ALLOWED_SERVER = ["triton", "fastapi", "nim"]
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Main")
@@ -30,7 +30,7 @@ def build_args(parser):
         "--server-type",
         type=str,
         nargs='?',
-        default='triton',
+        default='fastapi',
         choices=ALLOWED_SERVER,
         help="Choose the server type"
     )
@@ -211,6 +211,7 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
         tpl = jinja_env.get_template(f"responder/{name}.jinja.py")
         responder["implementation"] = tpl.render(**responder)
         responders.append(responder)
+    svr_tpl = jinja_env.get_template(f"api_server/{server_type}/responder.jinja.py")
     # render the responder.py
     if server_type == "triton":
         req_cls = [k for k in config["responders"]["infer"]["requests"].keys()]
@@ -220,14 +221,12 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
             "response_class": res_cls[0],
             "streaming_response_class": res_cls[1] if len(res_cls) > 1 else res_cls[0]
         }
-        svr_tpl = jinja_env.get_template(f"api_server/triton/responder.jinja.py")
         output = svr_tpl.render(
             service_name=model_name,
             responders=responders,
             triton=triton_config
         )
     elif server_type == "fastapi":
-        svr_tpl = jinja_env.get_template(f"api_server/fastapi/responder.jinja.py")
         output = svr_tpl.render(
             service_name=model_name,
             responders=responders
