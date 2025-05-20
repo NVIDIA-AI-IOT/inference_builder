@@ -5,12 +5,14 @@ class PytorchBackend(ModelBackend):
     def __init__(self, model_config:Dict, model_home: str, device_id: int=0):
         super().__init__(model_config, model_home, device_id)
         self._model_name = model_config["name"]
+        self._device = f"cuda:{device_id}"
         self._output_names = [o["name"] for o in model_config["output"]]
         self._model_class = model_config["parameters"].get("model_class", "AutoModelForCausalLM")
         self._module = importlib.import_module("transformers")
         model_class = getattr(self._module, self._model_class)
         logger.info(f"Loading pre-trained model {self._model_name} of type {self._model_class} from {self._model_home}")
         self._model = model_class.from_pretrained(self._model_home, torch_dtype="auto", device_map="auto")
+        self._model.to(self._device)
         logger.info(f"Model {self._model_name} loaded from {self._model_home}")
 
     def __call__(self, *args, **kwargs):
