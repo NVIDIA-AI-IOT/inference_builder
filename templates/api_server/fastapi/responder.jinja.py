@@ -56,11 +56,11 @@ class Responder(ResponderBase):
 
         return json_string if streaming else json.loads(json_string)
 
-    async def take_action(self, action_name:str, *args):
+    async def take_action(self, action_name:str, **kwargs):
         action = self._action_map.get(action_name, None)
         if not action:
             raise ValueError(f"Unknown action: {action_name}")
-        return await action(*args)
+        return await action(**kwargs)
 
 {% for responder in responders %}
 {{ responder.implementation }}

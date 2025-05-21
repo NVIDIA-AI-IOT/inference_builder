@@ -203,6 +203,77 @@ class DataFlow:
             item = Error("timeout")
         return item
 
+class VideoFrameSamplingDataFlow(DataFlow):
+    """A data flow for video frame sampling"""
+    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=None):
+        super().__init__(configs, tensor_names, True, False, timeout)
+        self._media_extractor = MediaExtractor(chunks=[],n_thread=1) # TODO: make it configurable
+        self._video_tensor_type = key_tensor_type
+        self._media_extractor()
+        logger.info(f"VideoFrameSamplingDataFlow initialized")
+
+    def _process_custom_data(self, tensor: np.ndarray, data_type: str):
+        logger.debug(f"VideoFrameSamplingDataFlow._process_custom_data: {data_type}")
+        if data_type == self._video_tensor_type:
+            return self._do_video_frame_sampling(tensor)
+        else:
+            return super()._process_custom_data(tensor, data_type)
+
+    def _do_video_frame_sampling(self, assets: np.ndarray):
+        qs = []
+        expected_frames = []
+        results = []
+        for asset in assets:
+            asset_manager = AssetManager()
+            asset_id, params = self._parse_asset_string(asset)
+            asset = asset_manager.get_asset(asset_id)
+            if asset:
+                n_frames = params.get("frames", None)
+                interval = asset.duration / int(n_frames) if n_frames else 0
+                chunk = MediaChunk(
+                    asset.path,
+                    duration=asset.duration,
+                    interval=interval
+                )
+                qs.append(self._media_extractor.append(chunk))
+                expected_frames.append(int(n_frames) if n_frames else None)
+
+        for q, expected in zip(qs, expected_frames):
+            frames = []
+            while True:
+                try:
+                    frame = q.get(timeout=10.0)
+                except Empty:
+                    logger.info(f"Decoder Queue is empty: {assets}")
+                    break
+                if frame is None:
+                    logger.info(f"Duration reached: {assets}")
+                    break
+                frames.append(frame.tensor)
+                if expected is not None and len(frames) == expected:
+                    logger.info(f"Got all {len(frames)} frames, dropping the rest")
+                    break
+            if expected is not None and len(frames) < expected:
+                logger.warning(f"Expected {expected} frames, but got {len(frames)}")
+            results.append(frames)
+        return results
+
+    def _is_collected_valid(self, collected: Dict):
+        # TODO
+        return super()._is_collected_valid(collected)
+
+    def _parse_asset_string(self, asset: str):
+        pieces = asset.split("?")
+        asset = pieces[0]
+        params = {}
+        if len(pieces) > 1:
+            query_string = pieces[1]
+            query_params = query_string.split("&")
+            for param in query_params:
+                key, value = param.split("=")
+                params[key] = value
+        return asset, params
+
 class VideoInputDataFlow(DataFlow):
     """A data flow for video data"""
     def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=None):
@@ -212,7 +283,7 @@ class VideoInputDataFlow(DataFlow):
 
     def _process_custom_data(self, tensor: np.ndarray, data_type: str):
         logger.debug(f"VideoInputDataFlow._process_custom_data: {data_type}")
-        if data_type == "TYPE_CUSTOM_VIDEO_ASSETS":
+        if data_type == self._video_tensor_type:
             return self._process_video_assets(tensor)
         else:
             return super()._process_custom_data(tensor, data_type)
@@ -335,6 +406,7 @@ inbound_dataflow_mapping = {
     "TYPE_CUSTOM_IMAGE_BASE64": ImageInputDataFlow,
     "TYPE_CUSTOM_IMAGE_ASSETS": ImageInputDataFlow,
     "TYPE_CUSTOM_VIDEO_ASSETS": VideoInputDataFlow,
+    "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": VideoFrameSamplingDataFlow,
 }
 class ModelBackend(ABC):
     """Interface for standardizing the model backend """
