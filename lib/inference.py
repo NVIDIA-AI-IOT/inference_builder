@@ -99,6 +99,12 @@ class DataFlow:
         self._outbound = outbound
         self._timeout = timeout
         self._queue = Queue()
+        self._optional = False
+        if self._inbound or self._outbound:
+            self._optional = all([
+                config["optional"] if "optional" in config else False
+                for config in self._configs
+            ])
 
     def _process_custom_data(self, tensor: np.ndarray, data_type: str):
         processed = tensor
@@ -139,6 +145,10 @@ class DataFlow:
     @property
     def o_names(self):
         return [i[1] for i in self._tensor_names]
+
+    @property
+    def optional(self):
+        return self._optional
 
     def get_config(self, name: str):
         if not self._configs:
@@ -756,7 +766,7 @@ class ModelOperator:
         else:
             outputs = [set(d.o_names) for d in self._in]
             intersection = set.intersection(*outputs)
-            if len(intersection) == 0:
+            if len(intersection) == 0 and not any([d.optional for d in self._in]):
                 logger.info(f"Aggregation data flow input detected, using aggregation flow collector on model {self._model_name}")
                 return AggregationFlowCollector(self._in)
             else:
