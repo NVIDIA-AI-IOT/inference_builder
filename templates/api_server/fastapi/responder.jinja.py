@@ -120,7 +120,7 @@ class Responder:
         json_string = jinja2_env.from_string(template).render(request=request, response=response)
         self.logger.debug(f"Sending json payload: {json_string}")
 
-        return json_string if streaming else json.loads(json_string)
+        return (json.dumps(json.loads(json_string), separators=(',', ':')) + "\n") if streaming else json.loads(json_string)
 
     async def take_action(self, action_name:str, *args):
         action = self._action_map.get(action_name, None)
