@@ -1,0 +1,9 @@
+---
+schema_version: '1.0'
+model: "eevaigoeixww/dev/tao_cv"
+release: 'rc0'
+simple:
+  profiles:
+    - model_version: detection.rtdetr.engine-b1_fp16_A6000
+      tags:
+        gpu: a6000

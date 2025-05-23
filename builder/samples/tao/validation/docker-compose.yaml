@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  validation-client:
+    build:
+      context: .  # Context is the validation directory
+      dockerfile: Dockerfile.validation
+    image: validation-client
+    # ipc: host
+    network_mode: "host"
+    environment:
+      - NIM_MODEL_NAME=${NIM_MODEL_NAME:-rtdetr}
+      - TEST_HOST=${TEST_HOST:-http://127.0.0.1:8800}

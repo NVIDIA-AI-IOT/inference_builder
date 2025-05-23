@@ -90,8 +90,12 @@ services:
       args:
         GITLAB_TOKEN: ${GITLAB_TOKEN}
     image: nim-tao
+    # entrypoint: ["/bin/bash"]
+    # # Keep container running
+    # command: ["-c", "sleep infinity"]
     volumes:
       - '~/.cache/nim:/opt/nim/.cache'
+      - './tao/validation/rtdetr/model_manifest.yaml:/opt/configs/model_manifest.rtdetr.yaml:ro'
     ipc: host
     # init: true
     ports:

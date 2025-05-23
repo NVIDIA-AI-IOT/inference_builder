@@ -1,0 +1,9 @@
+---
+schema_version: '1.0'
+model: "eevaigoeixww/dev/tao_cv"
+release: 'rc0'
+simple:
+  profiles:
+    - model_version: seg.cradiov2_b.engine_b1_fp16_A6000_tao2
+      tags:
+        gpu: a6000

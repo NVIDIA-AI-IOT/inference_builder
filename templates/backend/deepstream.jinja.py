@@ -10,7 +10,6 @@ import yaml
 png_data = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGK6HcwNCAAA//8DTgE8HuxwEQAAAABJRU5ErkJggg==")
 jpg_data = base64.b64decode("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCgr/2wBDAQICAgICAgUDAwUKBwYHCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgr/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD+f+iiigAooooAKKKKACiiigD/2Q==")
 
-
 class ImageTensorInput(BufferProvider):
 
     def __init__(self, height, width, format):
@@ -53,6 +52,18 @@ class GenericTensorInput():
     def send(self, data):
         self.queue.put(data)
 
+class StaticTensorInput():
+    def __init__(self, device_id):
+        self._tensors = {}
+        self._device_id = device_id
+
+    def generate(self):
+        result = {k: as_tensor(v, "").to_gpu(self._device_id) for k, v in self._tensors.items()}
+        return result
+
+    def set(self, data):
+        self._tensors.update(data)
+
 class TensorInputPool(ABC):
     @abstractmethod
     def submit(self, data: List):
@@ -63,12 +74,13 @@ class TensorInputPool(ABC):
 
 class ImageTensorInputPool(TensorInputPool):
 
-    def __init__(self, height, width, formats, batch_size, image_tensor_name, media_url_tensor_name, mime_tensor_name, device_id, require_extra_input=False):
+    def __init__(self, height, width, formats, batch_size, image_tensor_name, media_url_tensor_name, mime_tensor_name, device_id, require_extra_input):
         self._image_inputs = [ImageTensorInput(width, height, format) for format in formats for _ in range(batch_size)]
         self._media_url_tensor_name = media_url_tensor_name
         self._mime_tensor_name = mime_tensor_name
         self._image_tensor_name = image_tensor_name
         self._generic_input = GenericTensorInput(device_id) if require_extra_input else None
+        self._batch_size = batch_size
 
     @property
     def image_inputs(self):
@@ -104,14 +116,16 @@ class ImageTensorInputPool(TensorInputPool):
                         image_tensor_input.send(image_tensor)
                         indices.append(i)
                     else:
-                        logger.error(f"Unable to find tensor input for format {format}")
+                        logger.error(f"image tensor or media url is missing: {item}")
                 else:
                     logger.error(f"Unable to find free slot for format {format}")
             else:
                 logger.error(f"Unsupported MIME type {mime_type}")
                 continue
         if self._generic_input:
-            self._generic_input.send(stack_tensors_in_dict(data))
+            data = [data[i:i + self._batch_size] for i in range(0, len(data), self._batch_size)]
+            for d in data:
+                self._generic_input.send(stack_tensors_in_dict(d))
         # batched indices for each input
         return indices
 
@@ -122,24 +136,47 @@ class ImageTensorInputPool(TensorInputPool):
             self._generic_input.send(Stop())
 
 class BulkVideoInputPool(TensorInputPool):
-    def __init__(self, media_url_tensor_name, mime_tensor_name, infer_config_path, output):
+    def __init__(self,
+        batch_size,
+        media_url_tensor_name,
+        mime_tensor_name,
+        infer_config_paths,
+        preprocess_config_paths,
+        output,
+        device_id,
+        require_extra_input,
+        engine_file_names
+    ):
+        self._batch_size = batch_size
         self._media_url_tensor_name = media_url_tensor_name
         self._mime_tensor_name = mime_tensor_name
-        self._infer_config_path = infer_config_path
+        self._infer_config_paths = infer_config_paths
+        self._engine_file_names = engine_file_names
+        self._preprocess_config_paths = preprocess_config_paths
         self._pipeline = None
         self._output = output
+        self._generic_input = StaticTensorInput(device_id) if require_extra_input else None
+        self._device_id = device_id
 
     def submit(self, data: List):
         try:
             url_list = [item.pop(self._media_url_tensor_name) for item in data]
+            mime_list = [item.pop(self._mime_tensor_name) for item in data]
         except KeyError:
             logger.error(f"Unable to find tensor input for media_url_tensor_name {self._media_url_tensor_name}")
             return []
 
         pipeline = Pipeline(f"deepstream-video-batch")
+        if self._generic_input and data:
+            self._generic_input.set(stack_tensors_in_dict(data))
         flow = Flow(pipeline).batch_capture(url_list)
-        for config_path in self._infer_config_path:
-            flow = flow.infer(config_path)
+        for config in self._preprocess_config_paths:
+            flow = flow.preprocess(config, None if not self._generic_input else lambda: self._generic_input.generate())
+        for config_path, engine_file in zip(self._infer_config_paths, self._engine_file_names):
+            if engine_file:
+                flow = flow.infer(config_path, batch_size=self._batch_size, model_engine_file=engine_file)
+            else:
+                flow = flow.infer(config_path, batch_size=self._batch_size)
         flow = flow.attach(Probe('tensor_retriver', self._output)).render(RenderMode.DISCARD, enable_osd=False)
 
         if self._pipeline is not None:
@@ -310,10 +347,12 @@ class DeepstreamBackend(ModelBackend):
         d = (dims[1], dims[2]) if dims[0] == 3 else (dims[0], dims[1])
         if "parameters" not in model_config or "infer_config_path" not in model_config["parameters"]:
             raise Exception("Deepstream pipeline requires infer_config_path")
-        infer_config_path = model_config["parameters"]['infer_config_path']
-        if not infer_config_path:
+        infer_config_paths = self._correct_config_paths(model_config["parameters"]['infer_config_path'])
+        if not infer_config_paths:
             raise Exception("Deepstream pipeline requires infer_config_path")
-        preprocess_config_path = model_config["parameters"]['preprocess_config_path'] if "preprocess_config_path" in model_config["parameters"] else []
+        preprocess_config_paths = []
+        if "preprocess_config_path" in model_config["parameters"]:
+            preprocess_config_paths = self._correct_config_paths(model_config["parameters"]['preprocess_config_path'])
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
         require_extra_input = False
@@ -340,9 +379,7 @@ class DeepstreamBackend(ModelBackend):
             raise Exception("Deepstream pipeline requires at least one TYPE_CUSTOM_DS_MIME input")
         # override the network dimensions from  the primary inference config
         try:
-            primary_infer_config_path = infer_config_path[0]
-            if not os.path.isabs(primary_infer_config_path):
-                primary_infer_config_path = os.path.join(self._model_home, primary_infer_config_path)
+            primary_infer_config_path = infer_config_paths[0]
             with open(primary_infer_config_path, 'r') as f:
                 primary_infer_config = yaml.safe_load(f)
             if "property" in primary_infer_config:
@@ -365,8 +402,8 @@ class DeepstreamBackend(ModelBackend):
             in_pool = ImageTensorInputPool(d[0], d[1], formats, self._max_batch_size, self._image_tensor_name, self._media_url_tensor_name, self._mime_tensor_name, device_id, require_extra_input)
             n_output = self._max_batch_size * len(formats)
             if tensor_output:
-                output = TensorOutput(n_output, preprocess_config_path)
-            elif preprocess_config_path:
+                output = TensorOutput(n_output, preprocess_config_paths)
+            elif preprocess_config_paths:
                 output = PreprocessMetadataOutput(n_output, self._output_names[0], d)
             else:
                 output = MetadataOutput(n_output, self._output_names[0], d)
@@ -382,15 +419,10 @@ class DeepstreamBackend(ModelBackend):
             probe = Probe('tensor_retriver', output)
             batch_timeout = 1000 * self._max_batch_size
             flow = flow.inject(in_pool.image_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=batch_timeout, live_source=False, width=d[1], height=d[0])
-            for config in preprocess_config_path:
-                config_file = config
-                if not os.path.isabs(config):
-                    config_file = os.path.join(self._model_home, config)
-                flow = flow.preprocess(config_file, None if not require_extra_input else lambda: self._in_pools[media].generic_input.generate())
-            for config in infer_config_path:
-                config_file = config
-                if not os.path.isabs(config):
-                    config_file = os.path.join(self._model_home, config)
+            for config_file in preprocess_config_paths:
+                input = self._in_pools[media].generic_input if require_extra_input else None
+                flow = flow.preprocess(config_file, None if not input else lambda: input.generate())
+            for config_file in infer_config_paths:
                 engine_file = self._generate_engine_name(config_file, device_id, self._max_batch_size)
                 if engine_file:
                     flow = flow.infer(config_file, with_triton, batch_size=self._max_batch_size, model_engine_file=engine_file)
@@ -416,16 +448,25 @@ class DeepstreamBackend(ModelBackend):
             # video input support
             media = "video"
             if tensor_output:
-                output = TensorOutput(self._max_batch_size, preprocess_config_path)
-            elif preprocess_config_path:
+                output = TensorOutput(self._max_batch_size, preprocess_config_paths)
+            elif preprocess_config_paths:
                 output = PreprocessMetadataOutput(self._max_batch_size, self._output_names[0], d)
             else:
                 output = MetadataOutput(self._max_batch_size, self._output_names[0], d)
-            infer_config_path = [os.path.join(self._model_home, config) for config in infer_config_path]
-            in_pool = BulkVideoInputPool(self._media_url_tensor_name, self._mime_tensor_name, infer_config_path, output)
+            in_pool = BulkVideoInputPool(
+                self._max_batch_size,
+                self._media_url_tensor_name,
+                self._mime_tensor_name,
+                infer_config_paths,
+                preprocess_config_paths,
+                output,
+                device_id,
+                require_extra_input,
+                [self._generate_engine_name(config_file, device_id, self._max_batch_size) for config_file in infer_config_paths]
+            )
 
-            self._in_pools[media] = in_pool
-            self._outputs[media] = output
+        self._in_pools[media] = in_pool
+        self._outputs[media] = output
 
         logger.info(f"DeepstreamBackend created for {self._model_name} to generate {self._output_names}, output tensor: {tensor_output}")
 
@@ -510,6 +551,12 @@ class DeepstreamBackend(ModelBackend):
                 if mode:
                     network_mode = mode
         engine_file = f"{onnx_file}_b{batch_size}_gpu{device_id}_{network_mode}.engine"
-
-
         return os.path.join(self._model_home, engine_file)
+
+    def _correct_config_paths(self, config_paths: List[str]) -> List[str]:
+        if not config_paths:
+            return []
+        for i, path in enumerate(config_paths):
+            if not os.path.isabs(path):
+                config_paths[i] = os.path.join(self._model_home, path)
+        return config_paths

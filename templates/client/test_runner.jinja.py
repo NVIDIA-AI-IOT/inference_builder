@@ -14,11 +14,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Add builder/validator.py path to Python path
-VALIDATOR_DIR = Path("{{ validator_dir }}")
-if str(VALIDATOR_DIR) not in sys.path:
-    sys.path.append(str(VALIDATOR_DIR))
+# # Add builder/validator.py path to Python path
+# VALIDATOR_DIR = Path("{{ validator_dir }}")
+# if str(VALIDATOR_DIR) not in sys.path:
+#     sys.path.append(str(VALIDATOR_DIR))
 
+# Will load validate.py in the same directory
 import validate
 
 # Common paths relative to test runner location
