@@ -2,7 +2,7 @@
 
 ### Helper to get a subset from the complete set
 ```python
-python3 create_debug_subset.py /media/scratch.metropolis3/yuw/datasets/coco/annotations/instances_val2017.json /tmp/val2017_vehicle.50.json --supercategory vehicle --num_images 50
+python3 create_coco_subset.py /media/scratch.metropolis3/yuw/datasets/coco/annotations/instances_val2017.json /tmp/val2017_vehicle.50.json --supercategory vehicle --num_images 50
 ```
 
 ### Eval usage:

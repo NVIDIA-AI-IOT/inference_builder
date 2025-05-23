@@ -1,9 +1,13 @@
+class-attrs-all:
+  pre-cluster-threshold: 0.5
+  topk: 2
 property:
   cluster-mode: 4
   gie-unique-id: 1
   infer-dims: 3;224;224
   maintain-aspect-ratio: 1
-  net-scale-factor: 0.0173520735728
+  net-scale-factor: 0.01508295626  # 1 / (255 * 0.26)
+  offsets: 122.7709;116.746;104.09373  # 255 * mean
   network-mode: 1
   network-type: 1 # classification
   # num-detected-classes: 19
