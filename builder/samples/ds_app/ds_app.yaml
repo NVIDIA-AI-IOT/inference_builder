@@ -47,6 +47,7 @@ server:
                 "probs": {{item.data.probs}},
                 "labels": {{item.data.labels|tojson}},
                 "masks": {{item.data.seg_maps}},
+                "objects": {{item.data.objects}},
                 "timestamp": {{item.data.timestamp}}
               } {% if not loop.last %}, {% endif %} {% endfor %} ],
             "usage": { "num_images": 1},
@@ -71,3 +72,6 @@ models:
   parameters:
     infer_config_path:
       - config_infer_primary.yml
+    tracker_config:
+      ll_lib_file: /opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so
+      ll_config_file: /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_IOU.yml
