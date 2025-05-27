@@ -145,7 +145,8 @@ class BulkVideoInputPool(TensorInputPool):
         output,
         device_id,
         require_extra_input,
-        engine_file_names
+        engine_file_names,
+        dims
     ):
         self._batch_size = batch_size
         self._media_url_tensor_name = media_url_tensor_name
@@ -157,6 +158,7 @@ class BulkVideoInputPool(TensorInputPool):
         self._output = output
         self._generic_input = StaticTensorInput(device_id) if require_extra_input else None
         self._device_id = device_id
+        self._dims = dims
 
     def submit(self, data: List):
         try:
@@ -169,7 +171,7 @@ class BulkVideoInputPool(TensorInputPool):
         pipeline = Pipeline(f"deepstream-video-batch")
         if self._generic_input and data:
             self._generic_input.set(stack_tensors_in_dict(data))
-        flow = Flow(pipeline).batch_capture(url_list)
+        flow = Flow(pipeline).batch_capture(url_list, width=self._dims[1], height=self._dims[0])
         for config in self._preprocess_config_paths:
             flow = flow.preprocess(config, None if not self._generic_input else lambda: self._generic_input.generate())
         for config_path, engine_file in zip(self._infer_config_paths, self._engine_file_names):
@@ -259,9 +261,9 @@ class DeepstreamMetadata:
     timestamp: int = 0
 
 class PreprocessMetadataOutput(BaseTensorOutput):
-    def __init__(self, n_outputs, output_name, d):
+    def __init__(self, n_outputs, output_name, dims):
         super().__init__(n_outputs, name=output_name)
-        self._shape = d
+        self._shape = dims
 
     def handle_metadata(self, batch_meta):
         for meta in batch_meta.preprocess_batch_items:
@@ -299,9 +301,9 @@ class PreprocessMetadataOutput(BaseTensorOutput):
                 self._deposit(roi.frame_meta.pad_index, {"data": metadata})
 
 class MetadataOutput(BaseTensorOutput):
-    def __init__(self, n_outputs, output_name, d):
+    def __init__(self, n_outputs, output_name, dims):
         super().__init__(n_outputs, name=output_name)
-        self._shape = d
+        self._shape = dims
 
     def handle_metadata(self, batch_meta):
         for frame_meta in batch_meta.frame_items:
@@ -343,8 +345,7 @@ class DeepstreamBackend(ModelBackend):
         if len(self._output_names) > 1 and self._output_types[0] == "TYPE_CUSTOM_DS_METADATA":
             raise Exception(f"No more than one output is allowed for DS metadata!")
         tensor_output = False if self._output_types[0] == "TYPE_CUSTOM_DS_METADATA" else True
-        dims = model_config['input'][0]['dims']
-        d = (dims[1], dims[2]) if dims[0] == 3 else (dims[0], dims[1])
+        dims = (0, 0)
         if "parameters" not in model_config or "infer_config_path" not in model_config["parameters"]:
             raise Exception("Deepstream pipeline requires infer_config_path")
         infer_config_paths = self._correct_config_paths(model_config["parameters"]['infer_config_path'])
@@ -387,10 +388,15 @@ class DeepstreamBackend(ModelBackend):
                 if "infer-dims" in property:
                     infer_dims = [int(dim) for dim in property["infer-dims"].split(";")]
                     if len(infer_dims) == 3:
-                        d = (infer_dims[0], infer_dims[1]) if "network-input-order" in property and property["network-input-order"] == 1 else (infer_dims[1], infer_dims[2])
-                        logger.info(f"DeepstreamBackend: overriding network dimensions to {d}")
+                        dims = (infer_dims[0], infer_dims[1]) if "network-input-order" in property and property["network-input-order"] == 1 else (infer_dims[1], infer_dims[2])
+                        logger.info(f"DeepstreamBackend: setting network dimensions to {dims}")
         except Exception as e:
             raise Exception(f"Failed to load primary inference config: {e}")
+        if dims[0] == 0 or dims[1] == 0:
+            raise Exception(
+                "DeepstreamBackend: unable to find network dimensions: "
+                "infer-dims missing in the config?"
+            )
         # construct the input pools, outputs and pipelines
         self._in_pools = {}
         self._outputs = {}
@@ -399,14 +405,14 @@ class DeepstreamBackend(ModelBackend):
             # image input support
             media = "image"
             formats = ["JPEG", "PNG"]
-            in_pool = ImageTensorInputPool(d[0], d[1], formats, self._max_batch_size, self._image_tensor_name, self._media_url_tensor_name, self._mime_tensor_name, device_id, require_extra_input)
+            in_pool = ImageTensorInputPool(dims[0], dims[1], formats, self._max_batch_size, self._image_tensor_name, self._media_url_tensor_name, self._mime_tensor_name, device_id, require_extra_input)
             n_output = self._max_batch_size * len(formats)
             if tensor_output:
                 output = TensorOutput(n_output, preprocess_config_paths)
             elif preprocess_config_paths:
-                output = PreprocessMetadataOutput(n_output, self._output_names[0], d)
+                output = PreprocessMetadataOutput(n_output, self._output_names[0], dims)
             else:
-                output = MetadataOutput(n_output, self._output_names[0], d)
+                output = MetadataOutput(n_output, self._output_names[0], dims)
             # create the pipeline
             pipeline = Pipeline(f"deepstream-{self._model_name}-{media}")
 
@@ -418,7 +424,7 @@ class DeepstreamBackend(ModelBackend):
             flow = Flow(pipeline)
             probe = Probe('tensor_retriver', output)
             batch_timeout = 1000 * self._max_batch_size
-            flow = flow.inject(in_pool.image_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=batch_timeout, live_source=False, width=d[1], height=d[0])
+            flow = flow.inject(in_pool.image_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=batch_timeout, live_source=False, width=dims[1], height=dims[0])
             for config_file in preprocess_config_paths:
                 input = self._in_pools[media].generic_input if require_extra_input else None
                 flow = flow.preprocess(config_file, None if not input else lambda: input.generate())
@@ -450,9 +456,9 @@ class DeepstreamBackend(ModelBackend):
             if tensor_output:
                 output = TensorOutput(self._max_batch_size, preprocess_config_paths)
             elif preprocess_config_paths:
-                output = PreprocessMetadataOutput(self._max_batch_size, self._output_names[0], d)
+                output = PreprocessMetadataOutput(self._max_batch_size, self._output_names[0], dims)
             else:
-                output = MetadataOutput(self._max_batch_size, self._output_names[0], d)
+                output = MetadataOutput(self._max_batch_size, self._output_names[0], dims)
             in_pool = BulkVideoInputPool(
                 self._max_batch_size,
                 self._media_url_tensor_name,
@@ -462,17 +468,28 @@ class DeepstreamBackend(ModelBackend):
                 output,
                 device_id,
                 require_extra_input,
-                [self._generate_engine_name(config_file, device_id, self._max_batch_size) for config_file in infer_config_paths]
+                [
+                    self._generate_engine_name(
+                        config_file, device_id, self._max_batch_size
+                    ) for config_file in infer_config_paths
+                ],
+                dims
             )
 
         self._in_pools[media] = in_pool
         self._outputs[media] = output
 
-        logger.info(f"DeepstreamBackend created for {self._model_name} to generate {self._output_names}, output tensor: {tensor_output}")
+        logger.info(
+            f"DeepstreamBackend created for {self._model_name} to generate "
+            f"{self._output_names}, output tensor: {tensor_output}"
+        )
 
 
     def __call__(self, *args, **kwargs):
-        logger.debug(f"DeepstreamBackend {self._model_name} triggerred with  {args if args else kwargs}")
+        logger.debug(
+            f"DeepstreamBackend {self._model_name} triggerred with "
+            f"{args if args else kwargs}"
+        )
         in_data_list = args if args else [kwargs]
         media = None
         pass_through_list = [dict() for _ in range(len(in_data_list))]
@@ -490,7 +507,10 @@ class DeepstreamBackend(ModelBackend):
             if media is None:
                 media = current_media
             elif media != current_media:
-                raise Exception(f"Mixed media types are not supported in a single batch, got {media} and {current_media}")
+                raise Exception(
+                    f"Mixed media types are not supported in a single batch, "
+                    f"got {media} and {current_media}"
+                )
 
         # submit the data to the pipeline which supports the media type
         indices = self._in_pools[media].submit(in_data_list)

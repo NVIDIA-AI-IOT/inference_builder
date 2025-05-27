@@ -54,7 +54,7 @@ class Responder(ResponderBase):
         json_string = super().process_response(responder, request, response)
         self.logger.debug(f"Sending json payload: {json_string}")
 
-        return json_string if streaming else json.loads(json_string)
+        return (json.dumps(json.loads(json_string), separators=(',', ':')) + "\n") if streaming else json.loads(json_string)
 
     async def take_action(self, action_name:str, *args):
         action = self._action_map.get(action_name, None)

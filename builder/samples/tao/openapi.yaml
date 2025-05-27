@@ -168,9 +168,7 @@ components:
       additionalProperties: false
       type: object
       required:
-        - id
         - path
-        - size
         - contentType
       title: MediaAsset
       description: Represents a media asset.

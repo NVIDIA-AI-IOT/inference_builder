@@ -1,0 +1,33 @@
+This sample demonstrates how to build a deepstream application:
+
+Model files are loaded from '/workspace/models/{MODEL_NAME}' with the container, thus the volume must be correctly mapped from the host. For example:
+If you have a model under '$HOME/models/resnet50', you must map '$HOME/models' to '/workspace/models' and set MODEL_NAME to 'resnet50' when starting the container.
+
+python builder/main.py builder/samples/ds_app/ds_app.yaml -a builder/samples/tao/openapi.yaml -o builder/samples/ds_app -t
+
+Run the deepstream app with a container:
+
+cd samples
+docker compose up --build ds-app
+
+Submit an inference request:
+
+curl -X 'POST' \
+  'http://localhost:8800/v1/inference' \
+  -H 'accept: application/x-ndjson' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "input": [{
+    "id": "f734879c-9c7b-41b8-a5ca-140c26f911e7",
+    "path": "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4",
+    "size": 3472221,
+    "duration": 30000000000,
+    "contentType": "video/mp4"
+  }
+  ],
+  "model": "nvidia/nvdino-v2"
+}' -N
+
+
+
+
