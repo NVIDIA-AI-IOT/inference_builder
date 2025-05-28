@@ -18,13 +18,9 @@ curl -X 'POST' \
   -H 'Content-Type: application/json' \
   -d '{
   "input": [{
-    "id": "f734879c-9c7b-41b8-a5ca-140c26f911e7",
     "path": "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4",
-    "size": 3472221,
-    "duration": 30000000000,
     "contentType": "video/mp4"
-  }
-  ],
+  }],
   "model": "nvidia/nvdino-v2"
 }' -N
 
