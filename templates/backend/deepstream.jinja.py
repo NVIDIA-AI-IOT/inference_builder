@@ -203,7 +203,7 @@ class BulkVideoInputPool(TensorInputPool):
     def stop(self):
         if self._pipeline:
             self._pipeline.stop()
-            self._pipeline.join()
+            self._pipeline.wait()
 
 class BaseTensorOutput(BatchMetadataOperator):
     def __init__(self, n_outputs, name: str = None):
@@ -565,13 +565,12 @@ class DeepstreamBackend(ModelBackend):
             if media == "image":
                 break
 
-    def stop(self):
+    def __del__(self):
         for input in self._in_pools.values():
             input.stop()
         for pipeline in self._pipelines.values():
             pipeline.stop()
-        for pipeline in self._pipelines.values():
-            pipeline.join()
+            pipeline.wait()
 
     def _generate_engine_name(self, config_path: str, device_id: int, batch_size: int):
         def network_mode_to_string(network_mode: int):
