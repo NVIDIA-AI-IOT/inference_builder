@@ -84,7 +84,7 @@ class TensorRTLLMBackend(ModelBackend):
                 raise ValueError("max_tokens, temperature, top_p, and top_k must be provided for tensorrtllmpytorch backend")
             self._trt_session = None
             pytorch_config = PyTorchConfig(
-                enable_overlap_scheduler=self._params.get("enable_overlap_scheduler", False),
+                disable_overlap_scheduler=self._params.get("disable_overlap_scheduler", False),
                 kv_cache_dtype=self._params.get("kv_cache_dtype", "auto"),
                 attn_backend=self._params.get("attn_backend", "TRTLLM"),
                 use_cuda_graph=self._params.get("use_cuda_graph", False),
@@ -93,7 +93,7 @@ class TensorRTLLMBackend(ModelBackend):
                 torch_compile_enabled=self._params.get("use_torch_compile", False),
                 torch_compile_piecewise_cuda_graph=self._params.get("use_piecewise_cuda_graph", False),
                 moe_backend=self._params.get("moe_backend", "CUTLASS"),
-                enable_trtllm_decoder=self._params.get("enable_trtllm_decoder", False)
+                enable_trtllm_sampler=self._params.get("enable_trtllm_sampler", False)
             )
             kv_cache_config = KvCacheConfig(
                 enable_block_reuse=not self._params.get("disable_kv_cache_reuse", False),

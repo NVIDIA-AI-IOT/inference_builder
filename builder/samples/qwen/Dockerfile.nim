@@ -12,7 +12,7 @@
 FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev97" AS ds_stage
 
 FROM nvcr.io/nvidia/tritonserver:25.04-trtllm-python-py3 AS inference_base
-# Replace the base image with local built trtllm image for using tensorrtllm/pytorch backend
+# Replace the base image with local built trtllm(v0.20.0rc3) image for using tensorrtllm/pytorch backend
 # FROM tensorrt_llm/release:latest AS inference_base
 
 ENV NVIDIA_DRIVER_CAPABILITIES $NVIDIA_DRIVER_CAPABILITIES,video
