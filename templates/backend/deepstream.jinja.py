@@ -69,7 +69,7 @@ class TensorInputPool(ABC):
     def submit(self, data: List):
         pass
     @abstractmethod
-    def stop(self):
+    def stop(self, reason: str):
         pass
 
 class ImageTensorInputPool(TensorInputPool):
@@ -129,11 +129,11 @@ class ImageTensorInputPool(TensorInputPool):
         # batched indices for each input
         return indices
 
-    def stop(self):
+    def stop(self, reason: str):
         for input in self._image_inputs:
-            input.send(Stop())
+            input.send(Stop(reason))
         if self._generic_input:
-            self._generic_input.send(Stop())
+            self._generic_input.send(Stop(reason))
 
 class BulkVideoInputPool(TensorInputPool):
     def __init__(self,
@@ -142,6 +142,8 @@ class BulkVideoInputPool(TensorInputPool):
         mime_tensor_name,
         infer_config_paths,
         preprocess_config_paths,
+        tracker_config_path,
+        tracker_lib_path,
         output,
         device_id,
         require_extra_input,
@@ -159,6 +161,8 @@ class BulkVideoInputPool(TensorInputPool):
         self._generic_input = StaticTensorInput(device_id) if require_extra_input else None
         self._device_id = device_id
         self._dims = dims
+        self._tracker_config_path = tracker_config_path
+        self._tracker_lib_path = tracker_lib_path
 
     def submit(self, data: List):
         try:
@@ -179,6 +183,14 @@ class BulkVideoInputPool(TensorInputPool):
                 flow = flow.infer(config_path, batch_size=self._batch_size, model_engine_file=engine_file)
             else:
                 flow = flow.infer(config_path, batch_size=self._batch_size)
+        if self._tracker_config_path:
+            flow = flow.track(
+                ll_config_file=self._tracker_config_path,
+                ll_lib_file=self._tracker_lib_path,
+                gpu_id=self._device_id,
+                tracker_width=self._dims[1],
+                tracker_height=self._dims[0]
+            )
         flow = flow.attach(Probe('tensor_retriver', self._output)).render(RenderMode.DISCARD, enable_osd=False)
 
         if self._pipeline is not None:
@@ -188,10 +200,10 @@ class BulkVideoInputPool(TensorInputPool):
         self._pipeline = pipeline
         return [i for i in range(len(url_list))]
 
-    def stop(self):
+    def stop(self, reason: str):
         if self._pipeline:
             self._pipeline.stop()
-            self._pipeline.join()
+            self._pipeline.wait()
 
 class BaseTensorOutput(BatchMetadataOperator):
     def __init__(self, n_outputs, name: str = None):
@@ -258,6 +270,7 @@ class DeepstreamMetadata:
     probs: list[float] = field(default_factory=list)
     labels: list[str] = field(default_factory=list)
     seg_maps: list[list[int]] = field(default_factory=list)
+    objects: list[int] = field(default_factory=list)
     timestamp: int = 0
 
 class PreprocessMetadataOutput(BaseTensorOutput):
@@ -292,6 +305,7 @@ class PreprocessMetadataOutput(BaseTensorOutput):
                         for i in range(classifier.n_labels):
                             labels.append(classifier.get_n_label(i))
                     metadata.labels.append(labels)
+                    metadata.objects.append(object_meta.object_id)
                 for classifier in roi.classifier_items:
                     labels = []
                     for i in range(classifier.n_labels):
@@ -321,6 +335,7 @@ class MetadataOutput(BaseTensorOutput):
                     for i in range(classifier.n_labels):
                         labels.append(classifier.get_n_label(i))
                 metadata.labels.append(labels)
+                metadata.objects.append(object_meta.object_id)
             for user_meta in frame_meta.segmentation_items:
                 seg_meta = user_meta.as_segmentation()
                 if seg_meta:
@@ -354,6 +369,16 @@ class DeepstreamBackend(ModelBackend):
         preprocess_config_paths = []
         if "preprocess_config_path" in model_config["parameters"]:
             preprocess_config_paths = self._correct_config_paths(model_config["parameters"]['preprocess_config_path'])
+        if "tracker_config" in model_config["parameters"]:
+            tracker_config_path = self._correct_config_paths(
+                [model_config["parameters"]["tracker_config"]["ll_config_file"]]
+            )[0]
+            tracker_lib_path = self._correct_config_paths(
+                [model_config["parameters"]["tracker_config"]["ll_lib_file"]]
+            )[0]
+        else:
+            tracker_config_path = None
+            tracker_lib_path = None
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
         require_extra_input = False
@@ -465,6 +490,8 @@ class DeepstreamBackend(ModelBackend):
                 self._mime_tensor_name,
                 infer_config_paths,
                 preprocess_config_paths,
+                tracker_config_path,
+                tracker_lib_path,
                 output,
                 device_id,
                 require_extra_input,
@@ -473,7 +500,7 @@ class DeepstreamBackend(ModelBackend):
                         config_file, device_id, self._max_batch_size
                     ) for config_file in infer_config_paths
                 ],
-                dims
+                dims,
             )
 
         self._in_pools[media] = in_pool
@@ -538,13 +565,12 @@ class DeepstreamBackend(ModelBackend):
             if media == "image":
                 break
 
-    def stop(self):
+    def __del__(self):
         for input in self._in_pools.values():
-            input.stop()
+            input.stop("Finalized")
         for pipeline in self._pipelines.values():
             pipeline.stop()
-        for pipeline in self._pipelines.values():
-            pipeline.join()
+            pipeline.wait()
 
     def _generate_engine_name(self, config_path: str, device_id: int, batch_size: int):
         def network_mode_to_string(network_mode: int):

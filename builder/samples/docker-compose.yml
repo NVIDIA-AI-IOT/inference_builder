@@ -136,27 +136,3 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 1
-  ds-app:
-    build:
-      context: ds_app
-      target: inference_base
-      dockerfile: Dockerfile
-    image: ds-app
-    volumes:
-      - '~/.cache/nim/model-repo:/workspace/models'
-    ipc: host
-    # init: true
-    ports:
-      - "8800-8803:8000-8003"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              #count: 1
-              device_ids: ['0']
-              capabilities: [gpu]
-    environment:
-      DEBUG: 0
-      MODEL_NAME: resnet
-#      NVDSINFER_LOG_LEVEL: 3

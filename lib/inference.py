@@ -22,6 +22,24 @@ from .asset_manager import AssetManager
 
 logger = get_logger(__name__)
 
+py_datatype_mapping = {
+    "TYPE_UINT8": int,
+    "TYPE_UINT16": int,
+    "TYPE_UINT32": int,
+    "TYPE_UINT64": int,
+    "TYPE_INT8": int,
+    "TYPE_INT16": int,
+    "TYPE_INT32": int,
+    "TYPE_INT64": int,
+    "TYPE_FP16": float,
+    "TYPE_FP32": float,
+    "TYPE_FP64": float,
+    "TYPE_STRING": str,
+    "TYPE_CUSTOM_DS_IMAGE": str,
+    "TYPE_CUSTOM_DS_MIME": str,
+    "TYPE_CUSTOM_BINARY_URLS": str,
+}
+
 np_datatype_mapping = {
     "TYPE_INVALID": None,
     "TYPE_BOOL": np.bool_,
@@ -89,7 +107,7 @@ class DataFlow:
             tensor_names: List[Tuple[str, str]],
             inbound: bool = False,
             outbound: bool = False,
-            timeout=None
+            timeout=1.0
         ):
         self._configs = configs
         self._tensor_names = tensor_names
@@ -195,11 +213,7 @@ class DataFlow:
             self._queue.put(values, timeout=self._timeout)
 
     def get(self):
-        try:
-            item = self._queue.get(timeout=self._timeout)
-        except Empty:
-            item = Error("timeout")
-        return item
+        return self._queue.get(timeout=self._timeout)
 
 class VideoInputDataFlow(DataFlow):
     """A data flow for video data"""
@@ -454,12 +468,15 @@ class AggregationFlowCollector(Collector):
             result = {}
             completed = []
             for data_flow in self._data_flows:
-                data = data_flow.get()
-                if isinstance(data, Error) or isinstance(data, Stop):
-                    completed.append(data)
+                try:
+                    data = data_flow.get()
+                    if isinstance(data, Error) or isinstance(data, Stop):
+                        completed.append(data)
+                        continue
+                    else:
+                        result.update(data)
+                except Empty:
                     continue
-                else:
-                    result.update(data)
             self._queue.put(result)
             if all([isinstance(c, Stop) for c in completed]):
                 self._queue.put(Stop("All data flows completed"))
@@ -530,6 +547,7 @@ class ModelOperator:
         self._postprocessors = []
         self._model_config = model_config
         self._backend = None
+        self._stop_event = threading.Event()
 
     @property
     def model_name(self):
@@ -606,7 +624,7 @@ class ModelOperator:
         # backend loop
         self._backend = model_backend
         collector = self._create_collector()
-        while True:
+        while not self._stop_event.is_set():
             try:
                 # collect input data until Stop is received
                 data = collector.collect()
@@ -667,9 +685,15 @@ class ModelOperator:
                                 continue
                         logger.debug(f"Deposit result: {output_data}")
                         out.put(output_data)
+            except Empty:
+                continue
             except Exception as e:
                 logger.exception(e)
                 out.put(Error(str(e)))
+
+    def stop(self):
+        logger.info(f"Model operator {self._model_name} is stopping")
+        self._stop_event.set()
 
     def _preprocess(self, args: List):
         # go through the preprocess chain
@@ -921,7 +945,10 @@ class InferenceBase:
             logger.exception(e)
 
     def finalize(self):
+        for operator in self._operators:
+            operator.stop()
         self._executor.shutdown()
+        logger.info("Inference pipeline is finalized")
 
     def _submit(self, op: ModelOperator, backend: ModelBackend):
         self._future = self._executor.submit(lambda: op.run(backend))
