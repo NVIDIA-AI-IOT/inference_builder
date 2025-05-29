@@ -487,22 +487,30 @@ class MultiFlowCollector(Collector):
     def _poll(self, index: int):
         logger.info(f"Start polling data flow {self._data_flows[index].in_names}")
         data_flow = self._data_flows[index]
+        n_data = 0
         while not self._stop_event.is_set():
             try:
                 data = data_flow.get()
+                is_stop = isinstance(data, Error) or isinstance(data, Stop)
+                if is_stop and n_data == 0:
+                    # empty data flow, skip it
+                    logger.info(f"Empty data flow {data_flow.in_names}, skip it")
+                    continue
+                elif not is_stop:
+                    n_data += 1
+                # try grabbing the queue
                 with self._condition:
                     while self._active_flow != index and self._active_flow != -1:
-                        logger.debug(f"Data flow {data_flow.in_names} is waiting for output to be free")
                         self._condition.wait()
                     if self._active_flow == -1:
                         self._active_flow = index
-                if isinstance(data, Error) or isinstance(data, Stop):
-                    logger.error(f"Data flow {data_flow.in_names} ended in: {data}")
-                    self._queue.put(data)
-                    self._active_flow = -1
-                    self._condition.notify_all()
-                else:
-                    self._queue.put(data)
+                self._queue.put(data)
+                with self._condition:
+                    if isinstance(data, Error) or isinstance(data, Stop):
+                        logger.error(f"Data flow {data_flow.in_names} ended in: {data}")
+                        self._active_flow = -1
+                        n_data = 0
+                        self._condition.notify_all()
             except Empty:
                 continue
 
