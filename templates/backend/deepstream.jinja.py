@@ -6,9 +6,11 @@ import base64
 import numpy as np
 from abc import ABC, abstractmethod
 import yaml
+import tempfile
+import os
 
 png_data = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGK6HcwNCAAA//8DTgE8HuxwEQAAAABJRU5ErkJggg==")
-jpg_data = base64.b64decode("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCgr/2wBDAQICAgICAgUDAwUKBwYHCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgr/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD+f+iiigAooooAKKKKACiiigD/2Q==")
+jpg_data = base64.b64decode("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCgr/2wBDAQICAgICAgUDAwUKBwYHCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgr/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD+f+iiigAooooAKKKKACiiigD/2Q==")
 
 class ImageTensorInput(BufferProvider):
 
@@ -139,7 +141,6 @@ class BulkVideoInputPool(TensorInputPool):
     def __init__(self,
         batch_size,
         media_url_tensor_name,
-        mime_tensor_name,
         infer_config_paths,
         preprocess_config_paths,
         tracker_config_path,
@@ -152,7 +153,6 @@ class BulkVideoInputPool(TensorInputPool):
     ):
         self._batch_size = batch_size
         self._media_url_tensor_name = media_url_tensor_name
-        self._mime_tensor_name = mime_tensor_name
         self._infer_config_paths = infer_config_paths
         self._engine_file_names = engine_file_names
         self._preprocess_config_paths = preprocess_config_paths
@@ -167,7 +167,6 @@ class BulkVideoInputPool(TensorInputPool):
     def submit(self, data: List):
         try:
             url_list = [item.pop(self._media_url_tensor_name) for item in data]
-            mime_list = [item.pop(self._mime_tensor_name) for item in data]
         except KeyError:
             logger.error(f"Unable to find tensor input for media_url_tensor_name {self._media_url_tensor_name}")
             return []
@@ -484,10 +483,17 @@ class DeepstreamBackend(ModelBackend):
                 output = PreprocessMetadataOutput(self._max_batch_size, self._output_names[0], dims)
             else:
                 output = MetadataOutput(self._max_batch_size, self._output_names[0], dims)
+            engine_files = [
+                self._generate_engine_name(
+                    config_file,
+                    device_id,
+                    self._max_batch_size
+                )
+                for config_file in infer_config_paths
+            ]
             in_pool = BulkVideoInputPool(
                 self._max_batch_size,
                 self._media_url_tensor_name,
-                self._mime_tensor_name,
                 infer_config_paths,
                 preprocess_config_paths,
                 tracker_config_path,
@@ -495,13 +501,20 @@ class DeepstreamBackend(ModelBackend):
                 output,
                 device_id,
                 require_extra_input,
-                [
-                    self._generate_engine_name(
-                        config_file, device_id, self._max_batch_size
-                    ) for config_file in infer_config_paths
-                ],
+                engine_files,
                 dims,
             )
+            if not all(os.path.exists(e) for e in engine_files):
+                # generate the engine files
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    # Write test data to a temporary file
+                    temp_data_path = os.path.join(temp_dir, 'test.png')
+                    with open(temp_data_path, 'wb') as f:
+                        f.write(png_data)
+                    warmup_data = {self._media_url_tensor_name: temp_data_path}
+                    indices = in_pool.submit([warmup_data])
+                    results = output.collect(indices)
+                    output.reset()
 
         self._in_pools[media] = in_pool
         self._outputs[media] = output
@@ -543,7 +556,7 @@ class DeepstreamBackend(ModelBackend):
         indices = self._in_pools[media].submit(in_data_list)
         # collect the results
         while True:
-            #TODO: timeout should be runtime configurable
+            # TODO: timeout should be runtime configurable
             results = self._outputs[media].collect(indices, timeout=3)
             if results is None:
                 logger.info("DeepstreamBackend: No more data from this batch")
