@@ -13,9 +13,6 @@ from pathlib import Path
 
 logger = get_logger(__name__)
 
-CHECKPOINTS_DIR = os.getenv("CHECKPOINTS_DIR", Path(__file__).resolve().parent.parent.parent)
-
-
 {% for backend in backends %}
 {{ backend }}
 {% endfor %}
@@ -64,6 +61,7 @@ class GenericInference(InferenceBase):
         self._async_executor = ThreadPoolExecutor(max_workers=len(self._outputs))
         # async queues
         self._async_outputs = [asyncio.Queue() for o in self._outputs]
+        self._stop_event = threading.Event()
         logger.info(f"GenericInference {global_config.name} initialized:")
         logger.info(f"Inputs: {[f.o_names for f in self._inputs]}, Outputs:  {[f.o_names for f in self._outputs]}")
 
@@ -106,19 +104,15 @@ class GenericInference(InferenceBase):
         loop = asyncio.get_event_loop()
         for a_output, output in zip(self._async_outputs, self._outputs):
             self._async_executor.submit(thread_to_async_bridge, output, a_output, loop)
-        while True:
+        while not self._stop_event.is_set():
             try:
                 logger.debug("Waiting for tensors from async queue")
                 response_data = dict()
-                done, _ = await asyncio.wait([ao.get() for ao in self._async_outputs], return_when=asyncio.ALL_COMPLETED)
-                for f in done:
-                    data = f.result()
+                results = await asyncio.gather(*(ao.get() for ao in self._async_outputs))
+                for data in results:
                     logger.debug(f"Got output data: {data}")
-                    if isinstance(data, Error):
-                        logger.debug(f"Got Error: {data.message}")
-                        return
-                    elif isinstance(data, Stop):
-                        logger.debug(f"Got Stop: {data.reason}")
+                    if isinstance(data, Error) or isinstance(data, Stop):
+                        logger.info(f"Inference batch ended with {data}")
                         return
                     # collect the output
                     for k, v in data.items():
@@ -132,6 +126,9 @@ class GenericInference(InferenceBase):
 
     def finalize(self):
         super().finalize()
+        self._stop_event.set()
+        for o in self._outputs:
+            o.put(Stop(reason="Finalized"))
 
     def _post_process(self, data: Dict):
         processed = {k: v for k, v in data.items()}

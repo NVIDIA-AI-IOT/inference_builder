@@ -1,61 +1,8 @@
-name: "ds_app"
+name: "deepstream-app"
 model_repo: "/workspace/models"
 
-input:
-- name: media_url
-  data_type: TYPE_CUSTOM_BINARY_URLS
-  dims: [ -1 ]
-- name: mime
-  data_type: TYPE_STRING
-  dims: [ -1 ]
-
-output:
-  - name: output
-    data_type: TYPE_CUSTOM_DS_METADATA
-    dims: [ -1 ]
-
-server:
-  # map server implementation to the operation endpoint
-  responders:
-    infer:
-      operation: inference
-      requests:
-        InferenceRequest: >
-          {
-            {% set input_items = request.input %}
-            {% if input_items|length > 0 %}
-                "media_url": [
-                  {% for item in input_items %}
-                    {{ item.path|tojson }}{% if not loop.last %}, {% endif %}
-                  {% endfor %}
-                ],
-                "mime": [
-                  {% for item in input_items %}
-                    {{ item.contentType|tojson }}{% if not loop.last %}, {% endif %}
-                  {% endfor %}
-                ]
-            {% endif %}
-          }
-      responses:
-        InferenceResponse: >
-          {
-            "data": [
-              {% for item in response.output %} {
-                "index": {{loop.index0}},
-                "shape": {{item.data.shape}},
-                "bboxes": {{item.data.bboxes}},
-                "probs": {{item.data.probs}},
-                "labels": {{item.data.labels|tojson}},
-                "masks": {{item.data.seg_maps}},
-                "objects": {{item.data.objects}},
-                "timestamp": {{item.data.timestamp}}
-              } {% if not loop.last %}, {% endif %} {% endfor %} ],
-            "usage": { "num_images": 1},
-            "model": "nvidia/nvdinov2"
-          }
-
 models:
-- name: ds
+- name: resnet
   backend: deepstream/nvinfer
   max_batch_size: 1
   input:

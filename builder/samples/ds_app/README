@@ -1,28 +1,22 @@
-This sample demonstrates how to build a deepstream application:
+This sample demonstrates how to build a deepstream application using Inference Builder::
 
-Model files are loaded from '/workspace/models/{MODEL_NAME}' with the container, thus the volume must be correctly mapped from the host. For example:
-If you have a model under '$HOME/models/resnet50', you must map '$HOME/models' to '/workspace/models' and set MODEL_NAME to 'resnet50' when starting the container.
+Model files are loaded from '/workspace/models/{MODEL_NAME}' within the container, thus the volume must be correctly mapped from the host.
+For example: if you define a model with name "resnet", you must put all the model files include nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/resnet' for the model to be correctly loaded.
 
-python builder/main.py builder/samples/ds_app/ds_app.yaml -a builder/samples/tao/openapi.yaml -o builder/samples/ds_app -t
+Generate the application package and build it into a docker image:
+
+python builder/main.py builder/samples/ds_app/ds_app.yaml -o builder/samples/ds_app --server-type serverless -t \
+&& docker build -t deepstream-app builder/samples/ds_app
 
 Run the deepstream app with a container:
 
-cd samples
-docker compose up --build ds-app
-
-Submit an inference request:
-
-curl -X 'POST' \
-  'http://localhost:8800/v1/inference' \
-  -H 'accept: application/x-ndjson' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "input": [{
-    "path": "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4",
-    "contentType": "video/mp4"
-  }],
-  "model": "nvidia/nvdino-v2"
-}' -N
+docker run --rm --net=host --gpus all \
+    -v $MODEL_REPO:/workspace/models \
+    -v /tmp/.X11-unix/:/tmp/.X11-unix \
+    -e DISPLAY=$DISPLAY \
+    deepstream-app \
+    --media-url /opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4 \
+    --mime video/mp4
 
 
 
