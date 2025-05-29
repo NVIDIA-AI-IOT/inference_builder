@@ -71,10 +71,13 @@ class GenericInference(InferenceBase):
             await queue.put(item)
         def thread_to_async_bridge(thread_queue, async_queue, loop):
             while True:
-                item = thread_queue.get()
-                asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
-                if not item:
-                    break
+                try:
+                    item = thread_queue.get()
+                    asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
+                    if not item:
+                        break
+                except Empty:
+                    continue
 
         logger.info(f"Received request {request}")
         matched = [[n for n in input.in_names if n in request] for input in self._inputs]
