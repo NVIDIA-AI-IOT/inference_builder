@@ -213,11 +213,7 @@ class DataFlow:
             self._queue.put(values, timeout=self._timeout)
 
     def get(self):
-        try:
-            item = self._queue.get(timeout=self._timeout)
-        except Empty:
-            item = Error("timeout")
-        return item
+        return self._queue.get(timeout=self._timeout)
 
 class VideoInputDataFlow(DataFlow):
     """A data flow for video data"""
@@ -472,12 +468,15 @@ class AggregationFlowCollector(Collector):
             result = {}
             completed = []
             for data_flow in self._data_flows:
-                data = data_flow.get()
-                if isinstance(data, Error) or isinstance(data, Stop):
-                    completed.append(data)
+                try:
+                    data = data_flow.get()
+                    if isinstance(data, Error) or isinstance(data, Stop):
+                        completed.append(data)
+                        continue
+                    else:
+                        result.update(data)
+                except Empty:
                     continue
-                else:
-                    result.update(data)
             self._queue.put(result)
             if all([isinstance(c, Stop) for c in completed]):
                 self._queue.put(Stop("All data flows completed"))

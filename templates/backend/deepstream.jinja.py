@@ -69,7 +69,7 @@ class TensorInputPool(ABC):
     def submit(self, data: List):
         pass
     @abstractmethod
-    def stop(self):
+    def stop(self, reason: str):
         pass
 
 class ImageTensorInputPool(TensorInputPool):
@@ -129,11 +129,11 @@ class ImageTensorInputPool(TensorInputPool):
         # batched indices for each input
         return indices
 
-    def stop(self):
+    def stop(self, reason: str):
         for input in self._image_inputs:
-            input.send(Stop())
+            input.send(Stop(reason))
         if self._generic_input:
-            self._generic_input.send(Stop())
+            self._generic_input.send(Stop(reason))
 
 class BulkVideoInputPool(TensorInputPool):
     def __init__(self,
@@ -200,7 +200,7 @@ class BulkVideoInputPool(TensorInputPool):
         self._pipeline = pipeline
         return [i for i in range(len(url_list))]
 
-    def stop(self):
+    def stop(self, reason: str):
         if self._pipeline:
             self._pipeline.stop()
             self._pipeline.wait()
@@ -567,7 +567,7 @@ class DeepstreamBackend(ModelBackend):
 
     def __del__(self):
         for input in self._in_pools.values():
-            input.stop()
+            input.stop("Finalized")
         for pipeline in self._pipelines.values():
             pipeline.stop()
             pipeline.wait()
