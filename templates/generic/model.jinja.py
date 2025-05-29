@@ -70,14 +70,13 @@ class GenericInference(InferenceBase):
         async def async_put(queue, item):
             await queue.put(item)
         def thread_to_async_bridge(thread_queue, async_queue, loop):
-            while True:
+            while not self._stop_event.is_set():
                 try:
                     item = thread_queue.get()
                     asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
-                    if not item:
-                        break
                 except Empty:
                     continue
+            logger.info(f"thread_to_async_bridge {thread_queue} stopped")
 
         logger.info(f"Received request {request}")
         matched = [[n for n in input.in_names if n in request] for input in self._inputs]
@@ -128,10 +127,8 @@ class GenericInference(InferenceBase):
 
 
     def finalize(self):
-        super().finalize()
         self._stop_event.set()
-        for o in self._outputs:
-            o.put(Stop(reason="Finalized"))
+        super().finalize()
 
     def _post_process(self, data: Dict):
         processed = {k: v for k, v in data.items()}
