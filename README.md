@@ -2,7 +2,7 @@
 
 ## Overview
 
-Inference Builder is a tool for generating inference pipelines and integrating them into a microservice automatically. It takes an inference configuration file and an OpenAPI specification as inputs, and in some cases, also requires custom code snippets.
+Inference Builder is a tool for generating inference pipelines and integrating them into a microservice or standalone application automatically. It takes an inference configuration file, an OpenAPI specification while integrated with an HTTP server as inputs, and in some cases, also requires custom code snippets.
 
 The output of the tool is a Python package that can be used to build a microservice container image with a customized Dockerfile.
 

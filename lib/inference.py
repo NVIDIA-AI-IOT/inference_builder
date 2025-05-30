@@ -468,16 +468,19 @@ class AggregationFlowCollector(Collector):
             result = {}
             completed = []
             for data_flow in self._data_flows:
-                try:
-                    data = data_flow.get()
-                    if isinstance(data, Error) or isinstance(data, Stop):
-                        completed.append(data)
+                # continue reading from each data flow until we get some data
+                while not self._stop_event.is_set():
+                    try:
+                        data = data_flow.get()
+                        if isinstance(data, Error) or isinstance(data, Stop):
+                            completed.append(data)
+                        else:
+                            result.update(data)
+                        break
+                    except Empty:
                         continue
-                    else:
-                        result.update(data)
-                except Empty:
-                    continue
-            self._queue.put(result)
+            if result:
+                self._queue.put(result)
             if all([isinstance(c, Stop) for c in completed]):
                 self._queue.put(Stop("All data flows completed"))
             elif any([isinstance(c, Error) for c in completed]):
@@ -635,7 +638,7 @@ class ModelOperator:
                         out.put(data)
                     continue
                 # convert data to args and kwargs based on if explicit batching is required
-                logger.debug(f"Input collected: {data}")
+                logger.debug(f"Input collected from {collector}: {data}")
                 args = []
                 kwargs = data
                 if any([isinstance(v, list) for _, v in kwargs.items()]):
