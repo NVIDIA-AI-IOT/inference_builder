@@ -22,3 +22,8 @@ models:
     tracker_config:
       ll_lib_file: /opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so
       ll_config_file: /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_IOU.yml
+    msgbroker_config:
+      msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so
+      msgbroker_msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test4/dstest4_msgconv_config.yml
+      msgbroker_conn_str: localhost;9092
+      msgbroker_topic: ds_app

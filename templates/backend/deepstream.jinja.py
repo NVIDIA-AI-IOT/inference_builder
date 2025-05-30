@@ -144,6 +144,10 @@ class BulkVideoInputPool(TensorInputPool):
         preprocess_config_paths,
         tracker_config_path,
         tracker_lib_path,
+        msgbroker_proto_lib_path,
+        msgbroker_msgconv_config_path,
+        msgbroker_conn_str,
+        msgbroker_topic,
         output,
         device_id,
         require_extra_input,
@@ -163,6 +167,10 @@ class BulkVideoInputPool(TensorInputPool):
         self._dims = dims
         self._tracker_config_path = tracker_config_path
         self._tracker_lib_path = tracker_lib_path
+        self._msgbroker_proto_lib_path = msgbroker_proto_lib_path
+        self._msgbroker_msgconv_config_path = msgbroker_msgconv_config_path
+        self._msgbroker_conn_str = msgbroker_conn_str
+        self._msgbroker_topic = msgbroker_topic
 
     def submit(self, data: List):
         try:
@@ -191,7 +199,23 @@ class BulkVideoInputPool(TensorInputPool):
                 tracker_width=self._dims[1],
                 tracker_height=self._dims[0]
             )
-        flow = flow.attach(Probe('tensor_retriver', self._output)).render(RenderMode.DISCARD, enable_osd=False)
+        flow = flow.attach(Probe('tensor_retriver', self._output))
+
+        if self._msgbroker_proto_lib_path:
+            flow = flow.attach(
+                what="add_message_meta_probe",
+                name="message_generator"
+            )
+
+            flow = flow.fork()
+            flow.publish(
+                msg_broker_proto_lib=self._msgbroker_proto_lib_path,
+                msg_broker_conn_str=self._msgbroker_conn_str,
+                topic=self._msgbroker_topic,
+                msg_conv_config=self._msgbroker_msgconv_config_path,
+                sync=False
+            )
+        flow.render(RenderMode.DISCARD, enable_osd=False)
 
         if self._pipeline is not None:
             self._pipeline.wait()
@@ -379,6 +403,20 @@ class DeepstreamBackend(ModelBackend):
         else:
             tracker_config_path = None
             tracker_lib_path = None
+        if "msgbroker_config" in model_config["parameters"]:
+            msgbroker_proto_lib_path = self._correct_config_paths(
+                [model_config["parameters"]["msgbroker_config"]["msgbroker_proto_lib_path"]]
+            )[0]
+            msgbroker_msgconv_config_path = self._correct_config_paths(
+                [model_config["parameters"]["msgbroker_config"]["msgbroker_msgconv_config_path"]]
+            )[0]
+            msgbroker_conn_str = model_config["parameters"]["msgbroker_config"]["msgbroker_conn_str"]
+            msgbroker_topic = model_config["parameters"]["msgbroker_config"]["msgbroker_topic"]
+        else:
+            msgbroker_proto_lib_path = None
+            msgbroker_msgconv_config_path = None
+            msgbroker_conn_str = None
+            msgbroker_topic = None
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
         require_extra_input = False
@@ -492,6 +530,10 @@ class DeepstreamBackend(ModelBackend):
                 preprocess_config_paths,
                 tracker_config_path,
                 tracker_lib_path,
+                msgbroker_proto_lib_path,
+                msgbroker_msgconv_config_path,
+                msgbroker_conn_str,
+                msgbroker_topic,
                 output,
                 device_id,
                 require_extra_input,
