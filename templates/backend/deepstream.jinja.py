@@ -179,8 +179,18 @@ class BulkVideoInputPool(TensorInputPool):
     def submit(self, data: List):
         try:
             url_list = [item.pop(self._media_url_tensor_name) for item in data]
+            if len(url_list) > self._batch_size:
+                logger.warning(
+                    f"Number of media urls ({len(url_list)}) > "
+                    f"batch size ({self._batch_size}), "
+                    f"only the first {self._batch_size} will be used"
+                )
+                url_list = url_list[:self._batch_size]
         except KeyError:
-            logger.error(f"Unable to find tensor input for media_url_tensor_name {self._media_url_tensor_name}")
+            logger.error(
+                f"Unable to find tensor input for "
+                f"media_url_tensor_name {self._media_url_tensor_name}"
+            )
             return []
 
         pipeline = Pipeline(f"deepstream-video-batch")
