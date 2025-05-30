@@ -27,3 +27,6 @@ models:
       msgbroker_msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test4/dstest4_msgconv_config.yml
       msgbroker_conn_str: localhost;9092
       msgbroker_topic: ds_app
+    render_config:
+      enable_display: true
+      enable_osd: true

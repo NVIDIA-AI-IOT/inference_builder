@@ -148,6 +148,8 @@ class BulkVideoInputPool(TensorInputPool):
         msgbroker_msgconv_config_path,
         msgbroker_conn_str,
         msgbroker_topic,
+        enable_display,
+        enable_osd,
         output,
         device_id,
         require_extra_input,
@@ -171,6 +173,8 @@ class BulkVideoInputPool(TensorInputPool):
         self._msgbroker_msgconv_config_path = msgbroker_msgconv_config_path
         self._msgbroker_conn_str = msgbroker_conn_str
         self._msgbroker_topic = msgbroker_topic
+        self._enable_display = enable_display
+        self._enable_osd = enable_osd
 
     def submit(self, data: List):
         try:
@@ -215,7 +219,7 @@ class BulkVideoInputPool(TensorInputPool):
                 msg_conv_config=self._msgbroker_msgconv_config_path,
                 sync=False
             )
-        flow.render(RenderMode.DISCARD, enable_osd=False)
+        flow.render(RenderMode.DISCARD if not self._enable_display else RenderMode.DISPLAY, enable_osd=self._enable_osd)
 
         if self._pipeline is not None:
             self._pipeline.wait()
@@ -417,6 +421,12 @@ class DeepstreamBackend(ModelBackend):
             msgbroker_msgconv_config_path = None
             msgbroker_conn_str = None
             msgbroker_topic = None
+        if "render_config" in model_config["parameters"]:
+            enable_display = model_config["parameters"]["render_config"]["enable_display"]
+            enable_osd = model_config["parameters"]["render_config"]["enable_osd"]
+        else:
+            enable_display = False
+            enable_osd = False
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
         require_extra_input = False
@@ -534,6 +544,8 @@ class DeepstreamBackend(ModelBackend):
                 msgbroker_msgconv_config_path,
                 msgbroker_conn_str,
                 msgbroker_topic,
+                enable_display,
+                enable_osd,
                 output,
                 device_id,
                 require_extra_input,
