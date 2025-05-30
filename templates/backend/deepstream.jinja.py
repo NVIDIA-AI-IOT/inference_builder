@@ -10,7 +10,61 @@ import tempfile
 import os
 
 png_data = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGK6HcwNCAAA//8DTgE8HuxwEQAAAABJRU5ErkJggg==")
-jpg_data = base64.b64decode("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCgr/2wBDAQICAgICAgUDAwUKBwYHCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgr/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD+f+iiigAooooAKKKKACiiigD/2Q==")
+jpg_data = base64.b64decode("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCgr/2wBDAQICAgICAgUDAwUKBwYHCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgr/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD+f+iiigAooooAKKKKACiiigD/2Q==")
+
+
+@dataclass
+class RenderConfig:
+    enable_display: bool = False
+    enable_osd: bool = False
+
+    def is_configured(self) -> bool:
+        """Check if render configuration is valid."""
+        if self.enable_osd and not self.enable_display:
+            logger.warning("RenderConfig: enable_osd is True but enable_display is False. Display will be disabled.")
+        return True
+
+@dataclass
+class TrackerConfig:
+    config_path: str | None = None
+    lib_path: str | None = None
+
+    def is_configured(self) -> bool:
+        """Check if all required tracker configuration fields are set."""
+        missing_fields = []
+        if self.config_path is None:
+            missing_fields.append("config_path")
+        if self.lib_path is None:
+            missing_fields.append("lib_path")
+        
+        if missing_fields:
+            logger.warning(f"TrackerConfig is missing required fields: {', '.join(missing_fields)}")
+            return False
+        return True
+
+@dataclass
+class MessageBrokerConfig:
+    proto_lib_path: str | None = None
+    msgconv_config_path: str | None = None
+    conn_str: str | None = None
+    topic: str | None = None
+
+    def is_configured(self) -> bool:
+        """Check if all required message broker configuration fields are set."""
+        missing_fields = []
+        if self.proto_lib_path is None:
+            missing_fields.append("proto_lib_path")
+        if self.msgconv_config_path is None:
+            missing_fields.append("msgconv_config_path")
+        if self.conn_str is None:
+            missing_fields.append("conn_str")
+        if self.topic is None:
+            missing_fields.append("topic")
+        
+        if missing_fields:
+            logger.warning(f"MessageBrokerConfig is missing required fields: {', '.join(missing_fields)}")
+            return False
+        return True
 
 class ImageTensorInput(BufferProvider):
 
@@ -143,14 +197,9 @@ class BulkVideoInputPool(TensorInputPool):
         media_url_tensor_name,
         infer_config_paths,
         preprocess_config_paths,
-        tracker_config_path,
-        tracker_lib_path,
-        msgbroker_proto_lib_path,
-        msgbroker_msgconv_config_path,
-        msgbroker_conn_str,
-        msgbroker_topic,
-        enable_display,
-        enable_osd,
+        tracker_config: TrackerConfig,
+        msgbroker_config: MessageBrokerConfig,
+        render_config: RenderConfig,
         output,
         device_id,
         require_extra_input,
@@ -167,14 +216,9 @@ class BulkVideoInputPool(TensorInputPool):
         self._generic_input = StaticTensorInput(device_id) if require_extra_input else None
         self._device_id = device_id
         self._dims = dims
-        self._tracker_config_path = tracker_config_path
-        self._tracker_lib_path = tracker_lib_path
-        self._msgbroker_proto_lib_path = msgbroker_proto_lib_path
-        self._msgbroker_msgconv_config_path = msgbroker_msgconv_config_path
-        self._msgbroker_conn_str = msgbroker_conn_str
-        self._msgbroker_topic = msgbroker_topic
-        self._enable_display = enable_display
-        self._enable_osd = enable_osd
+        self._tracker_config = tracker_config
+        self._msgbroker_config = msgbroker_config
+        self._render_config = render_config
 
     def submit(self, data: List):
         try:
@@ -204,17 +248,17 @@ class BulkVideoInputPool(TensorInputPool):
                 flow = flow.infer(config_path, batch_size=self._batch_size, model_engine_file=engine_file)
             else:
                 flow = flow.infer(config_path, batch_size=self._batch_size)
-        if self._tracker_config_path:
+        if self._tracker_config.is_configured():
             flow = flow.track(
-                ll_config_file=self._tracker_config_path,
-                ll_lib_file=self._tracker_lib_path,
+                ll_config_file=self._tracker_config.config_path,
+                ll_lib_file=self._tracker_config.lib_path,
                 gpu_id=self._device_id,
                 tracker_width=self._dims[1],
                 tracker_height=self._dims[0]
             )
         flow = flow.attach(Probe('tensor_retriver', self._output))
 
-        if self._msgbroker_proto_lib_path:
+        if self._msgbroker_config.is_configured():
             flow = flow.attach(
                 what="add_message_meta_probe",
                 name="message_generator"
@@ -222,13 +266,14 @@ class BulkVideoInputPool(TensorInputPool):
 
             flow = flow.fork()
             flow.publish(
-                msg_broker_proto_lib=self._msgbroker_proto_lib_path,
-                msg_broker_conn_str=self._msgbroker_conn_str,
-                topic=self._msgbroker_topic,
-                msg_conv_config=self._msgbroker_msgconv_config_path,
+                msg_broker_proto_lib=self._msgbroker_config.proto_lib_path,
+                msg_broker_conn_str=self._msgbroker_config.conn_str,
+                topic=self._msgbroker_config.topic,
+                msg_conv_config=self._msgbroker_config.msgconv_config_path,
                 sync=False
             )
-        flow.render(RenderMode.DISCARD if not self._enable_display else RenderMode.DISPLAY, enable_osd=self._enable_osd)
+        flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY, 
+                   enable_osd=self._render_config.enable_osd)
 
         if self._pipeline is not None:
             self._pipeline.wait()
@@ -407,35 +452,36 @@ class DeepstreamBackend(ModelBackend):
         if "preprocess_config_path" in model_config["parameters"]:
             preprocess_config_paths = self._correct_config_paths(model_config["parameters"]['preprocess_config_path'])
         if "tracker_config" in model_config["parameters"]:
-            tracker_config_path = self._correct_config_paths(
-                [model_config["parameters"]["tracker_config"]["ll_config_file"]]
-            )[0]
-            tracker_lib_path = self._correct_config_paths(
-                [model_config["parameters"]["tracker_config"]["ll_lib_file"]]
-            )[0]
+            tracker_config = TrackerConfig(
+                config_path=self._correct_config_paths(
+                    [model_config["parameters"]["tracker_config"]["ll_config_file"]]
+                )[0],
+                lib_path=self._correct_config_paths(
+                    [model_config["parameters"]["tracker_config"]["ll_lib_file"]]
+                )[0]
+            )
         else:
-            tracker_config_path = None
-            tracker_lib_path = None
+            tracker_config = TrackerConfig()
         if "msgbroker_config" in model_config["parameters"]:
-            msgbroker_proto_lib_path = self._correct_config_paths(
-                [model_config["parameters"]["msgbroker_config"]["msgbroker_proto_lib_path"]]
-            )[0]
-            msgbroker_msgconv_config_path = self._correct_config_paths(
-                [model_config["parameters"]["msgbroker_config"]["msgbroker_msgconv_config_path"]]
-            )[0]
-            msgbroker_conn_str = model_config["parameters"]["msgbroker_config"]["msgbroker_conn_str"]
-            msgbroker_topic = model_config["parameters"]["msgbroker_config"]["msgbroker_topic"]
+            msgbroker_config = MessageBrokerConfig(
+                proto_lib_path=self._correct_config_paths(
+                    [model_config["parameters"]["msgbroker_config"]["msgbroker_proto_lib_path"]]
+                )[0],
+                msgconv_config_path=self._correct_config_paths(
+                    [model_config["parameters"]["msgbroker_config"]["msgbroker_msgconv_config_path"]]
+                )[0],
+                conn_str=model_config["parameters"]["msgbroker_config"]["msgbroker_conn_str"],
+                topic=model_config["parameters"]["msgbroker_config"]["msgbroker_topic"]
+            )
         else:
-            msgbroker_proto_lib_path = None
-            msgbroker_msgconv_config_path = None
-            msgbroker_conn_str = None
-            msgbroker_topic = None
+            msgbroker_config = MessageBrokerConfig()
         if "render_config" in model_config["parameters"]:
-            enable_display = model_config["parameters"]["render_config"]["enable_display"]
-            enable_osd = model_config["parameters"]["render_config"]["enable_osd"]
+            render_config = RenderConfig(
+                enable_display=model_config["parameters"]["render_config"]["enable_display"],
+                enable_osd=model_config["parameters"]["render_config"]["enable_osd"]
+            )
         else:
-            enable_display = False
-            enable_osd = False
+            render_config = RenderConfig()
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
         require_extra_input = False
@@ -554,14 +600,9 @@ class DeepstreamBackend(ModelBackend):
                 self._media_url_tensor_name,
                 infer_config_paths,
                 preprocess_config_paths,
-                tracker_config_path,
-                tracker_lib_path,
-                msgbroker_proto_lib_path,
-                msgbroker_msgconv_config_path,
-                msgbroker_conn_str,
-                msgbroker_topic,
-                enable_display,
-                enable_osd,
+                tracker_config,
+                msgbroker_config,
+                render_config,
                 output,
                 device_id,
                 require_extra_input,
