@@ -52,9 +52,10 @@ class Responder(ResponderBase):
 
         # the helper function transforms the inference output to a json string
         json_string = super().process_response(responder, request, response)
+        json_string = json.dumps(json.loads(json_string), separators=(',', ':'))
         self.logger.debug(f"Sending json payload: {json_string}")
 
-        return json_string if streaming else json.loads(json_string)
+        return (json.dumps(json.loads(json_string), separators=(',', ':')) + "\n") if streaming else json.loads(json_string)
 
     async def take_action(self, action_name:str, **kwargs):
         action = self._action_map.get(action_name, None)
