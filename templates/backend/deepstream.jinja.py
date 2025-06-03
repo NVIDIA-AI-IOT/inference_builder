@@ -18,10 +18,11 @@ class RenderConfig:
     enable_display: bool = False
     enable_osd: bool = False
 
-    def is_configured(self) -> bool:
+    def __bool__(self) -> bool:
         """Check if render configuration is valid."""
         if self.enable_osd and not self.enable_display:
             logger.warning("RenderConfig: enable_osd is True but enable_display is False. Display will be disabled.")
+            return False
         return True
 
 @dataclass
@@ -29,18 +30,9 @@ class TrackerConfig:
     config_path: str | None = None
     lib_path: str | None = None
 
-    def is_configured(self) -> bool:
+    def __bool__(self) -> bool:
         """Check if all required tracker configuration fields are set."""
-        missing_fields = []
-        if self.config_path is None:
-            missing_fields.append("config_path")
-        if self.lib_path is None:
-            missing_fields.append("lib_path")
-        
-        if missing_fields:
-            logger.warning(f"TrackerConfig is missing required fields: {', '.join(missing_fields)}")
-            return False
-        return True
+        return self.config_path is not None and self.lib_path is not None
 
 @dataclass
 class MessageBrokerConfig:
@@ -49,22 +41,14 @@ class MessageBrokerConfig:
     conn_str: str | None = None
     topic: str | None = None
 
-    def is_configured(self) -> bool:
+    def __bool__(self) -> bool:
         """Check if all required message broker configuration fields are set."""
-        missing_fields = []
-        if self.proto_lib_path is None:
-            missing_fields.append("proto_lib_path")
-        if self.msgconv_config_path is None:
-            missing_fields.append("msgconv_config_path")
-        if self.conn_str is None:
-            missing_fields.append("conn_str")
-        if self.topic is None:
-            missing_fields.append("topic")
-        
-        if missing_fields:
-            logger.warning(f"MessageBrokerConfig is missing required fields: {', '.join(missing_fields)}")
-            return False
-        return True
+        return (
+            self.proto_lib_path is not None and
+            self.msgconv_config_path is not None and
+            self.conn_str is not None and
+            self.topic is not None
+        )
 
 class ImageTensorInput(BufferProvider):
 
@@ -248,7 +232,7 @@ class BulkVideoInputPool(TensorInputPool):
                 flow = flow.infer(config_path, batch_size=self._batch_size, model_engine_file=engine_file)
             else:
                 flow = flow.infer(config_path, batch_size=self._batch_size)
-        if self._tracker_config.is_configured():
+        if self._tracker_config:
             flow = flow.track(
                 ll_config_file=self._tracker_config.config_path,
                 ll_lib_file=self._tracker_config.lib_path,
@@ -258,7 +242,7 @@ class BulkVideoInputPool(TensorInputPool):
             )
         flow = flow.attach(Probe('tensor_retriver', self._output))
 
-        if self._msgbroker_config.is_configured():
+        if self._msgbroker_config:
             flow = flow.attach(
                 what="add_message_meta_probe",
                 name="message_generator"
@@ -272,7 +256,7 @@ class BulkVideoInputPool(TensorInputPool):
                 msg_conv_config=self._msgbroker_config.msgconv_config_path,
                 sync=False
             )
-        flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY, 
+        flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
                    enable_osd=self._render_config.enable_osd)
 
         if self._pipeline is not None:
@@ -460,6 +444,8 @@ class DeepstreamBackend(ModelBackend):
                     [model_config["parameters"]["tracker_config"]["ll_lib_file"]]
                 )[0]
             )
+            if not tracker_config:
+                logger.warning("DeepstreamBackend: tracker_config is not properlyconfigured")
         else:
             tracker_config = TrackerConfig()
         if "msgbroker_config" in model_config["parameters"]:
@@ -473,6 +459,8 @@ class DeepstreamBackend(ModelBackend):
                 conn_str=model_config["parameters"]["msgbroker_config"]["msgbroker_conn_str"],
                 topic=model_config["parameters"]["msgbroker_config"]["msgbroker_topic"]
             )
+            if not msgbroker_config:
+                logger.warning("DeepstreamBackend: msgbroker_config is not properly configured")
         else:
             msgbroker_config = MessageBrokerConfig()
         if "render_config" in model_config["parameters"]:
