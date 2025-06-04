@@ -163,12 +163,13 @@ class TensorRTLLMBackend(ModelBackend):
             inputs = []
             if args:
                 for i in args:
-                    inputs.extend(i[self._trtllm_input_name])
+                    input = i[self._trtllm_input_name]
+                    inputs.extend(input) if isinstance(input, list) else inputs.append(input)
             elif kwargs:
                 inputs = kwargs[self._trtllm_input_name]
             else:
                 raise ValueError("No inputs provided")
-
+            inputs = self._input_formatter(self._model_home, inputs)
             results = self._llm.generate(inputs, sample_params)
             yield [{"outputs": r} for r in results]
         elif self._trt_session is not None:
