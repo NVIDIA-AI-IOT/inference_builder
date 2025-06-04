@@ -71,6 +71,7 @@ class TensorRTLLMBackend(ModelBackend):
         self._device = f"cuda:{device_id}"
         self._stream = torch.cuda.Stream(self._device)
         self._params = model_config["parameters"]
+        self._inputs = model_config["input"]
         llm_backend = model_config["backend"].split("/")[-1]
         if llm_backend == "pytorch":
             from tensorrt_llm import SamplingParams
@@ -78,7 +79,7 @@ class TensorRTLLMBackend(ModelBackend):
             from tensorrt_llm._torch.pyexecutor.config import PyTorchConfig
             from tensorrt_llm.llmapi import (EagleDecodingConfig, KvCacheConfig,
                                             MTPDecodingConfig)
-            from tensorrt_llm.inputs import (INPUT_FORMATTER_MAP, default_image_loader, default_video_loader)
+            from tensorrt_llm.inputs import INPUT_FORMATTER_MAP
             in_names = [i['name'] for i in model_config['input']]
             if "max_tokens" not in in_names or "temperature" not in in_names or "top_p" not in in_names or "top_k" not in in_names:
                 raise ValueError("max_tokens, temperature, top_p, and top_k must be provided for tensorrtllmpytorch backend")
@@ -133,11 +134,11 @@ class TensorRTLLMBackend(ModelBackend):
                 speculative_config=spec_config
             )
             self._sample_params_cls = SamplingParams
-            self._modality = self._params.get("modality", None)
-            self._model_type = json.load(open(os.path.join(self._llm._hf_model_dir, 'config.json')))['model_type']
-            self._default_image_loader = default_image_loader
-            self._default_video_loader = default_video_loader
-            self._input_formatter = INPUT_FORMATTER_MAP[self._model_type]
+            self._input_formatter = INPUT_FORMATTER_MAP["qwen2_5_vl"]
+            self._trtllm_input_name = next((i["name"] for i in self._inputs if i["data_type"] == "TYPE_CUSTOM_TRTLLM_INPUT"), None)
+            if self._trtllm_input_name is None:
+                raise ValueError("TYPE_CUSTOM_TRTLLM_INPUT must be provided for tensorrtllm/pytorch backend")
+
             logger.debug(f"TensorRTLLMBackend with pytorch created for {self._model_name} to generate {self._output_names}")
         else:
             self._llm = None
@@ -152,8 +153,6 @@ class TensorRTLLMBackend(ModelBackend):
 
     def __call__(self, *args, **kwargs):
         if self._llm is not None:
-            prompts = [i["prompts"] for i in args] if args else [kwargs["prompts"]]
-            media = [i["media"] for i in args] if args else [kwargs["media"]]
             params = args[0] if args else kwargs
             sample_params = self._sample_params_cls(
                 max_tokens=params.get("max_tokens", 1024),
@@ -162,12 +161,14 @@ class TensorRTLLMBackend(ModelBackend):
                 top_k=params.get("top_k", 0)
             )
             inputs = []
-            if self._modality == "video":
-                num_frames = params.get("num_frames", 1)
-                inputs = self._default_video_loader(prompts, media, num_frames=num_frames)
-            elif self._modality == "image":
-                inputs = self._default_image_loader(prompts, media)
-            inputs = self._input_formatter(self._model_home, inputs)
+            if args:
+                for i in args:
+                    inputs.extend(i[self._trtllm_input_name])
+            elif kwargs:
+                inputs = kwargs[self._trtllm_input_name]
+            else:
+                raise ValueError("No inputs provided")
+
             results = self._llm.generate(inputs, sample_params)
             yield [{"outputs": r} for r in results]
         elif self._trt_session is not None:

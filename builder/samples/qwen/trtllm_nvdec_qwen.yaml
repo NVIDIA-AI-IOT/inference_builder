@@ -9,8 +9,8 @@ input:
   - name: "prompts"
     data_type: TYPE_STRING
     dims: [ -1 ]
-  - name: "videos"
-    data_type: TYPE_CUSTOM_BINARY_URLS
+  - name : "videos"
+    data_type: TYPE_CUSTOM_VIDEO_CHUNK_ASSETS
     dims: [ -1 ]
   - name: "max_tokens"
     data_type: TYPE_INT32
@@ -54,6 +54,16 @@ server:
                     {% if item.role == "user" %}
                         {% for content in item.content %}
                             {% if content.type == "video" %} {{ content.video|tojson }} {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                {% if not loop.last %}, {% endif %}
+                {% endfor %}
+            ],
+            "images": [
+                {% for item in request.messages %}
+                    {% if item.role == "user" %}
+                        {% for content in item.content %}
+                            {% if content.type == "image" %} {{ content.image|tojson }} {% endif %}
                         {% endfor %}
                     {% endif %}
                 {% if not loop.last %}, {% endif %}
@@ -157,8 +167,6 @@ models:
       num_frames: 8
     preprocessors:
       - kind: "custom"
-        name: "qwen-vl-video-loader"
+        name: "qwen-vl-video-processor"
         input: ["prompts", "videos"]
         output: ["inputs"]
-        config:
-          num_frames: 8

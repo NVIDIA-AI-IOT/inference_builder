@@ -9,7 +9,7 @@
 # its affiliates is strictly prohibited.
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev97" AS ds_stage
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev118" AS ds_stage
 
 FROM nvcr.io/nvidia/tritonserver:25.04-trtllm-python-py3 AS inference_base
 # Replace the base image with local built trtllm(v0.20.0rc3) image for using tensorrtllm/pytorch backend

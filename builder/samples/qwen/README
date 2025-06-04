@@ -3,10 +3,11 @@ This example demonstrates how to build an inference pipeline and package it to a
 - Qwen/Qwen2.5-VL-7B-Instruct
 - Qwen/Qwen2.5-VL-32B-Instruct
 
-Two configurations are provided, allowing you to choose based on your specific software and hardware environment:
+Three configurations are provided, allowing you to choose based on your specific software and hardware environment:
 
 1. pytorch_qwen.yaml: leveraging the transformer APIs and fits all the models
 2. trtllm_qwen.yaml: leveraging TensroRT LLM APIs for better performance
+3. trtllm_nvdec_qwen.yaml: leveraging h/w decoder and TensorRT LLM for the best performance
 
 How to Build the inference code:
 
@@ -19,6 +20,10 @@ python builder/main.py builder/samples/qwen/pytorch_qwen.yaml --api-spec builder
 b. Using optimized tensorrtllm pytorch backend:
 
 python builder/main.py builder/samples/qwen/trtllm_qwen.yaml --api-spec builder/samples/qwen/openapi.yaml -o builder/samples/qwen/ --server-type nim -t
+
+OR
+
+python builder/main.py builder/samples/qwen/trtllm_nvdec_qwen.yaml --api-spec builder/samples/qwen/openapi.yaml -o builder/samples/qwen/ -c builder/samples/qwen/processors.py --server-type nim -t
 
 How to Run the inference pipeline within a NIM:
 
