@@ -10,6 +10,7 @@ input:
     data_type: TYPE_STRING
     dims: [ -1 ]
   - name : "videos"
+    # This custom data type automatically converts the video chunk to a list of image Tensors
     data_type: TYPE_CUSTOM_VIDEO_CHUNK_ASSETS
     dims: [ -1 ]
   - name: "max_tokens"
