@@ -14,6 +14,11 @@ jpg_data = base64.b64decode("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQEBAQIBAQECAgI
 
 
 @dataclass
+class PerfConfig:
+    enable_fps_logs: bool = False
+    enable_latency_logs: bool = False
+
+@dataclass
 class RenderConfig:
     enable_display: bool = False
     enable_osd: bool = False
@@ -184,6 +189,7 @@ class BulkVideoInputPool(TensorInputPool):
         tracker_config: TrackerConfig,
         msgbroker_config: MessageBrokerConfig,
         render_config: RenderConfig,
+        perf_config: PerfConfig,
         output,
         device_id,
         require_extra_input,
@@ -203,6 +209,7 @@ class BulkVideoInputPool(TensorInputPool):
         self._tracker_config = tracker_config
         self._msgbroker_config = msgbroker_config
         self._render_config = render_config
+        self._perf_config = perf_config
 
     def submit(self, data: List):
         try:
@@ -241,6 +248,11 @@ class BulkVideoInputPool(TensorInputPool):
                 tracker_height=self._dims[0]
             )
         flow = flow.attach(Probe('tensor_retriver', self._output))
+
+        if self._perf_config.enable_fps_logs:
+            flow = flow.attach(what="measure_fps_probe", name="fps_probe")
+        if self._perf_config.enable_latency_logs:
+            flow = flow.attach(what="measure_latency_probe", name="latency_probe")
 
         if self._msgbroker_config:
             flow = flow.attach(
@@ -470,6 +482,13 @@ class DeepstreamBackend(ModelBackend):
             )
         else:
             render_config = RenderConfig()
+        if "perf_config" in model_config["parameters"]:
+            perf_config = PerfConfig(
+                enable_fps_logs=model_config["parameters"]["perf_config"]["enable_fps_logs"],
+                enable_latency_logs=model_config["parameters"]["perf_config"]["enable_latency_logs"]
+            )
+        else:
+            perf_config = PerfConfig()
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
         require_extra_input = False
@@ -591,6 +610,7 @@ class DeepstreamBackend(ModelBackend):
                 tracker_config,
                 msgbroker_config,
                 render_config,
+                perf_config,
                 output,
                 device_id,
                 require_extra_input,
