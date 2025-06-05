@@ -228,10 +228,20 @@ class BulkVideoInputPool(TensorInputPool):
             )
             return []
 
+        # Check if single URI is a YAML source config file
+        is_source_config = (len(url_list) == 1 and 
+                           url_list[0].lower().endswith(('.yml', '.yaml')))
+        
         pipeline = Pipeline(f"deepstream-video-batch")
         if self._generic_input and data:
             self._generic_input.set(stack_tensors_in_dict(data))
-        flow = Flow(pipeline).batch_capture(url_list, width=self._dims[1], height=self._dims[0])
+        
+        # Use appropriate batch_capture method based on input type
+        if is_source_config:
+            flow = Flow(pipeline).batch_capture(input=url_list[0])
+        else:
+            flow = Flow(pipeline).batch_capture(url_list, width=self._dims[1], height=self._dims[0])
+            
         for config in self._preprocess_config_paths:
             flow = flow.preprocess(config, None if not self._generic_input else lambda: self._generic_input.generate())
         for config_path, engine_file in zip(self._infer_config_paths, self._engine_file_names):
@@ -269,11 +279,16 @@ class BulkVideoInputPool(TensorInputPool):
                 sync=False
             )
         flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
-                   enable_osd=self._render_config.enable_osd)
+                   enable_osd=self._render_config.enable_osd, sync=False)
 
         if self._pipeline is not None:
             self._pipeline.wait()
-        logger.info("DeepstreamBackend: starting pipeline for bulk video inference...")
+        
+        if is_source_config:
+            logger.info("DeepstreamBackend: starting pipeline for source config inference...")
+        else:
+            logger.info("DeepstreamBackend: starting pipeline for bulk video inference...")
+            
         pipeline.start()
         self._pipeline = pipeline
         return [i for i in range(len(url_list))]

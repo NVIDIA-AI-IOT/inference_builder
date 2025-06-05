@@ -24,7 +24,7 @@ models:
       ll_config_file: /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_IOU.yml
     msgbroker_config:
       msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so
-      msgbroker_msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test4/dstest4_msgconv_config.yml
+      msgbroker_msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt
       msgbroker_conn_str: localhost;9092
       msgbroker_topic: ds_app
     render_config:
