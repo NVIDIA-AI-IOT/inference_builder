@@ -35,12 +35,14 @@ docker compose up nim-qwen --build
 How to adapt the generated inference package to your own NIM environment:
 
 1. All the prerequisites listed in the dependencies.yaml be copied to your dependencies.
-2. The latest transformers(pip install git+https://github.com/huggingface/transformers accelerate) and qwen utils(pip install qwen-vl-utils[decord]==0.0.8) be installed in your Dockerfile if you choose transforms pytorch backend (pytorch_qwen.yaml).
-3. Build your tensrortllm image and use it as base image if you want to use tensorrtllm/pytorch backend (trtllm_qwen.yaml) since some newer models are not supported in older tensorrtllm container images pulled from the repository.
-4. Your model checkpoints are downloaded in /opt/nim/.cache/model-repo. You can also use your preferred model folder by modifying the "model_repo" in the yaml configuration file and rebuild the inference package.
-5. Add the inference package to the contaienr image (ADD qwen.tgz $NIM_DIR_PATH)
-6. Set the entry point as "python /opt/nim/__main__.py" (assuming NIM_DIR_PATH == "/opt/nim")
-7. If you're using a different OpenAPI specification in your NIM, you must modify the request/response mapping templates accordingly in the yaml configuration and rebuild the inference package.
+2. Properly set up your base container image:
+2.1. The latest transformers(pip install git+https://github.com/huggingface/transformers accelerate) and qwen utils(pip install qwen-vl-utils[decord]==0.0.8) be installed in your Dockerfile if you choose transforms pytorch backend (pytorch_qwen.yaml).
+2.2. Get the latest TensorRT LLM base container(v0.20.0rc3) or build your tensrortllm image and use it as base image if you want to use tensorrtllm/pytorch backend (trtllm_qwen.yaml) since some newer models are not supported in older tensorrtllm container images pulled from the repository.
+2.3. Copy and install DeepstreamSDK from the Deepstream 8.0 container image if you want to use H/W decoder
+3. Your model checkpoints are downloaded in /opt/nim/.cache/model-repo. You can also use your preferred model folder by modifying the "model_repo" in the yaml configuration file and rebuild the inference package.
+4. Add the inference package to the contaienr image (ADD qwen.tgz $NIM_DIR_PATH)
+5. Set the entry point as "python /opt/nim/__main__.py" (assuming NIM_DIR_PATH == "/opt/nim")
+6. If you're using a different OpenAPI specification in your NIM, you must modify the request/response mapping templates accordingly in the yaml configuration and rebuild the inference package.
 
 There is a OpenAI client included in the sample for testing the NIM.
 
@@ -66,3 +68,7 @@ You'll get a response 200 with a json body:
 Run the client.py with the returned video path:
 
 python client.py --video-path /tmp/assets/577a9f11-2b24-4db8-82c8-2601e0c2b6e4/its_1920_30s.mp4
+
+OR run the client.py with the returned asset id if H/W encoder configuration is used:
+
+python client.py --video-path 577a9f11-2b24-4db8-82c8-2601e0c2b6e4?frames=8
