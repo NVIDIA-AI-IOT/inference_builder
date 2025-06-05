@@ -164,7 +164,7 @@ models:
         dims: [ -1 ]
     parameters:
       max_num_tokens: 19200
-      num_frames: 8
+      disable_kv_cache_reuse: true
     preprocessors:
       - kind: "custom"
         name: "qwen-vl-video-processor"
