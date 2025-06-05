@@ -23,6 +23,9 @@ ADD deepstream-app.tgz /workspace
 ## Set Environment variables
 ENV LD_LIBRARY_PATH=/opt/tritonserver/lib:$LD_LIBRARY_PATH
 ENV NVSTREAMMUX_ADAPTIVE_BATCHING=yes
+# Enable latency measurement
+#ENV NVDS_ENABLE_LATENCY_MEASUREMENT=1
+#ENV NVDS_ENABLE_COMPONENT_LATENCY_MEASUREMENT=1
 
 ENTRYPOINT ["python3", "/workspace/__main__.py"]
 #ENTRYPOINT ["/bin/bash"]
