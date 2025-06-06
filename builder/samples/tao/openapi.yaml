@@ -168,9 +168,7 @@ components:
       additionalProperties: false
       type: object
       required:
-        - id
         - path
-        - size
         - contentType
       title: MediaAsset
       description: Represents a media asset.
@@ -357,6 +355,13 @@ components:
                 The mask vector as base64 string. The length of the vector depends on the model.
               format: ^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)$
           title: Mask
+        objects:
+          type: array
+          items:
+            type: integer
+            format: int32
+          title: Objects
+          description: The IDs of the objects in the inference result.
         timestamp:
           type: integer
           format: int64

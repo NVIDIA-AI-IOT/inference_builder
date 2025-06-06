@@ -1,7 +1,7 @@
 image=$1
 image_b64=$( base64 $image )
 
-url="http://localhost:8803/v1/embeddings"
+url="http://localhost:8800/v1/embeddings"
 echo '{
     "input": ["Image of a dog",
           "data:image/png;base64,'${image_b64}'"

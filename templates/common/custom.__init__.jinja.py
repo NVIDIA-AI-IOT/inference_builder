@@ -1,5 +1,8 @@
 import importlib
 from pathlib import Path
+from lib.utils import get_logger
+
+logger = get_logger(__name__)
 
 custom_module_table = {
     {% for item in classes %}
@@ -12,7 +15,7 @@ custom_module_table = {
 
 def create_instance(name:str, config):
     if not name in custom_module_table:
-        print(f"{name} not found")
+        logger.error(f"{name} not found")
         return None
     module_name = custom_module_table[name]["module"]
     class_name = custom_module_table[name]["class"]
@@ -26,5 +29,5 @@ def create_instance(name:str, config):
         # Instantiate and return the class object
         return cls(config)
     except Exception as e:
-        print(f"Error creating class '{class_name}' from module '{module_name}': {e}")
+        logger.error(f"Error creating class '{class_name}' from module '{module_name}': {e}")
         return None

@@ -1,4 +1,4 @@
-    async def {{ name }}(self, interface, request, body):
+    async def {{ name }}(self, interface, request, body, *args):
         accept = request.headers.get("accept", "")
         streaming = "application/x-ndjson" in accept
         in_data = self.process_request("{{ name }}", body)
@@ -19,5 +19,5 @@
                     response = self.process_response("infer", request, result)
                 return 200, response
         except Exception as e:
-            self.logger.error(f"Inference failed: {e}")
+            self.logger.error(f"Inference failed: {type(e).__name__}: {e}")
             return 500, str(e)

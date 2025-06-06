@@ -6,12 +6,11 @@ class OpenclipTokenizer:
     name = "openclip-tokenizer"
     def __init__(self, config):
         import open_clip
-        open_clip.add_model_config(config["model_path"])
+        open_clip.add_model_config(config["model_home"])
         self._tokenizer = open_clip.get_tokenizer("NVCLIP_224_700M_ViTH14")
 
     def __call__(self, *args, **kwargs):
-        strs = [s.decode("utf-8") for s in args[0]]
-        return self._tokenizer(strs)
+        return self._tokenizer(args[0])
 
 class VisionPreprocessor:
     name = "nvclip-vision-preprocessor"
@@ -42,15 +41,15 @@ class NvClipPostProcessor:
     def __call__(self, *args, **kwargs):
         text = args[0].tolist()
         images = args[1].tolist()
+        indices = args[2].tolist()
         total_tokens = sum(len(s) for s in text)
         num_images = len(images)
-        indices = [s.decode("utf-8") for s in args[2]]
         embeddings = []
         for index in indices:
             if index == "text":
                 embeddings.append(text.pop(0))
             elif index == "image":
                 embeddings.append(images.pop(0))
-        return np.array(embeddings), np.array([total_tokens]), np.array([num_images])
+        return np.array(embeddings), np.array(total_tokens), np.array(num_images)
 
 

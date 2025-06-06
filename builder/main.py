@@ -19,7 +19,7 @@ import os
 import subprocess
 import validate
 
-ALLOWED_SERVER = ["triton", "fastapi"]
+ALLOWED_SERVER = ["triton", "fastapi", "nim", "serverless"]
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Main")
@@ -30,7 +30,7 @@ def build_args(parser):
         "--server-type",
         type=str,
         nargs='?',
-        default='triton',
+        default='fastapi',
         choices=ALLOWED_SERVER,
         help="Choose the server type"
     )
@@ -163,8 +163,9 @@ def build_inference(server_type, config, output_dir: Path):
                 output = triton_tpl.render(backends=[backend], top_level=False)
                 with open (target_dir/"model.py", 'w') as o:
                     o.write(output)
-                if "triton" not in t_backends:
-                    t_backends.append("triton")
+            # triton python backend to communicate with triton fastapi server
+            if "triton" not in t_backends:
+                t_backends.append("triton")
             # write the pbtxt
             pbtxt_str = generate_pbtxt(OmegaConf.to_container(model), backend_spec[1] )
             pbtxt_path = triton_model_repo_dir/model.name/"config.pbtxt"
@@ -177,7 +178,12 @@ def build_inference(server_type, config, output_dir: Path):
 
     # create backends and model.py
     backends = []
-    target_dir = triton_model_repo_dir/f"{config.name}"/"1/" if server_type == "triton" else output_dir / "server"
+    if server_type == "serverless":
+        target_dir = output_dir / "app"
+    elif server_type == "triton":
+        target_dir = triton_model_repo_dir/f"{config.name}"/"1/"
+    else:
+        target_dir = output_dir / "server"
     for backend in t_backends:
         backend_tpl = jinja_env.get_template(f"backend/{backend}.jinja.py")
         backends.append(backend_tpl.render(server_type=server_type))
@@ -190,30 +196,28 @@ def build_inference(server_type, config, output_dir: Path):
         with open (target_dir/"model.py", 'w') as o:
             o.write(output)
 
-
+def build_serverless(name: str, output_dir: Path):
+    output_dir = output_dir / "app"
+    tpl_dir = get_resource_path("templates")
+    jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
+    app_tpl = jinja_env.get_template("serverless/inference.jinja.py")
+    output = app_tpl.render(service_name=name)
+    with open(output_dir/"inference.py", 'w') as f:
+        f.write(output)
 
 def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
     output_dir = output_dir / "server"
-    # generate pydantic data models from swagger spec
-    output_file = output_dir / "data_model.py"
+    # generate pydantic data models and inference base class from swagger spec
     tpl_dir = get_resource_path("templates")
-    if server_type == "fastapi":
-        fastapi_tpl_dir = get_resource_path("templates/api_server/fastapi/route")
-        command = (
-            f"fastapi-codegen --input {api_spec.name} --output {output_dir} --output-model-type pydantic_v2.BaseModel "
-            f"--template-dir {fastapi_tpl_dir} -m data_model.py --disable-timestamp"
-        )
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise Exception(f"Failed to generate fastapi data models: {result.stderr}")
-    else:
-        with open(api_spec, "r") as f:
-            api_schema = f.read()
-            data_generator.generate(
-                api_schema, output=output_file, output_model_type=data_generator.DataModelType.PydanticV2BaseModel
-            )
-    # generate the server
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
+    api_tpl_dir = get_resource_path(f"templates/api_server/{server_type}/route")
+    command = (
+        f"fastapi-codegen --input {api_spec.name} --output {output_dir} --output-model-type pydantic_v2.BaseModel "
+        f"--template-dir {api_tpl_dir} -m data_model.py --disable-timestamp"
+    )
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise Exception(f"Failed to generate fastapi data models: {result.stderr}")
 
     responders = []
     for name, r in config["responders"].items():
@@ -224,12 +228,28 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
         tpl = jinja_env.get_template(f"responder/{name}.jinja.py")
         responder["implementation"] = tpl.render(**responder)
         responders.append(responder)
-
     svr_tpl = jinja_env.get_template(f"api_server/{server_type}/responder.jinja.py")
-    output = svr_tpl.render(
-        service_name=model_name,
-        responders=responders
-    )
+    # render the responder.py
+    if server_type == "triton":
+        req_cls = [k for k in config["responders"]["infer"]["requests"].keys()]
+        res_cls = [k for k in config["responders"]["infer"]["responses"].keys()]
+        triton_config = {
+            "request_class": req_cls[0],
+            "response_class": res_cls[0],
+            "streaming_response_class": res_cls[1] if len(res_cls) > 1 else res_cls[0]
+        }
+        output = svr_tpl.render(
+            service_name=model_name,
+            responders=responders,
+            triton=triton_config
+        )
+    elif server_type == "fastapi":
+        output = svr_tpl.render(
+            service_name=model_name,
+            responders=responders
+        )
+    else:
+        raise ValueError(f"Unsupported server type: {server_type}")
     with open(output_dir/"responder.py", 'w') as f:
         f.write(output)
 
@@ -238,7 +258,8 @@ def generate_configuration(config, tree):
     def encode_templates(templates):
         encoded_templates = dict()
         for key, value in templates.items():
-            # these are json templates and need be encoded before being embeded as yaml strings
+            # these are json templates and need be encoded before being
+            # embeded as yaml strings
             if isinstance(value, str):
                 encoded_templates[key] = base64.b64encode(value.encode())
             else:
@@ -246,16 +267,27 @@ def generate_configuration(config, tree):
         return encoded_templates
     # base64 encode the templates if found in the config
     config_map = OmegaConf.to_container(config)
-    try:
-        for responder in config_map["server"]["responders"].values():
-            input_templates = responder.get("requests", None)
-            output_templates = responder.get("responses", None)
-            if input_templates:
-                responder["requests"] = encode_templates(input_templates)
-            if output_templates:
-                responder["responses"] = encode_templates(output_templates)
-    except ConfigKeyError:
-        raise ValueError("Server config error: responders not found")
+    if "input" not in config_map:
+        config_map["input"] = []
+        for m in config_map["models"]:
+            for i in m["input"]:
+                config_map["input"].append(i)
+    if "output" not in config_map:
+        config_map["output"] = []
+        for m in config_map["models"]:
+            for o in m["output"]:
+                config_map["output"].append(o)
+    if "server" in config_map:
+        try:
+            for responder in config_map["server"]["responders"].values():
+                input_templates = responder.get("requests", None)
+                output_templates = responder.get("responses", None)
+                if input_templates:
+                    responder["requests"] = encode_templates(input_templates)
+                if output_templates:
+                    responder["responses"] = encode_templates(output_templates)
+        except ConfigKeyError:
+            raise ValueError("Server config error: responders not found")
     # write the config to a python file
     tpl_dir = get_resource_path("templates")
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
@@ -270,7 +302,10 @@ def main(args):
     config = OmegaConf.load(args.config)
     with tempfile.TemporaryDirectory() as temp_dir:
         tree = build_tree(args.server_type, config, temp_dir)
-        build_server(args.server_type, config.name, args.api_spec, OmegaConf.to_container(config.server), tree)
+        if args.server_type == "serverless":
+            build_serverless(config.name, tree)
+        else:
+            build_server(args.server_type, config.name, args.api_spec, OmegaConf.to_container(config.server), tree)
         build_inference(args.server_type, config, tree)
         generate_configuration(config, tree)
         if not args.exclude_lib :

@@ -10,7 +10,7 @@ class PreprocessorCvcuda:
     name = "changenet-normalizer"
     def __init__(self, config):
         self.device_id = config["device_id"]
-
+        self.network_size = config['network_size']
         self.mean_tensor = torch.Tensor([0.5, 0.5, 0.5])
         self.mean_tensor = self.mean_tensor.reshape(1, 1, 1, 3).cuda(self.device_id)
         self.mean_tensor = cvcuda.as_tensor(self.mean_tensor, "NHWC")
@@ -18,15 +18,15 @@ class PreprocessorCvcuda:
         self.stddev_tensor = self.stddev_tensor.reshape(1, 1, 1, 3).cuda(self.device_id)
         self.stddev_tensor = cvcuda.as_tensor(self.stddev_tensor, "NHWC")
 
-    def __call__(self, *args, **kwargs):
-        out_size = kwargs.pop("out_size")
-        frame_nhwc = torch.stack([t for t in args])
+    def __call__(self, *args):
+        images = [arg for arg in args]
+        frame_nhwc = torch.stack(images)
         resized = cvcuda.resize(
             cvcuda.as_tensor(frame_nhwc, "NHWC"),
             (
                 frame_nhwc.shape[0],
-                out_size[1],
-                out_size[0],
+                self.network_size[1],
+                self.network_size[0],
                 frame_nhwc.shape[3],
             ),
             cvcuda.Interp.LINEAR,

@@ -52,14 +52,18 @@ class TritonPythonModel(InferenceBase):
         return auto_complete_model_config
 
     def initialize(self, args):
-        logger.info(f"CHECKPOINTS_DIR: {CHECKPOINTS_DIR}")
-        super().initialize(check_point_dir=CHECKPOINTS_DIR)
+        model_repo = global_config.model_repo
+        logger.info(f"Model Repository: {model_repo}")
+        super().initialize(model_repo)
         for operator in self._operators:
             model_config = next((m for m in global_config.models if m.name == operator.model_name), None)
             backend_spec = model_config.backend.split('/')
             backend_instance = None
             if backend_spec[0] == 'triton':
-                backend_instance = TritonBackend(model_config=OmegaConf.to_container(model_config))
+                backend_instance = TritonBackend(
+                    model_config=OmegaConf.to_container(model_config),
+                    model_home=os.path.join(model_repo, operator.model_name, "1")
+                )
             if backend_instance is None:
                 raise Exception(f"Unable to create backend {model_config.backend}")
             self._submit(operator, backend_instance)
@@ -70,7 +74,7 @@ class TritonPythonModel(InferenceBase):
             for config in configs:
                 if config["kind"] == "custom":
                     self._processors.append(
-                        CustomProcessor(config, CHECKPOINTS_DIR, global_config.name)
+                        CustomProcessor(config, model_repo)
                     )
 
         # thread executor for async bridge
@@ -86,10 +90,13 @@ class TritonPythonModel(InferenceBase):
             await queue.put(item)
         def thread_to_async_bridge(thread_queue, async_queue, loop):
             while True:
-                item = thread_queue.get()
-                asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
-                if not item:
-                    break
+                try:
+                    item = thread_queue.get()
+                    asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
+                    if isinstance(item, Stop) or isinstance(item, Error):
+                        break
+                except Empty:
+                    continue
 
 
         logger.info(f"Received {len(requests)} request(s)")
@@ -122,12 +129,14 @@ class TritonPythonModel(InferenceBase):
                         if len(tensor.shape) == (len(dims)+1):
                             tensor = torch.squeeze(tensor, 0)
                     tensors[name] = tensor
-                logger.debug(f"Injecting tensors {tensors}")
-                input.put(tensors)
-                input.put(Stop(reason="end"))
+                if tensors:
+                    logger.debug(f"Injecting tensors {tensors}")
+                    input.put(tensors)
+                    input.put(Stop(reason="end"))
             # fetch result
             loop = asyncio.get_event_loop()
             for a_output, output in zip(self._async_outputs, self._outputs):
+                logger.error(f"Submitting {output._timeout} to async executor")
                 self._async_executor.submit(thread_to_async_bridge, output, a_output, loop)
             stop = False
             while not stop:
@@ -194,6 +203,7 @@ class TritonPythonModel:
         the model to initialize any state associated with this model.
         """
         model_name = args["model_name"]
+        model_home = os.path.join(global_config.model_repo, model_name, "1")
         model_config = next((m for m in global_config.models if m.name == model_name), None)
         if model_config is None:
             raise Exception("Model config not found")
@@ -216,8 +226,10 @@ class TritonPythonModel:
             BackendClass = TensorRTLLMBackend
         elif backend_spec[-1]  == "polygraphy":
             BackendClass = PolygraphBackend
+        elif backend_spec[-1] == "dummy":
+            BackendClass = DummyBackend
         if BackendClass is not None:
-            self._model_backend = BackendClass(self._model_config, self._device_id)
+            self._model_backend = BackendClass(self._model_config, model_home,self._device_id)
         else:
             raise Exception(f"Backend not supported: {model_config.backend}")
 

@@ -19,8 +19,8 @@ def trt_dtype_to_torch(dtype):
 
 class TensorRTLLMBackend(ModelBackend):
     """Python TensorRT Backend"""
-    def __init__(self, model_config:Dict, device_id: int=0):
-        super().__init__(model_config, device_id)
+    def __init__(self, model_config:Dict, model_home: str, device_id: int=0):
+        super().__init__(model_config, model_home, device_id)
         self._model_name = model_config["name"]
         self._output_names = [o['name'] for o in model_config['output']]
         self._device = f"cuda:{device_id}"
@@ -29,7 +29,9 @@ class TensorRTLLMBackend(ModelBackend):
         logger.debug(f"TensorRTBackend created for {self._model_name} to generate {self._output_names}")
         if "tensorrt_engine" not in model_config:
             raise("PolygraphBackend requires a path to tensorrt_engine")
-        engine_file = model_config["tensorrt_engine"]
+        engine_file = model_config["parameters"]["tensorrt_engine"]
+        if not os.path.isabs(engine_file):
+            engine_file = os.path.join(self._model_home, engine_file)
         logger.info(f"Loading TensorRT Engine from {engine_file}...")
         with open(engine_file, 'rb') as f:
             engine_buffer = f.read()
