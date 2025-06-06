@@ -12,15 +12,20 @@ def create_parser(inputs: List) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description='Command line interface for{{ service_name }}'
     )
-    for input in inputs:
-        input_name = input.name.replace("_", "-")
+    for input_item in inputs:
+        input_name = input_item.name.replace("_", "-")
         nargs = 1
-        if len(input.dims) == 1:
-            nargs = "+" if input.dims[0] == -1 else input.dims[0]
-        optional = input.optional if hasattr(input, "optional") else False
+        optional = input_item.optional if hasattr(input_item, "optional") else False
+        if len(input_item.dims) == 1:
+            if input_item.dims[0] == -1:
+                nargs = "+"
+            elif input_item.dims[0] == 1 and optional:
+                nargs = "?"
+            else:
+                nargs = input_item.dims[0]
         parser.add_argument(
             f'--{input_name}',
-            type=py_datatype_mapping[input.data_type],
+            type=py_datatype_mapping[input_item.data_type],
             nargs=nargs,
             required=not optional
         )
@@ -44,8 +49,10 @@ async def run_inference(args) -> Optional[int]:
     """
     # Read and remove save_to argument before converting to dict
     save_to = getattr(args, 'save_to', None)
-    if hasattr(args, 'save_to'):
+    if save_to:
         delattr(args, 'save_to')
+        # Create empty file if save_to is specified
+        open(save_to, 'w', encoding='utf-8').close()
 
     # Convert remaining args to dictionary
     inputs = vars(args)
@@ -55,22 +62,17 @@ async def run_inference(args) -> Optional[int]:
 
     service = GenericInference()
     service.initialize()
-    results = []
     async for result in service.execute(inputs):
-        results.append(result)
-
-    # Save results if save_to was specified
-    if save_to:
-        with open(save_to, "w") as f:
-            for result in results:
+        if save_to:
+            with open(save_to, "a", encoding='utf-8') as f:
                 json_str = json.dumps(result, indent=4)
                 f.write(json_str)
                 f.write("\n")
-    else:
-        for result in results:
+        else:
             print(result)
             print()
-    print(f"Inference completed with {len(results)} results")
+
+    print("Inference completed.")
     service.finalize()
     return 0
 

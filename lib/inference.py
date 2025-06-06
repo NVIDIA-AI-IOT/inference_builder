@@ -38,6 +38,7 @@ py_datatype_mapping = {
     "TYPE_CUSTOM_DS_IMAGE": str,
     "TYPE_CUSTOM_DS_MIME": str,
     "TYPE_CUSTOM_BINARY_URLS": str,
+    "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
 }
 
 np_datatype_mapping = {
@@ -58,6 +59,7 @@ np_datatype_mapping = {
     "TYPE_CUSTOM_DS_IMAGE": np.ubyte,
     "TYPE_CUSTOM_DS_MIME": np.string_,
     "TYPE_CUSTOM_DS_PASSTHROUGH": None,
+    "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
     "TYPE_BF16": None
 }
 
@@ -79,6 +81,7 @@ torch_datatype_mapping = {
     "TYPE_CUSTOM_DS_IMAGE": torch.int8,
     "TYPE_CUSTOM_DS_MIME": None,
     "TYPE_CUSTOM_DS_PASSTHROUGH": None,
+    "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
     "TYPE_BF16": None
 }
 

@@ -9,9 +9,15 @@ models:
   - name: media_url
     data_type: TYPE_CUSTOM_BINARY_URLS
     dims: [ -1 ]
+    optional: true
   - name: mime
     data_type: TYPE_CUSTOM_DS_MIME
     dims: [ -1 ]
+    optional: true
+  - name: source_config
+    data_type: TYPE_CUSTOM_DS_SOURCE_CONFIG
+    dims: [ 1 ]
+    optional: true
   output:
   - name: output
     data_type: TYPE_CUSTOM_DS_METADATA
@@ -24,9 +30,12 @@ models:
       ll_config_file: /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_IOU.yml
     msgbroker_config:
       msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so
-      msgbroker_msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test4/dstest4_msgconv_config.yml
+      msgbroker_msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt
       msgbroker_conn_str: localhost;9092
       msgbroker_topic: ds_app
     render_config:
       enable_display: true
       enable_osd: true
+    perf_config:
+      enable_fps_logs: true
+      enable_latency_logs: true
