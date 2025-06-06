@@ -1,4 +1,4 @@
-    async def {{ name }}(self, interface, request, asset_id):
+    async def {{ name }}(self, request, asset_id):
         try:
             status = self._asset_manager.delete_asset(asset_id)
         except Exception as e:

@@ -451,7 +451,6 @@ class DeepstreamBackend(ModelBackend):
         self._model_name = model_config["name"]
         self._output_names = [o['name'] for o in model_config['output']]
         self._output_types = [o['data_type'] for o in model_config['output']]
-        self._pass_through_tensors = []
         self._image_tensor_name = None
         self._media_url_tensor_name = None
         self._mime_tensor_name = None
@@ -521,8 +520,6 @@ class DeepstreamBackend(ModelBackend):
                 self._image_tensor_name = input['name']
             elif input['data_type'] == 'TYPE_CUSTOM_BINARY_URLS':
                 self._media_url_tensor_name = input['name']
-            elif input['data_type'] == 'TYPE_CUSTOM_DS_PASSTHROUGH':
-                self._pass_through_tensors.append(input['name'])
             elif input['data_type'] == 'TYPE_CUSTOM_DS_MIME':
                 self._mime_tensor_name = input['name']
             elif input['data_type'] == 'TYPE_CUSTOM_DS_SOURCE_CONFIG':
@@ -672,20 +669,12 @@ class DeepstreamBackend(ModelBackend):
 
 
     def __call__(self, *args, **kwargs):
-        logger.debug(
-            f"DeepstreamBackend {self._model_name} triggerred with "
-            f"{args if args else kwargs}"
-        )
         in_data_list = args if args else [kwargs]
         media = None
-        pass_through_list = [dict() for _ in range(len(in_data_list))]
         explicit_batch = True if args else False
 
         # analyze the input batch
-        for data, pass_through_data in zip(in_data_list, pass_through_list):
-            # pass through the tensors if needed
-            for tensor_name in self._pass_through_tensors:
-                pass_through_data[tensor_name] = data.pop(tensor_name, None)
+        for data in in_data_list:
             # get the media type
             if ((self._image_tensor_name in data or self._media_url_tensor_name in data) and
                 not self._mime_tensor_name in data):

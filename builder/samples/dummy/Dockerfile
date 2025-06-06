@@ -9,19 +9,12 @@
 # its affiliates is strictly prohibited.
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-blos-dev271" AS inference_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev118" AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends curl ca-certificates python3-distutils libyaml-cpp0.7 pkg-config cmake \
-    && if ! command -v pip &> /dev/null; then \
-        curl -sSL https://bootstrap.pypa.io/get-pip.py -o get-pip.py \
-        && python3 get-pip.py \
-        && rm get-pip.py; \
-    else \
-        python3 -m pip install --upgrade pip; \
-    fi
+    apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libyaml-cpp-dev pkg-config cmake 
 
     #TODO: remove curl?
     #&& apt-get purge -y --auto-remove curl
@@ -30,7 +23,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
     python-multipart==0.0.9 \
     aiofiles==23.2.1 \
-    aiohttp==3.8.5 \
+    aiohttp==3.11.0 \
     annotated-types==0.7.0 \
     python-magic==0.4.27 \
     torch==2.4.0 \

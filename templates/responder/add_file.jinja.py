@@ -1,4 +1,4 @@
-    async def {{ name }}(self, interface, request, file):
+    async def {{ name }}(self, request, file):
         if not file:
             return 400, "No file provided"
         try:

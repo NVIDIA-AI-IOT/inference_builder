@@ -36,10 +36,12 @@ class GenericInference(InferenceBase):
                 backend_class = DeepstreamBackend
             elif backend_spec[0] == 'polygraphy':
                 backend_class = PolygraphBackend
-            elif backend_spec[0] == 'tensorrt_llm':
-                backend_class = TensorrtLlmBackend
+            elif backend_spec[0] == 'tensorrtllm':
+                backend_class = TensorRTLLMBackend
             elif backend_spec[0] == 'dummy':
                 backend_class = DummyBackend
+            elif backend_spec[0] == 'pytorch':
+                backend_class = PytorchBackend
             else:
                 raise Exception(f"Backend {model_config.backend} not supported")
             backend_instance = backend_class(

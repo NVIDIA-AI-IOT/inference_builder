@@ -136,3 +136,28 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 1
+  nim-qwen:
+    build:
+      context: qwen
+      target: inference_base
+      dockerfile: Dockerfile.nim
+      # used for creating NIM
+#      dockerfile: Dockerfile.nim
+    image: nim-qwen
+    volumes:
+      - '~/.cache/nim:/opt/nim/.cache'
+      - '$HOME/TensorRT-LLM:/workspace/TensorRT-LLM'
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              #count: 1
+              device_ids: ['7']
+              capabilities: [gpu]
+    environment:
+      DEBUG: 0

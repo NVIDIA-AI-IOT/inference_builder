@@ -141,9 +141,6 @@ models:
   - name: text_token_mask
     data_type: TYPE_BOOL
     dims: [ 256, 256 ]
-  - name: pos_map
-    data_type: TYPE_CUSTOM_DS_PASSTHROUGH
-    dims: [ -1, -1 ]
   output:
   - name: pred_logits
     data_type: TYPE_FP32
@@ -154,9 +151,6 @@ models:
   - name: pred_masks
     data_type: TYPE_FP32
     dims: [ -1, -1, -1, -1 ]
-  - name: pos_map
-    data_type: TYPE_FP32
-    dims: [ -1, -1,]
   parameters:
     infer_config_path:
       - nvdsinfer_config.yaml
