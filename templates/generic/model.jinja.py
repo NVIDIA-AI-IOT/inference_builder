@@ -84,7 +84,8 @@ class GenericInference(InferenceBase):
         for i in reshuffled:
             input = self._inputs[i]
             # select the tensors for the input
-            tensors = { n: request[n] for n in input.in_names if n in request }
+            tensors = { n: request[n] for n in input.in_names if n in request and request[n] is not None }
+
             # the tensors need to be transformed to generic type
             for name in tensors:
                 tensor = tensors[name]
@@ -92,12 +93,7 @@ class GenericInference(InferenceBase):
                 if config is None:
                     logger.warning(f"Invalid input parsed: {name}")
                     continue
-                dims = config['dims']
-                if len(dims) == 1 and dims[0] == 1:
-                    tensor = np.array([tensor])
-                else:
-                    tensor = np.array(tensor)
-                tensors[name] = tensor
+                tensors[name] = np.array(tensor)
             if tensors:
                 logger.debug(f"Injecting tensors {tensors}")
                 input.put(tensors)

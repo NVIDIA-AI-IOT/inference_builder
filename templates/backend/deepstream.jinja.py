@@ -184,6 +184,7 @@ class BulkVideoInputPool(TensorInputPool):
     def __init__(self,
         batch_size,
         media_url_tensor_name,
+        source_tensor_name,
         infer_config_paths,
         preprocess_config_paths,
         tracker_config: TrackerConfig,
@@ -198,6 +199,7 @@ class BulkVideoInputPool(TensorInputPool):
     ):
         self._batch_size = batch_size
         self._media_url_tensor_name = media_url_tensor_name
+        self._source_tensor_name = source_tensor_name
         self._infer_config_paths = infer_config_paths
         self._engine_file_names = engine_file_names
         self._preprocess_config_paths = preprocess_config_paths
@@ -212,36 +214,45 @@ class BulkVideoInputPool(TensorInputPool):
         self._perf_config = perf_config
 
     def submit(self, data: List):
-        try:
-            url_list = [item.pop(self._media_url_tensor_name) for item in data]
-            if len(url_list) > self._batch_size:
-                logger.warning(
-                    f"Number of media urls ({len(url_list)}) > "
-                    f"batch size ({self._batch_size}), "
-                    f"only the first {self._batch_size} will be used"
-                )
-                url_list = url_list[:self._batch_size]
-        except KeyError:
-            logger.error(
-                f"Unable to find tensor input for "
-                f"media_url_tensor_name {self._media_url_tensor_name}"
-            )
-            return []
+        url_list = []
+        source_config_file = None
+        for item in data:
+            if self._media_url_tensor_name and self._media_url_tensor_name in item:
+                url_list.append(item.pop(self._media_url_tensor_name))
+            elif self._source_tensor_name and self._source_tensor_name in data[0]:
+                source_config_file = item.pop(self._source_tensor_name).tolist()
+                if not source_config_file.lower().endswith(('.yml', '.yaml')):
+                    logger.error(
+                        f"Source config file must be a YAML file: {source_config_file}"
+                    )
+                    return []
+                break
+            else:
+                logger.error(f"Invalid input data: {data}")
+                continue
 
-        # Check if single URI is a YAML source config file
-        is_source_config = (len(url_list) == 1 and 
-                           url_list[0].lower().endswith(('.yml', '.yaml')))
-        
+        if len(url_list) > self._batch_size:
+            logger.warning(
+                f"Number of media urls ({len(url_list)}) > "
+                f"batch size ({self._batch_size}), "
+                f"only the first {self._batch_size} will be used"
+            )
+            url_list = url_list[:self._batch_size]
+
         pipeline = Pipeline(f"deepstream-video-batch")
         if self._generic_input and data:
             self._generic_input.set(stack_tensors_in_dict(data))
-        
+
         # Use appropriate batch_capture method based on input type
-        if is_source_config:
-            flow = Flow(pipeline).batch_capture(input=url_list[0])
+        if source_config_file:
+            flow = Flow(pipeline).batch_capture(
+                input=source_config_file,
+                width=self._dims[1], height=self._dims[0],
+                batch_size=self._batch_size
+            )
         else:
             flow = Flow(pipeline).batch_capture(url_list, width=self._dims[1], height=self._dims[0])
-            
+
         for config in self._preprocess_config_paths:
             flow = flow.preprocess(config, None if not self._generic_input else lambda: self._generic_input.generate())
         for config_path, engine_file in zip(self._infer_config_paths, self._engine_file_names):
@@ -283,15 +294,10 @@ class BulkVideoInputPool(TensorInputPool):
 
         if self._pipeline is not None:
             self._pipeline.wait()
-        
-        if is_source_config:
-            logger.info("DeepstreamBackend: starting pipeline for source config inference...")
-        else:
-            logger.info("DeepstreamBackend: starting pipeline for bulk video inference...")
-            
+
         pipeline.start()
         self._pipeline = pipeline
-        return [i for i in range(len(url_list))]
+        return list(range(len(url_list))) if url_list else list(range(self._batch_size))
 
     def stop(self, reason: str):
         if self._pipeline:
@@ -449,6 +455,7 @@ class DeepstreamBackend(ModelBackend):
         self._image_tensor_name = None
         self._media_url_tensor_name = None
         self._mime_tensor_name = None
+        self._source_tensor_name = None
 
         if len(self._output_names) > 1 and self._output_types[0] == "TYPE_CUSTOM_DS_METADATA":
             raise Exception(f"No more than one output is allowed for DS metadata!")
@@ -518,16 +525,25 @@ class DeepstreamBackend(ModelBackend):
                 self._pass_through_tensors.append(input['name'])
             elif input['data_type'] == 'TYPE_CUSTOM_DS_MIME':
                 self._mime_tensor_name = input['name']
+            elif input['data_type'] == 'TYPE_CUSTOM_DS_SOURCE_CONFIG':
+                self._source_tensor_name = input['name']
             elif not ('optional' in input and input['optional']):
                 tensor_name = input['name']
                 require_extra_input = True
                 np_type = np_datatype_mapping[input['data_type']]
                 warmup_data_0[tensor_name] = np.random.rand(*input['dims']).astype(np_type)
                 warmup_data_1[tensor_name] = np.random.rand(*input['dims']).astype(np_type)
-        if self._image_tensor_name is None and self._media_url_tensor_name is None:
-            raise Exception("Deepstream pipeline requires at least one TYPE_CUSTOM_DS_IMAGE or TYPE_CUSTOM_BINARY_URLS input")
-        if self._mime_tensor_name is None:
-            raise Exception("Deepstream pipeline requires at least one TYPE_CUSTOM_DS_MIME input")
+        if (self._image_tensor_name is None and
+            self._media_url_tensor_name is None and
+            self._source_tensor_name is None):
+            raise ValueError(
+                "Deepstream pipeline requires at least one "
+                "TYPE_CUSTOM_DS_IMAGE or TYPE_CUSTOM_BINARY_URLS input "
+                "or TYPE_CUSTOM_DS_SOURCE_CONFIG input"
+            )
+        if ((self._image_tensor_name or self._media_url_tensor_name) and
+            self._mime_tensor_name is None):
+            raise ValueError("Deepstream pipeline requires TYPE_CUSTOM_DS_MIME input")
         # override the network dimensions from  the primary inference config
         try:
             primary_infer_config_path = infer_config_paths[0]
@@ -541,9 +557,9 @@ class DeepstreamBackend(ModelBackend):
                         dims = (infer_dims[0], infer_dims[1]) if "network-input-order" in property and property["network-input-order"] == 1 else (infer_dims[1], infer_dims[2])
                         logger.info(f"DeepstreamBackend: setting network dimensions to {dims}")
         except Exception as e:
-            raise Exception(f"Failed to load primary inference config: {e}")
+            raise RuntimeError(f"Failed to load primary inference config: {e}") from e
         if dims[0] == 0 or dims[1] == 0:
-            raise Exception(
+            raise ValueError(
                 "DeepstreamBackend: unable to find network dimensions: "
                 "infer-dims missing in the config?"
             )
@@ -600,7 +616,8 @@ class DeepstreamBackend(ModelBackend):
             output.reset()
             logger.info(f"Warm up 1: {results}")
 
-        if self._media_url_tensor_name is not None:
+        if (self._media_url_tensor_name is not None or
+            self._source_tensor_name is not None):
             # video input support
             media = "video"
             if tensor_output:
@@ -620,6 +637,7 @@ class DeepstreamBackend(ModelBackend):
             in_pool = BulkVideoInputPool(
                 self._max_batch_size,
                 self._media_url_tensor_name,
+                self._source_tensor_name,
                 infer_config_paths,
                 preprocess_config_paths,
                 tracker_config,
@@ -669,16 +687,24 @@ class DeepstreamBackend(ModelBackend):
             for tensor_name in self._pass_through_tensors:
                 pass_through_data[tensor_name] = data.pop(tensor_name, None)
             # get the media type
-            if not self._mime_tensor_name in data:
-                raise Exception(f"MIME type is not specified for input {data}")
+            if ((self._image_tensor_name in data or self._media_url_tensor_name in data) and
+                not self._mime_tensor_name in data):
+                logger.error(f"MIME type is not specified for input {data}")
+                return
+            if self._source_tensor_name and self._source_tensor_name in data:
+                media = "video"
+                explicit_batch = True
+                break # only video source is supported through source config
+
             current_media = data[self._mime_tensor_name].split('/')[0]
             if media is None:
                 media = current_media
             elif media != current_media:
-                raise Exception(
+                logger.error(
                     f"Mixed media types are not supported in a single batch, "
                     f"got {media} and {current_media}"
                 )
+                return
 
         # submit the data to the pipeline which supports the media type
         indices = self._in_pools[media].submit(in_data_list)
@@ -690,10 +716,7 @@ class DeepstreamBackend(ModelBackend):
                 logger.info("DeepstreamBackend: No more data from this batch")
                 break
             out_data_list = []
-            for result, pass_through_data in zip(results, pass_through_list):
-                if pass_through_data:
-                    result.update(pass_through_data)
-
+            for result in results:
                 out_data = dict()
                 for o in self._output_names:
                     if o in result:
