@@ -9,34 +9,16 @@
 # its affiliates is strictly prohibited.
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-blos-dev271" AS nim_builder_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev156" AS nim_builder_base
 
 ENV NIM_DIR_PATH="/opt/nim" \
     PIP_INDEX_URL=https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple \
     PYTHONDONTWRITEBYTECODE=1
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    python3-distutils \
-    && if ! command -v pip &> /dev/null; then \
-        curl -sSL https://bootstrap.pypa.io/get-pip.py -o get-pip.py \
-        && python3 get-pip.py \
-        && rm get-pip.py; \
-    else \
-        python3 -m pip install --upgrade pip; \
-    fi
-
-    #TODO: remove curl?
-    #&& apt-get purge -y --auto-remove curl
-
-RUN --mount=type=cache,target=/root/.cache/pip \
     pip install nimlib[runtime]==0.8.4
 
-LABEL com.nvidia.nim.base_image="gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-blos-dev271"
+LABEL com.nvidia.nim.base_image="gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev156"
 LABEL com.nvidia.nim.name={{MODEL_NAME}}
 LABEL com.nvidia.nim.type=triton
 LABEL com.nvidia.nim.version=0.0.1
@@ -49,7 +31,7 @@ ENV NIM_CACHE_PATH="/opt/nim/.cache" \
     NGC_API_KEY=
 
 ENV BACKEND_TYPE=triton
-ENV BASE_IMAGE="nvcr.io/nvidia/tritonserver-pb24h1:24.03.04-py3"
+ENV BASE_IMAGE="gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev156"
 ENV NIMTOOLS_VERSION=1.1.1
 ENV BACKEND_TYPE="triton"
 ENV NIM_NSPECT_ID=NSPECT-Z39R-IVVG
@@ -66,18 +48,18 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
     # Build TRT customized plugins
 ARG TRT_VERSION_MAJOR=10
-ARG TRT_VERSION_MINOR=3
+ARG TRT_VERSION_MINOR=9
 ARG TRT_VERSION_PATCH=0
-ARG TRT_VERSION_BUILD=26
+ARG TRT_VERSION_BUILD=34
 
 ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
 ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
 ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
 
 ARG CUDA_VERSION_MAJOR=12
-ARG CUDA_VERSION_MINOR=6
-ARG CUDA_VERSION_PATCH=37
-ARG CUDA_VERSION_BUILD=001
+ARG CUDA_VERSION_MINOR=8
+ARG CUDA_VERSION_PATCH=93
+ARG CUDA_VERSION_BUILD=35583870_0
 ARG CUDA_VERSION_MAJOR_MINOR=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR
 ARG CUDA_VERSION_FULL=$CUDA_VERSION_MAJOR_MINOR.$CUDA_VERSION_PATCH.$CUDA_VERSION_BUILD
 ARG CUDNN_VERSION=9.3.0.75

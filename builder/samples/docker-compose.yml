@@ -86,7 +86,7 @@ services:
     build:
       context: tao
       target: nim_final
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.nim
       args:
         GITLAB_TOKEN: ${GITLAB_TOKEN}
     image: nim-tao
