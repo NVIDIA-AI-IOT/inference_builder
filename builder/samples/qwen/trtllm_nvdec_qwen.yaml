@@ -180,7 +180,9 @@ models:
         name: "qwen-vl-image-processor"
         input: ["prompts", "images"]
         output: ["inputs"]
-# TODO: add routes for video and image
+
+# The explicit routes are used to separate the data flow for video and image,
+# so that they can be processed by different hardware decoders
 routes: {
   ':["images", "prompts", "max_tokens", "temperature", "top_p", "top_k"]': 'Qwen2.5-VL-7B-Instruct',
   ':["videos", "prompts", "max_tokens", "temperature", "top_p", "top_k"]': 'Qwen2.5-VL-7B-Instruct',
