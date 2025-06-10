@@ -163,12 +163,20 @@ class TensorRTLLMBackend(ModelBackend):
             inputs = []
             if args:
                 for i in args:
-                    input = i[self._trtllm_input_name]
-                    inputs.extend(input) if isinstance(input, list) else inputs.append(input)
+                    if self._trtllm_input_name in i:
+                        input = i[self._trtllm_input_name]
+                        inputs.extend(input) if isinstance(input, list) else inputs.append(input)
+                    else:
+                        logger.warning(f"TensorRTLLMBackend: Input {self._trtllm_input_name} not found in {i}")
             elif kwargs:
-                inputs = kwargs[self._trtllm_input_name]
+                if self._trtllm_input_name in kwargs:
+                    inputs = kwargs[self._trtllm_input_name]
+                else:
+                    logger.warning(f"TensorRTLLMBackend: Input {self._trtllm_input_name} not found in {kwargs}")
             else:
-                raise ValueError("No inputs provided")
+                logger.warning("TensorRTLLMBackend: No inputs provided")
+            if not inputs:
+                return
             inputs = self._input_formatter(self._model_home, inputs)
             results = self._llm.generate(inputs, sample_params)
             yield [{"outputs": r} for r in results]

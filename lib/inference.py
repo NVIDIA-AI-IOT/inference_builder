@@ -219,6 +219,11 @@ class VideoFrameSamplingDataFlow(DataFlow):
         super().__init__(configs, tensor_names, True, False, timeout)
         self._media_extractor = MediaExtractor(chunks=[],n_thread=1) # TODO: make it configurable
         self._video_tensor_type = key_tensor_type
+        self._video_tensor_names = []
+        for tensor_name in tensor_names:
+            config = next((c for c in configs if c["name"] == tensor_name[0]), None)
+            if config and config["data_type"] == key_tensor_type:
+                self._video_tensor_names.append(tensor_name[1])
         self._media_extractor()
         logger.info(f"VideoFrameSamplingDataFlow initialized")
 
@@ -269,8 +274,10 @@ class VideoFrameSamplingDataFlow(DataFlow):
         return results
 
     def _is_collected_valid(self, collected: Dict):
-        # TODO
-        return super()._is_collected_valid(collected)
+        result = super()._is_collected_valid(collected)
+        if not result:
+            return False
+        return all([n in collected for n in self._video_tensor_names])
 
     def _parse_asset_string(self, asset: str):
         pieces = asset.split("?")
@@ -494,7 +501,8 @@ class CustomProcessor(Processor):
     def __init__(self, config: Dict, model_home: str):
         super().__init__(config, model_home)
         if not hasattr(custom, "create_instance"):
-            raise Exception("Custom processor module not valid!!")
+            logger.error("Custom processor module not valid!!")
+            raise ValueError("Custom processor module not valid!!")
         self._processor = custom.create_instance(self.name, self.config)
         if self._processor is not None:
             logger.info(f"Custom processor {self._processor.name} created")
@@ -762,7 +770,7 @@ class ModelOperator:
                             if not all([n in output_data for n in out.in_names]):
                                 logger.error(f"Data received from model {self._model_name} is incomplete, expected: {out.in_names}, received: {output_data.keys()}. Post-processor missing?")
                                 continue
-                        logger.debug(f"Deposit result: {output_data}")
+                        logger.debug(f"ModelOperator of {self._model_name} deposits result: {output_data}")
                         out.put(output_data)
             except Exception as e:
                 logger.exception(e)

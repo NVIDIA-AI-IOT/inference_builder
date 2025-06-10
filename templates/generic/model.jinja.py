@@ -86,7 +86,7 @@ class GenericInference(InferenceBase):
         for i in reshuffled:
             input = self._inputs[i]
             # select the tensors for the input
-            tensors = { n: request[n] for n in input.in_names if n in request }
+            tensors = { n: request[n] for n in input.in_names if n in request and request[n]}
             # the tensors need to be transformed to generic type
             for name in tensors:
                 tensor = tensors[name]
@@ -116,10 +116,10 @@ class GenericInference(InferenceBase):
                 for data in results:
                     logger.debug(f"Got output data: {data}")
                     if isinstance(data, Error):
-                        logger.debug(f"Got Error: {data.message}")
+                        logger.info(f"Got Error: {data.message}")
                         return
                     elif isinstance(data, Stop):
-                        logger.debug(f"Got Stop: {data.reason}")
+                        logger.info(f"Got Stop: {data.reason}")
                         return
                     # collect the output
                     for k, v in data.items():

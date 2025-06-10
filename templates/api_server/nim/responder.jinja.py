@@ -9,12 +9,14 @@ import numpy as np
 import torch
 from typing import Dict, Any
 from fastapi.responses import StreamingResponse
+import asyncio
 
 class Responder(ResponderBase):
     def __init__(self):
         super().__init__()
         self._inference = GenericInference()
         self._inference.initialize()
+        self._lock = asyncio.Lock()
 
         # initialize the action map
         {% for responder in responders %}
