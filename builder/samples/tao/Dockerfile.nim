@@ -157,7 +157,7 @@ RUN touch $NIM_DIR_PATH/start_server.sh && \
     if [ ! -f "\$DEFAULT_MANIFEST" ] && { [ -z "\${NIM_MANIFEST_PATH:-}" ] || [ ! -f "\${NIM_MANIFEST_PATH}" ]; }; then
         echo "No model manifest found. Using legacy mode with cache path"
         ln -s \${NIM_CACHE_PATH}/model-repo/\${NIM_MODEL_NAME} "\$SYMLINK"
-        python3 __main__.py
+        python3 inference.py
     else
         # At least one manifest exists, determine which one for debug message
         if [ -f "\$DEFAULT_MANIFEST" ]; then
