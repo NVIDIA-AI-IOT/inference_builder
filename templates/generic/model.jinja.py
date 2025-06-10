@@ -80,7 +80,7 @@ class GenericInference(InferenceBase):
                     continue
             logger.info(f"thread_to_async_bridge {thread_queue} stopped")
 
-        logger.info(f"Received request {request}")
+        logger.debug(f"Received request {request}")
         matched = [[n for n in input.in_names if n in request] for input in self._inputs]
         reshuffled = sorted(range(len(matched)), key=lambda x: len(matched[x]), reverse=True)
         for i in reshuffled:

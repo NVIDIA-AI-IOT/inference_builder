@@ -109,8 +109,10 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
-#      DEBUG: 1
-      NIM_MODEL_NAME: rtdetr
+      DEBUG: 0
+      # NIM_MODEL_NAME: rtdetr
+      NIM_MANIFEST_PATH: /opt/configs/model_manifest.rtdetr.yaml
+      NGC_API_KEY: ${NGC_API_KEY}
   dry-run:
     user: nvs:1000
     build:

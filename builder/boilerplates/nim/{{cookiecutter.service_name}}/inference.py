@@ -50,10 +50,11 @@ def setup_tao_config_symlink():
     print(f"Created symlink: {SYMLINK} -> {MODEL_PATH}")
 
 def main():
+    print("Run inference.py by nimlib's start_server import")
     setup_tao_config_symlink()
     update_model_config_paths()
     server.inference.main()
 
 if __name__ == "__main__":
-    print(f"Directly run inference.py as main entrypoint")
-    main()
+    print("Directly run inference.py as main entrypoint")
+    server.inference.main()
