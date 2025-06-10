@@ -53,3 +53,7 @@ def main():
     setup_tao_config_symlink()
     update_model_config_paths()
     server.inference.main()
+
+if __name__ == "__main__":
+    print(f"Directly run inference.py as main entrypoint")
+    main()
