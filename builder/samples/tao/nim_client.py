@@ -403,8 +403,21 @@ def save_as_validation_reference(response_data, image_path, text=None):
         if validation_ref_path.exists():
             with open(validation_ref_path, 'r') as f:
                 existing_data = json.load(f)
-            if existing_data == response_data:
-                print(f"Validation reference response already exists and is identical to the current response")
+
+            # Create copies of both data structures and remove timestamp
+            def remove_timestamp(data):
+                data_copy = json.loads(json.dumps(data))  # Deep copy
+                if isinstance(data_copy, dict) and 'data' in data_copy:
+                    for item in data_copy['data']:
+                        if isinstance(item, dict) and 'timestamp' in item:
+                            del item['timestamp']
+                return data_copy
+
+            existing_data_no_timestamp = remove_timestamp(existing_data)
+            response_data_no_timestamp = remove_timestamp(response_data)
+
+            if existing_data_no_timestamp == response_data_no_timestamp:
+                print(f"Validation reference response already exists and is identical to the current response (ignoring timestamp)")
             else:
                 print(f"Validation reference response already exists but is different from the current response")
                 need_write = True
