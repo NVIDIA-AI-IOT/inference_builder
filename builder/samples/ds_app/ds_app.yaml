@@ -39,3 +39,4 @@ models:
     perf_config:
       enable_fps_logs: true
       enable_latency_logs: true
+    inference_timeout: 5

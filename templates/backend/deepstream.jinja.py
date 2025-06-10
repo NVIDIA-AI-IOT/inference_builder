@@ -456,6 +456,7 @@ class DeepstreamBackend(ModelBackend):
         self._media_url_tensor_name = None
         self._mime_tensor_name = None
         self._source_tensor_name = None
+        self._inference_timeout = model_config["parameters"].get("inference_timeout", 3)
 
         if len(self._output_names) > 1 and self._output_types[0] == "TYPE_CUSTOM_DS_METADATA":
             raise Exception(f"No more than one output is allowed for DS metadata!")
@@ -711,7 +712,7 @@ class DeepstreamBackend(ModelBackend):
         # collect the results
         while True:
             # TODO: timeout should be runtime configurable
-            results = self._outputs[media].collect(indices, timeout=3)
+            results = self._outputs[media].collect(indices, timeout=self._inference_timeout)
             if results is None:
                 logger.info("DeepstreamBackend: No more data from this batch")
                 break
