@@ -77,7 +77,7 @@ build_deployer_image:
   image: $BUILDER_IMAGE
   script:
     - python builder/main.py builder/samples/tao/ds_${FLAVOR}.yaml
-      --server-type fastapi
+      --server-type nim
       -a builder/samples/tao/openapi.yaml
       --no-docker
       -o builder/samples/tao
@@ -100,7 +100,7 @@ build_deployer_image:
   <<: *build_tao_base_template
   script:
     - python builder/main.py builder/samples/tao/ds_${FLAVOR}.yaml
-      --server-type fastapi
+      --server-type nim
       -a builder/samples/tao/openapi.yaml
       -v builder/samples/tao/validation/${VALIDATION_MODEL}
       --no-docker
@@ -113,7 +113,7 @@ build_deployer_image:
   <<: *build_tao_validation_template
   script:
     - python builder/main.py builder/samples/tao/ds_${FLAVOR}.yaml
-      --server-type fastapi
+      --server-type nim
       -a builder/samples/tao/openapi.yaml
       --no-docker
       -o builder/samples/tao
