@@ -44,36 +44,16 @@ server:
       operation: create_chat_completion_v1_chat_completions_post
       requests:
         NIMLLMChatCompletionRequest: >
+          {% set contents = request.messages | selectattr("role", "equalto", "user")| map(attribute="content")| sum(start=[]) %}
           {
             "prompts": [
-                {% for item in request.messages %}
-                    {% if item.role == "user" %}
-                        {% for content in item.content %}
-                            {% if content.type == "text" %} {{ (content.text+"\n")|tojson }} {% endif %}
-                        {% endfor %}
-                    {% endif %}
-                {% if not loop.last %}, {% endif %}
-                {% endfor %}
+                {{ contents | selectattr("type", "equalto", "text") | map(attribute="text") | map("tojson") | join(", ") }}
             ],
             "videos": [
-                {% for item in request.messages %}
-                    {% if item.role == "user" %}
-                        {% for content in item.content %}
-                            {% if content.type == "video" %} {{ content.video|tojson }} {% endif %}
-                        {% endfor %}
-                    {% endif %}
-                {% if not loop.last %}, {% endif %}
-                {% endfor %}
+                {{ contents | selectattr("type", "equalto", "video") | map(attribute="video") | map("tojson") | join(", ") }}
             ],
             "images": [
-                {% for item in request.messages %}
-                    {% if item.role == "user" %}
-                        {% for content in item.content %}
-                            {% if content.type == "image" %} {{ content.image|tojson }} {% endif %}
-                        {% endfor %}
-                    {% endif %}
-                {% if not loop.last %}, {% endif %}
-                {% endfor %}
+                {{ contents | selectattr("type", "equalto", "image") | map(attribute="image") | map("tojson") | join(", ") }}
             ]
             {% if 'max_tokens' in request %}
             , "max_tokens": {{ request.max_tokens }}

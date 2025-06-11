@@ -21,5 +21,4 @@ class PytorchBackend(ModelBackend):
             result = self._model.generate(**in_data)
             if len(self._output_names) != len(result):
                 raise ValueError(f"Number of output names ({len(self._output_names)}) does not match the number of output tensors ({len(result)})")
-            for i, tensor in enumerate(result):
-                yield {self._output_names[i]: tensor}
+            yield {self._output_names[i]: tensor for i, tensor in enumerate(result)}

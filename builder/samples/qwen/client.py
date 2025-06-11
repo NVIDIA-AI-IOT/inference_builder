@@ -11,40 +11,39 @@ if __name__ == '__main__':
     parser.add_argument("--endpoint", type=str, help="Endpoint to send for inference", default="http://0.0.0.0:8803/v1", nargs="?")
     args = parser.parse_args()
 
+    messages = []
     if args.images:
-        messages = [
-            {
-                "role": "user",
-                "content": []
-            }
-        ]
         for image in args.images:
             with open(image, "rb") as f:
                 data = base64.b64encode(f.read()).decode()
                 mime_type = mimetypes.guess_type(image)[0]
-                messages[0]["content"].append({
-                    "type": "text",
-                    "text": "Please describe the image in detail."
+                messages.append({
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Please describe the image in detail."
+                        },
+                        {
+                            "type": "image",
+                            "image": f"data:{mime_type};base64,{data}"
+                        }
+                    ]
                 })
-                messages[0]["content"].append({
-                    "type": "image",
-                    "image": f"data:{mime_type};base64,{data}"
-                }                )
     elif args.videos:
-        messages = [
-            {
-                "role": "user",
-                "content": []
-            }
-        ]
         for video in args.videos:
-            messages[0]["content"].append({
-                "type": "text",
-                "text": "Please describe the video in detail."
-            })
-            messages[0]["content"].append({
-                "type": "video",
-                "video": f"{video}"
+            messages.append({
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Please describe the video in detail."
+                    },
+                    {
+                        "type": "video",
+                        "video": f"{video}"
+                    }
+                ]
             })
     else:
         raise ValueError("No images or videos provided")
