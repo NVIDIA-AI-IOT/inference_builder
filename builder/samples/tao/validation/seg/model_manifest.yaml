@@ -1,16 +1,16 @@
 schema_version: '2.0'
 profile_selection_criteria: auto
 model: eevaigoeixww/dev/tao_cv
-release: rc0
+release: rc1
 profiles:
-- id: 425dcb3ef646e497d5a50bbd1eb1169c9f33f4253f36669bb428ef250e2447cd
+- id: 425dcb3ef646e497d5a50bbd1eb1169c9f33f4253f36669bb428ef250e2447ce
   tags:
     gpu: a6000
   workspace:
     files:
       nvdsinfer_config.yaml:
-        uri: ngc://eevaigoeixww/dev/tao_cv:seg.cradiov2_b.engine_b1_fp16_A6000_tao2?file=nvdsinfer_config.yaml
-        checksum: blake3:d805653a1d9a03748a66e4024f0b98d64deb56643d0ff7784b29198641d83689
+        uri: ngc://eevaigoeixww/dev/tao_cv:seg.cradiov2_b.engine_b1_fp16_A6000_tao2_trt10.9?file=nvdsinfer_config.yaml
+        checksum: blake3:8e479d4f7fc8ac37b0b690040213f4cde8ac7c279ba120fa316e36d9d40ab41e
       segformer.onnx_b1_gpu0_fp16.engine:
-        uri: ngc://eevaigoeixww/dev/tao_cv:seg.cradiov2_b.engine_b1_fp16_A6000_tao2?file=segformer.onnx_b1_gpu0_fp16.engine
-        checksum: blake3:2e767735aedde9d44365697921a2c87dbc3a8e5aba5ea83fd1a12e474bc949d0
+        uri: ngc://eevaigoeixww/dev/tao_cv:seg.cradiov2_b.engine_b1_fp16_A6000_tao2_trt10.9?file=segformer.onnx_b1_gpu0_fp16.engine
+        checksum: blake3:13ce94093ac0f2365ccacc2ccc7fbf6be1aba981a2f3eed0422606346db6af3d

@@ -1,9 +1,9 @@
 ---
 schema_version: '1.0'
 model: "eevaigoeixww/dev/tao_cv"
-release: 'rc0'
+release: 'rc1'
 simple:
   profiles:
-    - model_version: cls.nvdino_pretrain_0114_final_scale0.8.engine_b1_fp16_A6000
+    - model_version: cls.nvdino_pretrain_0114_final_scale0.8.engine_b1_fp16_A6000_trt10.9
       tags:
         gpu: a6000
