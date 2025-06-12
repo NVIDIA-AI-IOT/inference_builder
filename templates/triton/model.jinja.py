@@ -143,9 +143,8 @@ class TritonPythonModel(InferenceBase):
                 try:
                     logger.debug("Waiting for tensors from async queue")
                     response_data = dict()
-                    done, _ = await asyncio.wait([ao.get() for ao in self._async_outputs], return_when=asyncio.ALL_COMPLETED)
-                    for f in done:
-                        data = f.result()
+                    results = await asyncio.gather(*(ao.get() for ao in self._async_outputs))
+                    for data in results:
                         logger.debug(f"Got output data: {data}")
                         if isinstance(data, Error):
                             error = pb_utils.TritonError(f"steam llm_response, error received: {data.message}")

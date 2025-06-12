@@ -37,10 +37,12 @@ class GenericInference(InferenceBase):
                 backend_class = DeepstreamBackend
             elif backend_spec[0] == 'polygraphy':
                 backend_class = PolygraphBackend
-            elif backend_spec[0] == 'tensorrt_llm':
-                backend_class = TensorrtLlmBackend
+            elif backend_spec[0] == 'tensorrtllm':
+                backend_class = TensorRTLLMBackend
             elif backend_spec[0] == 'dummy':
                 backend_class = DummyBackend
+            elif backend_spec[0] == 'pytorch':
+                backend_class = PytorchBackend
             else:
                 raise Exception(f"Backend {model_config.backend} not supported")
             backend_instance = backend_class(
@@ -79,7 +81,7 @@ class GenericInference(InferenceBase):
                     continue
             logger.info(f"thread_to_async_bridge {thread_queue} stopped")
 
-        logger.info(f"Received request {request}")
+        logger.debug(f"Received request {request}")
         matched = [[n for n in input.in_names if n in request] for input in self._inputs]
         reshuffled = sorted(range(len(matched)), key=lambda x: len(matched[x]), reverse=True)
         for i in reshuffled:

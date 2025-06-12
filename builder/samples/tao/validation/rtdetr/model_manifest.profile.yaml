@@ -4,6 +4,6 @@ model: "eevaigoeixww/dev/tao_cv"
 release: 'rc0'
 simple:
   profiles:
-    - model_version: detection.rtdetr.engine-b1_fp16_A6000
+    - model_version: rtdetr.engine-b1_fp16_A6000_trt10.9
       tags:
         gpu: a6000

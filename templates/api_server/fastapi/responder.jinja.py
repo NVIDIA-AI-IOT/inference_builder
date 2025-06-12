@@ -9,12 +9,14 @@ import numpy as np
 import torch
 from typing import Dict, Any
 from fastapi.responses import StreamingResponse
+import asyncio
 
 class Responder(ResponderBase):
     def __init__(self):
         super().__init__()
         self._inference = GenericInference()
         self._inference.initialize()
+        self._lock = asyncio.Lock()
 
         # initialize the action map
         {% for responder in responders %}
@@ -56,11 +58,11 @@ class Responder(ResponderBase):
 
         return (json.dumps(json.loads(json_string), separators=(',', ':')) + "\n") if streaming else json.loads(json_string)
 
-    async def take_action(self, action_name:str, *args):
+    async def take_action(self, action_name:str, **kwargs):
         action = self._action_map.get(action_name, None)
         if not action:
             raise ValueError(f"Unknown action: {action_name}")
-        return await action(*args)
+        return await action(**kwargs)
 
 {% for responder in responders %}
 {{ responder.implementation }}

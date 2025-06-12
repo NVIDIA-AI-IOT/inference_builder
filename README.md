@@ -204,7 +204,6 @@ Input and Output definitions are required both at the top level and model level.
   - TYPE_CUSTOM_DS_IMAGE: Encoded image specificially for Deepstream pipeline
   - TYPE_CUSTOM_DS_MIME: Mime type used by Deepstream pipeline to determine the decoder type
   - TYPE_CUSTOM_DS_METADATA: Structured output data specifically for Deepstream pipeline
-  - TYPE_CUSTOM_DS_PASSTHROUGH: Passthrough data, the DS pipeline will pass it to the output without modification
 - dims: The dimensions of the input or output in the form of a list. Each item in the list specifies the maximum length of the dimension and -1 means it is dynamic.
 - optional(optional): Whether the input or output is optional. By default, it is false.
 - force_cpu(optional): Whether to force the input or output to be on CPU. By default, it is false.

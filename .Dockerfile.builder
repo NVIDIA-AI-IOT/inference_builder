@@ -13,7 +13,6 @@ ENV PIP_INDEX_URL=https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/sim
 
 # Install NIM tools and other Python dependencies
 RUN pip install --no-cache-dir \
-    nimtools==1.0.0 \
     openapi-generator-cli
 
 # Install project dependencies
