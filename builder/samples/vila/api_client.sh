@@ -47,7 +47,7 @@ echo '{
   "messages": [
     {
       "role": "user",
-      "content": "Describe what you see in this image. <img src=\"data:image/png;base64,'${image_b64}'\" />"
+      "content": "Describe what you see in this image. <img src=\"data:image/jpeg;base64,'${image_b64}'\" />"
     }
   ],
   "max_tokens": 1024,

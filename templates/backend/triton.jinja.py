@@ -2,16 +2,15 @@
 
 class TritonBackend(ModelBackend):
     """Triton Python Backend"""
-    def __init__(self, model_config: Dict):
-        logger.debug(f"model_config: {model_config}")
-        super().__init__(model_config)
+    def __init__(self, model_config: Dict, model_home: str):
+        logger.debug(f"model_config: {model_config}, model_home: {model_home}")
+        super().__init__(model_config, model_home)
         self._model_name = model_config["name"]
         self._input_names = [i['name'] for i in model_config['input']]
         self._output_names = [o['name'] for o in model_config['output']]
         logger.debug(f"TritonBackend created for {self._model_name} with inputs {self._input_names} and outputs {self._output_names}")
 
     def __call__(self, *args, **kwargs):
-        logger.debug(f"TritonBackend {self._model_name} triggered with {args if args else kwargs}")
         in_data_list = args if args else [kwargs]
         input_config = self._model_config["input"]
         # to determine if we need to stack the input, TODO: below logic needs be more generic
@@ -84,16 +83,15 @@ from tritonclient.utils import *
 
 class TritonBackend(ModelBackend):
     """Triton Python Backend"""
-    def __init__(self, model_config: Dict):
+    def __init__(self, model_config: Dict, model_home: str):
         logger.debug(f"model_config: {model_config}")
-        super().__init__(model_config)
+        super().__init__(model_config, model_home)
         self._model_name = model_config["name"]
         self._input_names = [i['name'] for i in model_config['input']]
         self._output_names = [o['name'] for o in model_config['output']]
         logger.debug(f"TritonBackend created for {self._model_name} with inputs {self._input_names} and outputs {self._output_names}")
 
     def __call__(self, *args, **kwargs):
-        logger.debug(f"TritonBackend {self._model_name} triggered with {args if args else kwargs}")
         in_data_list = args if args else [kwargs]
         input_config = self._model_config["input"]
         # to determine if we need to stack the input, TODO: below logic needs be more generic

@@ -1,0 +1,10 @@
+dependencies:
+  python:
+    - name: "numpy"
+      version: "1.26.4"
+    - name: "torch"
+      version: "2.4.0"
+    - name: "omegaconf"
+      version: "2.3.0"
+    - name: "python-multipart"
+      version: "0.0.9"

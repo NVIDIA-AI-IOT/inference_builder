@@ -53,15 +53,27 @@ class Asset:
 
 
 class AssetManager:
-    def __init__(self, asset_dir: str = DEFAULT_ASSET_DIR):
-        self._asset_dir = asset_dir
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(AssetManager, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if self._initialized:
+            return
+
+        self._asset_dir = DEFAULT_ASSET_DIR
         self._asset_map:Dict[str, Asset] = dict()
         os.makedirs(self._asset_dir, exist_ok=True)
         asset_ids = self._get_existing_asset_ids()
         self._asset_map: dict[str, Asset] = {
-            asset_id: Asset.fromdir(os.path.join(asset_dir, asset_id))
+            asset_id: Asset.fromdir(os.path.join(self._asset_dir, asset_id))
             for asset_id in asset_ids
         }
+        self._initialized = True
 
     def save_file(self, file: UploadFile, file_name: str, mime_type: str) -> Asset | None:
         asset_id = str(uuid.uuid4())

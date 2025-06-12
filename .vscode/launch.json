@@ -13,12 +13,12 @@
             "justMyCode": false,
             "args": [
                 "--output-dir",
-                "${workspaceFolder}/builder/samples/",
+                "${workspaceFolder}/builder/samples/changenet",
                 "--custom-module",
-                "${workspaceFolder}/builder/samples/vila/processors.py",
+                "${workspaceFolder}/builder/samples/changenet/processors.py",
                 "--api-spec",
-                "${workspaceFolder}/builder/samples/vila/openapi.json",
-                "${workspaceFolder}/builder/samples/vila/tensorrt_vila1.5.yaml",
+                "${workspaceFolder}/builder/samples/changenet/openapi.yaml",
+                "${workspaceFolder}/builder/samples/changenet/trt_changenet.yaml",
 //                "-t"
             ]
         }

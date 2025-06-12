@@ -14,91 +14,6 @@ tags:
   - name: "NVIDIA NVCLIP API"
     description: Get a vector representation of a given input that can be easily consumed by machine learning models and algorithms.
 paths:
-  /v1/health/ready:
-    get:
-      summary: Service ready check
-      description: This endpoint will return a 200 status when the service is ready
-        to receive inference requests
-      operationId: health_v1_health_ready_get
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NIMHealthSuccessResponse'
-        '503':
-          description: Service is not ready to receive requests.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Errors'
-  /v1/health/live:
-    get:
-      summary: Service liveness check
-      description: This endpoint will return a 200 status as soon as the service is
-        able to accept traffic, but it does not mean the service is ready to accept
-        inference requests.
-      operationId: health_ready_v1_health_live_get
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NIMHealthSuccessResponse'
-  /v1/metrics: 
-    get: 
-      summary: Metrics
-      description: Handler for metrics endpoint.
-      operationId: metrics_v1_metrics_get
-      responses:
-        200: 
-          description: Successful Response
-          content: 
-            application/json: 
-              schema: 
-                type: string
-                title: Response Metrics V1 Metrics Get
-  /v1/license:
-    get:
-      summary: Provide NIM LICENSE
-      description: This endpoint will return the NIM Container license information
-      operationId: show_license_v1_license_get
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NIMLicenseInfoResponse'
-  /v1/metadata:
-    get:
-      summary: Provide NIM Metadata
-      description: This endpoint will return the NIM Container Version, associated
-        models, assets and license information
-      operationId: show_metadata_v1_metadata_get
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NIMMetadataResponse'
-  /v1/manifest:
-    get:
-      summary: Provide NIM Manifest file
-      description: This endpoint will return the NIM manifest file content
-      operationId: manifest_v1_manifest_get
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              manifest_file:
-                type: string
-                title: ManifestFile
-                description: Manifest file contents
   "/v1/embeddings":
     post:
       tags:
@@ -108,23 +23,7 @@ paths:
         large images, this POST should be used in conjunction with the NVCF API which
         allows for the upload of large assets. \nYou can find details on how to use
         NVCF Asset APIs here: https://docs.api.nvidia.com/cloud-functions/reference/createasset."
-      operationId: createEmbedding
-      parameters:
-      - in: header
-        name: NVCF-INPUT-ASSET-REFERENCES
-        schema:
-          type: string
-          maxLength: 370
-          format: uuid
-        required: false
-        description: 'String of asset IDs separated by commas. Data is uploaded to
-          AWS S3 using NVCF Asset APIs and associated with these asset IDs.If the
-          size of an image is more than 180KB, it needs to be uploaded to a presigned
-          S3 URL bucket. The presigned URL allows for secure and temporary access
-          to the S3 bucket for uploading the image. Once the asset is requested, an
-          asset ID is generated for it. Please include this asset ID in this header
-          and to use the uploaded image in a prompt, you need to refer to it using
-          the following format: `<img src="data:image/png;asset_id,{asset_id}" />`.'
+      operationId: create_embedding
       requestBody:
         content:
           application/json:

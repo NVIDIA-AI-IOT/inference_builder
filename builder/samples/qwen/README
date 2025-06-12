@@ -1,0 +1,74 @@
+This example demonstrates how to build an inference pipeline and package it to a NIM for the Qwen family of VLM models using the Inference Builder tool. Following models have been tested:
+- Qwen/Qwen2.5-VL-3B-Instruct
+- Qwen/Qwen2.5-VL-7B-Instruct
+- Qwen/Qwen2.5-VL-32B-Instruct
+
+Three configurations are provided, allowing you to choose based on your specific software and hardware environment:
+
+1. pytorch_qwen.yaml: leveraging the transformer APIs and fits all the models
+2. trtllm_qwen.yaml: leveraging TensroRT LLM APIs for better performance
+3. trtllm_nvdec_qwen.yaml: leveraging h/w decoder and TensorRT LLM for the best performance
+
+How to Build the inference code:
+
+First you must follow the top level README.md to set up the enviroment, and then run
+
+a. Using baseline pytorch backend via transfomer APIs:
+
+python builder/main.py builder/samples/qwen/pytorch_qwen.yaml --api-spec builder/samples/qwen/openapi.yaml -o builder/samples/qwen/ -c builder/samples/qwen/processors.py --server-type nim -t
+
+b. Using optimized tensorrtllm pytorch backend:
+
+python builder/main.py builder/samples/qwen/trtllm_qwen.yaml --api-spec builder/samples/qwen/openapi.yaml -o builder/samples/qwen/ --server-type nim -t
+
+OR
+
+python builder/main.py builder/samples/qwen/trtllm_nvdec_qwen.yaml --api-spec builder/samples/qwen/openapi.yaml -o builder/samples/qwen/ -c builder/samples/qwen/processors.py --server-type nim -t
+
+How to Run the inference pipeline within a NIM:
+
+The sample folder already contains all the ingredients for building a NIM, you only need to run
+
+cd builder/samples
+docker compose up nim-qwen --build
+
+How to adapt the generated inference package to your own NIM environment:
+
+1. All the prerequisites listed in the dependencies.yaml be copied to your dependencies.
+2. Properly set up your base container image:
+2.1. The latest transformers(pip install git+https://github.com/huggingface/transformers accelerate) and qwen utils(pip install qwen-vl-utils[decord]==0.0.8) be installed in your Dockerfile if you choose transforms pytorch backend (pytorch_qwen.yaml).
+2.2. Get the latest TensorRT LLM base container(v0.20.0rc3) or build your tensrortllm image and use it as base image if you want to use tensorrtllm/pytorch backend (trtllm_qwen.yaml) since some newer models are not supported in older tensorrtllm container images pulled from the repository.
+2.3. Copy and install DeepstreamSDK from the Deepstream 8.0 container image if you want to use H/W decoder
+3. Your model checkpoints are downloaded in /opt/nim/.cache/model-repo. You can also use your preferred model folder by modifying the "model_repo" in the yaml configuration file and rebuild the inference package.
+4. Add the inference package to the contaienr image (ADD qwen.tgz $NIM_DIR_PATH)
+5. Set the entry point as "python /opt/nim/__main__.py" (assuming NIM_DIR_PATH == "/opt/nim")
+6. If you're using a different OpenAPI specification in your NIM, you must modify the request/response mapping templates accordingly in the yaml configuration and rebuild the inference package.
+
+There is a OpenAI client included in the sample for testing the NIM.
+
+For video input, you need to first upload a test video file:
+
+curl -X 'POST' \
+  'http://localhost:8803/v1/files' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: multipart/form-data' \
+  -F 'file=@its_1920_30s.mp4;type=video/mp4'
+
+You'll get a response 200 with a json body:
+{
+  "data": {
+    "id": "577a9f11-2b24-4db8-82c8-2601e0c2b6e4",
+    "path": "/tmp/assets/577a9f11-2b24-4db8-82c8-2601e0c2b6e4/its_1920_30s.mp4",
+    "size": 3472221,
+    "duration": 30000000000,
+    "contentType": "video/mp4"
+  }
+}
+
+Run the client.py with the returned video path:
+
+python client.py --video-path /tmp/assets/577a9f11-2b24-4db8-82c8-2601e0c2b6e4/its_1920_30s.mp4
+
+OR run the client.py with the returned asset id if H/W encoder configuration is used:
+
+python client.py --video-path 577a9f11-2b24-4db8-82c8-2601e0c2b6e4?frames=8

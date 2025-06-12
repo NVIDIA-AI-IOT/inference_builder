@@ -11,55 +11,41 @@
 from typing import Any
 {{imports}}
 from contextlib import asynccontextmanager
-from fastapi import Request, HTTPException
-from nimlib.nim_inference_api_builder.http_api import HttpNIMApiInterface
+from fastapi import Request, HTTPException, FastAPI, APIRouter
+import uvicorn
 from .responder import Responder
 from lib.utils import get_logger
 
-class Interface(HttpNIMApiInterface):
+class FastAPIInterface:
 
     def __init__(self, *args, **kwargs):
-        super().__init__(
-            # These kwargs will get propagated to the FastAPI class constructor
-            *args,
-            description = "{{ info.description }}",
-            title = "{{ info.title }}",
-            version = "{{ info.version }}",
-            **kwargs
-        )
+        self.app = FastAPI()
+        self.router = APIRouter()
         self.responder = Responder()
         self.logger = get_logger(__name__)
+        self.register_routes()
+        self.app.include_router(self.router)
+
+    def register_routes(self):
+        {% for operation in operations %}
+        self.router.{{operation.type}}("{{operation.path}}")(self.{{operation.function_name}})
+        {% endfor %}
+
+
+    def serve(self, **kwargs):
+        uvicorn.run(self.app, host="0.0.0.0", port=8000)
 
     {% for operation in operations %}
-    @HttpNIMApiInterface.route("{{operation.path}}", methods=["{{operation.type}}"])
     async def {{operation.function_name}}(self, request: Request, {{operation.snake_case_arguments}}) -> {{operation.response}}:
         self.logger.info("{{operation.function_name}} called")
-        status, response = await self.responder.take_action("{{operation.function_name}}", *locals().values())
+        kwargs = dict(locals())
+        kwargs.pop("self")
+        status, response = await self.responder.take_action("{{operation.function_name}}", **kwargs)
         if status != 200:
             raise HTTPException(status_code=status, detail=response)
         self.logger.debug(f"response generated as {response}")
         return response
     {% endfor %}
-
-    async def health_live(self):
-        """
-        Provide your implementation of liveness to know when to restart container
-        """
-        return await super().health_live()
-
-    async def health_ready(self):
-        """
-        Provide your implementation of readiness to know when container ready to accept traffic
-        """
-        return await super().health_ready()
-
-    @asynccontextmanager
-    async def lifespan(self):
-        self.logger.info("Welcome! Application is starting up.")
-        try:
-            yield
-        finally:
-            self.logger.info("Thank you for using the application. Shutting down.")
 
 def get_openapi_schema(file_dump=True, pprint=True):
     """
@@ -77,5 +63,5 @@ def get_openapi_schema(file_dump=True, pprint=True):
 
 
 def main():
-    interface = Interface()
+    interface = FastAPIInterface()
     interface.serve()
