@@ -1,6 +1,6 @@
 from pyservicemaker import Pipeline, Flow, BufferProvider, Buffer, RenderMode, BatchMetadataOperator, Probe, as_tensor, StateTransitionMessage
 from typing import Dict, List
-from queue import Queue, Empty
+from queue import Queue, Empty, Full
 from dataclasses import dataclass, field
 import base64
 import numpy as np
@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 import yaml
 import tempfile
 import os
+from collections import deque
 
 png_data = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGK6HcwNCAAA//8DTgE8HuxwEQAAAABJRU5ErkJggg==")
 jpg_data = base64.b64decode("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCgr/2wBDAQICAgICAgUDAwUKBwYHCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgr/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD+f+iiigAooooAKKKKACiiigD/2Q==")
@@ -304,31 +305,63 @@ class BulkVideoInputPool(TensorInputPool):
             self._pipeline.stop()
             self._pipeline.wait()
 
+
 class BaseTensorOutput(BatchMetadataOperator):
     def __init__(self, n_outputs, name: str = None):
         super().__init__()
-        self._queues = [Queue() for _ in range(n_outputs)]
+        self._queue = Queue(maxsize=n_outputs)
+        self._dq = deque(maxlen=n_outputs)
         self._name = name
 
     def handle_metadata(self, batch_meta):
         pass
 
     def collect(self, indices: List, timeout=None) -> List | None:
-        try:
-            results = [self._queues[i].get(timeout=timeout) if i >= 0 else None for i in indices]
-        except Empty:
-            return None
-        if any (x is None for x in results):
-            return None
-        return results if self._name is None else [{self._name: r} for r in results]
+        # expected results for a batch
+        results = [None] * len(indices)
+
+        # first check the deque for stashed results for the batch
+        while self._dq:
+            i = self._dq[0][0]
+            if results[i] is None:
+                results[i] = self._dq.popleft()[1]
+            else:
+                # No data from the batch, return the results
+                return results if self._name is None else [
+                    {self._name: r} for r in results
+                ]
+
+        # read from the thread queue
+        while True:
+            try:
+                i, data = self._queue.get(timeout=timeout)
+                if results[i] is None:
+                    results[i] = data
+                else:
+                    # this is a new batch, stash the results and break
+                    self._dq.append((i, data))
+                    break
+            except Empty:
+                break
+        return results if self._name is None else [
+            {self._name: r} for r in results
+        ]
 
     def reset(self):
-        self._queues = [Queue() for _ in range(len(self._queues))]
+        self._queue = Queue(maxsize=self._queue.maxsize)
+        self._dq = deque(maxlen=self._dq.maxlen)
 
     def _deposit(self, index: int, data: dict):
-        logger.debug(f"DeepstreamBackend: Depositing data to index {index}: {data}")
-        q = self._queues[index]
-        q.put(data)
+        logger.debug(
+            f"DeepstreamBackend: Depositing data to index {index}: {data}"
+        )
+        try:
+            self._queue.put((index, data))
+        except Full:
+            logger.warning(
+                f"DeepstreamBackend: Queue is full, dropping data from "
+                f"index {index}"
+            )
 
 
 class TensorOutput(BaseTensorOutput):
@@ -411,7 +444,7 @@ class PreprocessMetadataOutput(BaseTensorOutput):
                         labels.append(classifier.get_n_label(i))
                     metadata.labels.append(labels)
                 metadata.timestamp = roi.frame_meta.buffer_pts
-                self._deposit(roi.frame_meta.pad_index, {"data": metadata})
+                self._deposit(roi.frame_meta.pad_index, metadata)
 
 class MetadataOutput(BaseTensorOutput):
     def __init__(self, n_outputs, output_name, dims):
@@ -441,7 +474,7 @@ class MetadataOutput(BaseTensorOutput):
                     metadata.shape = [seg_meta.height, seg_meta.width]
                     metadata.seg_maps.append(seg_meta.class_map)
             metadata.timestamp = frame_meta.buffer_pts
-            self._deposit(frame_meta.pad_index, {"data": metadata})
+            self._deposit(frame_meta.pad_index, metadata)
 
 class DeepstreamBackend(ModelBackend):
     """Deepstream backend using pyservicemaker"""
@@ -711,9 +744,9 @@ class DeepstreamBackend(ModelBackend):
         indices = self._in_pools[media].submit(in_data_list)
         # collect the results
         while True:
-            # TODO: timeout should be runtime configurable
+            # TODO: timeout should be runtime configurabl
             results = self._outputs[media].collect(indices, timeout=self._inference_timeout)
-            if results is None:
+            if not results:
                 logger.info("DeepstreamBackend: No more data from this batch")
                 break
             out_data_list = []

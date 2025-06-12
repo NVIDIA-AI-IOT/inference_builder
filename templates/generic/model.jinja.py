@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import torch
 from pathlib import Path
+import dataclasses
 
 logger = get_logger(__name__)
 
@@ -168,6 +169,8 @@ class GenericInference(InferenceBase):
                         value_list.append(v.tolist())
                     elif isinstance(v, torch.Tensor):
                         value_list.append(v.tolist())
+                    elif dataclasses.is_dataclass(v):
+                        value_list.append(dataclasses.asdict(v))
                     else:
                         value_list.append(v)
                 processed[key] = value_list
@@ -176,4 +179,6 @@ class GenericInference(InferenceBase):
                     processed[key] = value.tolist()
                 elif isinstance(value, torch.Tensor):
                     processed[key] = value.tolist()
+                elif dataclasses.is_dataclass(value):
+                    processed[key] = dataclasses.asdict(value)
         return processed
