@@ -310,7 +310,7 @@ class BaseTensorOutput(BatchMetadataOperator):
     def __init__(self, n_outputs, name: str = None):
         super().__init__()
         self._queue = Queue(maxsize=n_outputs)
-        self._dq = deque(maxlen=n_outputs)
+        self._stashed = None
         self._name = name
 
     def handle_metadata(self, batch_meta):
@@ -318,38 +318,37 @@ class BaseTensorOutput(BatchMetadataOperator):
 
     def collect(self, indices: List, timeout=None) -> List | None:
         # expected results for a batch
-        results = [None] * len(indices)
+        collected = [None] * (max(indices) + 1)
 
-        # first check the deque for stashed results for the batch
-        while self._dq:
-            i = self._dq[0][0]
-            if results[i] is None:
-                results[i] = self._dq.popleft()[1]
-            else:
-                # No data from the batch, return the results
-                return results if self._name is None else [
-                    {self._name: r} for r in results
-                ]
+        # first check the for stashed results for the batch
+        if self._stashed is not None:
+            collected[self._stashed[0]] = self._stashed[1]
+            self._stashed = None
 
         # read from the thread queue
-        while True:
+        while not all(collected[i] is not None for i in indices):
             try:
                 i, data = self._queue.get(timeout=timeout)
-                if results[i] is None:
-                    results[i] = data
+                if collected[i] is None:
+                    collected[i] = data
                 else:
                     # this is a new batch, stash the results and break
-                    self._dq.append((i, data))
+                    self._stashed = (i, data)
                     break
             except Empty:
                 break
-        return results if self._name is None else [
-            {self._name: r} for r in results
+        if all(i is None for i in collected):
+            # flag the end of the infernece run
+            return None
+        # rearrange the results to the required order
+        collected = [collected[i] for i in indices]
+        return collected if self._name is None else [
+            {self._name: r} for r in collected
         ]
 
     def reset(self):
         self._queue = Queue(maxsize=self._queue.maxsize)
-        self._dq = deque(maxlen=self._dq.maxlen)
+        self._stashed = None
 
     def _deposit(self, index: int, data: dict):
         logger.debug(
