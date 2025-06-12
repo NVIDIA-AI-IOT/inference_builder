@@ -82,7 +82,7 @@ spec:
     parameters:
       image:
         repository: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-validation
-        tag: "2c8f236d58f5e007bad90811482aaeb1043c97a5"
+        tag: "61ba5e0a56fad97b865fa69f5c0f5ced2850398e"
       command: ["bash", "/opt/scripts/start.sh"]
       # command: ["sleep", "infinity"]
       env:

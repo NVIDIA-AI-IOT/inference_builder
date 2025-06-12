@@ -69,7 +69,7 @@ spec:
         # repository: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-tao
         # repository: nvcr.io/eevaigoeixww/staging/tao_cv_nim
         repository: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-tao
-        tag: "20250423.test.2"
+        tag: "61ba5e0a56fad97b865fa69f5c0f5ced2850398e"
       command: [bash, /opt/scripts/start.sh]
       # command: ["sleep", "infinity"]
       env:

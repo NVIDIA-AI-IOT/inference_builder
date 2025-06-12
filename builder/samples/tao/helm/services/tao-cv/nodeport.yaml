@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tao-cv-nodeport
+spec:
+  type: NodePort
+  ports:
+    - port: 8000          # Port exposed internally in the cluster
+      targetPort: 8000    # Port your ClusterIP service is listening on
+      nodePort: 30080     # Port exposed on each node (must be in range 30000-32767)
+      protocol: TCP
+  selector:
+    app: tao-cv-tao-cv-deployment      # Make sure this matches your deployment's labels
+
+# microk8s kubectl apply -f nodeport.yaml
