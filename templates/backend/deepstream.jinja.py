@@ -186,6 +186,7 @@ class BulkVideoInputPool(TensorInputPool):
         batch_size,
         media_url_tensor_name,
         source_tensor_name,
+        mime_tensor_name,
         infer_config_paths,
         preprocess_config_paths,
         tracker_config: TrackerConfig,
@@ -201,6 +202,7 @@ class BulkVideoInputPool(TensorInputPool):
         self._batch_size = batch_size
         self._media_url_tensor_name = media_url_tensor_name
         self._source_tensor_name = source_tensor_name
+        self._mime_tensor_name = mime_tensor_name
         self._infer_config_paths = infer_config_paths
         self._engine_file_names = engine_file_names
         self._preprocess_config_paths = preprocess_config_paths
@@ -218,6 +220,8 @@ class BulkVideoInputPool(TensorInputPool):
         url_list = []
         source_config_file = None
         for item in data:
+            if self._mime_tensor_name and self._mime_tensor_name in item:
+                item.pop(self._mime_tensor_name)
             if self._media_url_tensor_name and self._media_url_tensor_name in item:
                 url_list.append(item.pop(self._media_url_tensor_name))
             elif self._source_tensor_name and self._source_tensor_name in data[0]:
@@ -228,6 +232,8 @@ class BulkVideoInputPool(TensorInputPool):
                     )
                     return []
                 break
+            elif self._mime_tensor_name and self._mime_tensor_name in item:
+                item.pop(self._mime_tensor_name)
             else:
                 logger.error(f"Invalid input data: {data}")
                 continue
@@ -668,6 +674,7 @@ class DeepstreamBackend(ModelBackend):
                 self._max_batch_size,
                 self._media_url_tensor_name,
                 self._source_tensor_name,
+                self._mime_tensor_name,
                 infer_config_paths,
                 preprocess_config_paths,
                 tracker_config,

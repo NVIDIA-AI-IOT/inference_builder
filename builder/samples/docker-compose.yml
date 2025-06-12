@@ -110,9 +110,9 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 0
-      # NIM_MODEL_NAME: rtdetr
-      NIM_MANIFEST_PATH: /opt/configs/model_manifest.rtdetr.yaml
-      NGC_API_KEY: ${NGC_API_KEY}
+      NIM_MODEL_NAME: gdino
+#      NIM_MANIFEST_PATH: /opt/configs/model_manifest.rtdetr.yaml
+#      NGC_API_KEY: ${NGC_API_KEY}
   dry-run:
     user: nvs:1000
     build:
