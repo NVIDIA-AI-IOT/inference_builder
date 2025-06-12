@@ -232,8 +232,6 @@ class BulkVideoInputPool(TensorInputPool):
                     )
                     return []
                 break
-            elif self._mime_tensor_name and self._mime_tensor_name in item:
-                item.pop(self._mime_tensor_name)
             else:
                 logger.error(f"Invalid input data: {data}")
                 continue
@@ -344,7 +342,7 @@ class BaseTensorOutput(BatchMetadataOperator):
             except Empty:
                 break
         if all(i is None for i in collected):
-            # flag the end of the infernece run
+            # signal the end of the inference run
             return None
         # rearrange the results to the required order
         collected = [collected[i] for i in indices]
