@@ -23,11 +23,20 @@ class PerfConfig:
 class RenderConfig:
     enable_display: bool = False
     enable_osd: bool = False
+    enable_stream: bool = False
+    rtsp_mount_point: str | None = "/ds-test"
+    rtsp_port: int | None = 8554
 
     def __bool__(self) -> bool:
         """Check if render configuration is valid."""
-        if self.enable_osd and not self.enable_display:
-            logger.warning("RenderConfig: enable_osd is True but enable_display is False. Display will be disabled.")
+        if self.enable_display and self.enable_stream:
+            logger.warning("RenderConfig: Both enable_display and enable_stream are True. both will be disabled.")
+            return False
+        if self.enable_osd and not self.enable_display and not self.enable_stream:
+            logger.warning("RenderConfig: enable_osd is True but both enable_display and enable_stream are False. OSD requires an output method.")
+            return False
+        if self.enable_stream and (self.rtsp_mount_point is None or self.rtsp_port is None):
+            logger.warning("RenderConfig: enable_stream is True but rtsp_mount_point or rtsp_port is None.")
             return False
         return True
 
@@ -294,8 +303,15 @@ class BulkVideoInputPool(TensorInputPool):
                 msg_conv_config=self._msgbroker_config.msgconv_config_path,
                 sync=False
             )
-        flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
-                   enable_osd=self._render_config.enable_osd, sync=False)
+        if self._render_config.enable_stream:
+            flow.render(RenderMode.STREAM,
+                       enable_osd=self._render_config.enable_osd,
+                       rtsp_mount_point=self._render_config.rtsp_mount_point,
+                       rtsp_port=self._render_config.rtsp_port,
+                       sync=False)
+        else:
+            flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
+                       enable_osd=self._render_config.enable_osd, sync=False)
 
         if self._pipeline is not None:
             self._pipeline.wait()
@@ -508,8 +524,8 @@ class DeepstreamBackend(ModelBackend):
         if "tracker_config" in model_config["parameters"]:
             tracker_config = TrackerConfig(
                 config_path=self._correct_config_paths(
-                    [model_config["parameters"]["tracker_config"]["ll_config_file"]]
-                )[0],
+                    [model_config["parameters"]["tracker_config"].get("ll_config_file")]
+                )[0] if model_config["parameters"]["tracker_config"].get("ll_config_file") else None,
                 lib_path=self._correct_config_paths(
                     [model_config["parameters"]["tracker_config"]["ll_lib_file"]]
                 )[0]
@@ -535,15 +551,18 @@ class DeepstreamBackend(ModelBackend):
             msgbroker_config = MessageBrokerConfig()
         if "render_config" in model_config["parameters"]:
             render_config = RenderConfig(
-                enable_display=model_config["parameters"]["render_config"]["enable_display"],
-                enable_osd=model_config["parameters"]["render_config"]["enable_osd"]
+                enable_display=model_config["parameters"]["render_config"].get("enable_display", False),
+                enable_osd=model_config["parameters"]["render_config"].get("enable_osd", False),
+                enable_stream=model_config["parameters"]["render_config"].get("enable_stream", False),
+                rtsp_mount_point=model_config["parameters"]["render_config"].get("rtsp_mount_point", "/ds-test"),
+                rtsp_port=model_config["parameters"]["render_config"].get("rtsp_port", 8554)
             )
         else:
             render_config = RenderConfig()
         if "perf_config" in model_config["parameters"]:
             perf_config = PerfConfig(
-                enable_fps_logs=model_config["parameters"]["perf_config"]["enable_fps_logs"],
-                enable_latency_logs=model_config["parameters"]["perf_config"]["enable_latency_logs"]
+                enable_fps_logs=model_config["parameters"]["perf_config"].get("enable_fps_logs", False),
+                enable_latency_logs=model_config["parameters"]["perf_config"].get("enable_latency_logs", False)
             )
         else:
             perf_config = PerfConfig()
