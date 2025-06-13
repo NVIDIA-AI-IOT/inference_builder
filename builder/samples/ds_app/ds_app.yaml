@@ -36,6 +36,9 @@ models:
     render_config:
       enable_display: true
       enable_osd: true
+      # enable_stream: true
+      # rtsp_mount_point: /ds_app
+      # rtsp_port: 8554
     perf_config:
       enable_fps_logs: true
       enable_latency_logs: true
