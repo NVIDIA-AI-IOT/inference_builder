@@ -712,8 +712,11 @@ class ModelOperator:
                 # convert data to args and kwargs based on if explicit batching is required
                 logger.debug(f"Input collected: {data}")
                 args = []
+                expected_length = len(data[list(data.keys())[0]])
                 kwargs = data
-                if any([isinstance(v, list) for _, v in kwargs.items()]):
+                if any([isinstance(v, list) for _, v in kwargs.items()]) and \
+                   all([len(v) == expected_length for _, v in kwargs.items()]):
+                    logger.info("Explicit batching detected, splitting the data into multiple inference requests")
                     # construct multiple inference requests
                     args = split_tensor_in_dict(kwargs)
                     kwargs = {}
