@@ -112,8 +112,11 @@ class GenericInference(InferenceBase):
                 results = await asyncio.gather(*(ao.get() for ao in self._async_outputs))
                 for data in results:
                     logger.debug(f"Got output data: {data}")
-                    if isinstance(data, Error) or isinstance(data, Stop):
-                        logger.info(f"Inference batch ended with {data}")
+                    if isinstance(data, Error):
+                        logger.info(f"Got Error: {data.message}")
+                        return
+                    elif isinstance(data, Stop):
+                        logger.info(f"Got Stop: {data.reason}")
                         return
                     # collect the output
                     for k, v in data.items():
