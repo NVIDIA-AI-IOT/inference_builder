@@ -731,14 +731,22 @@ class ModelOperator:
                         logger.debug(f"Passing error or stop message to {out.in_names}")
                         out.put(data)
                     continue
+                logger.info(f"Input collected from {collector}: {data}")
+
                 # convert data to args and kwargs based on if explicit batching is required
-                logger.debug(f"Input collected from {collector}: {data}")
                 args = []
-                expected_length = len(data[list(data.keys())[0]])
                 kwargs = data
-                if any([isinstance(v, list) for _, v in kwargs.items()]) and \
-                   all([len(v) == expected_length for _, v in kwargs.items()]):
-                    logger.info("Explicit batching detected, splitting the data into multiple inference requests")
+                values = [v for v in data.values()]
+                lengths = [
+                    len(v) if isinstance(v, list) or v.ndim > 0 else 0
+                    for v in values
+                ]
+                if any(isinstance(v, list) for v in values) and \
+                   all(length == lengths[0] for length in lengths):
+                    logger.info(
+                        "Explicit batching detected, "
+                        "splitting the data into multiple inference requests"
+                    )
                     # construct multiple inference requests
                     args = split_tensor_in_dict(kwargs)
                     kwargs = {}

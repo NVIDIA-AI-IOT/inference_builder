@@ -1,4 +1,4 @@
-name: "grounding-dino"
+name: "deepstream-app"
 model_repo: /workspace/models
 
 input:
