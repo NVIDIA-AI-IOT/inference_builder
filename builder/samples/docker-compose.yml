@@ -110,9 +110,36 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 0
-      NIM_MODEL_NAME: gdino
-#      NIM_MANIFEST_PATH: /opt/configs/model_manifest.rtdetr.yaml
-#      NGC_API_KEY: ${NGC_API_KEY}
+      NIM_MODEL_NAME: rtdetr
+  tao-cv:
+    user: nvs:1000
+    build:
+      context: tao
+      target: cv_tao_base
+      dockerfile: Dockerfile
+      args:
+        GITLAB_TOKEN: ${GITLAB_TOKEN}
+    image: tao-cv
+    # entrypoint: ["/bin/bash"]
+    # # Keep container running
+    # command: ["-c", "sleep infinity"]
+    volumes:
+      - '~/.cache/nim:/workspace/.cache'
+    ipc: host
+    # init: true
+    ports:
+      - "8800:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              #count: 1
+              device_ids: ['0']
+              capabilities: [gpu]
+    environment:
+      DEBUG: 0
+      TAO_MODEL_NAME: rtdetr
   dry-run:
     user: nvs:1000
     build:
