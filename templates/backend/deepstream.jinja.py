@@ -198,7 +198,7 @@ class BulkVideoInputPool(TensorInputPool):
         engine_file_names,
         dims
     ):
-        self._max_batch_size = max_batch_size
+        self._batch_size = max_batch_size
         self._batch_timeout = batch_timeout
         self._media_url_tensor_name = media_url_tensor_name
         self._source_tensor_name = source_tensor_name
