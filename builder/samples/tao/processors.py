@@ -412,13 +412,11 @@ class GDinoPostProcessor:
         scores = scores.squeeze(0)
 
         return {
-            "data": {
-                "shape": self.shape.tolist(),
-                "bboxes": boxes.tolist(),
-                "probs": scores.tolist(),
-                "labels": [[str(i)] for i in result_label_indices.tolist()],
-                "mask": mask_list
-            }
+            "shape": self.shape.tolist(),
+            "bboxes": boxes.tolist(),
+            "probs": scores.tolist(),
+            "labels": [[str(i)] for i in result_label_indices.tolist()],
+            "mask": mask_list
         }
 
 

@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import torch
 from pathlib import Path
+import dataclasses
 
 logger = get_logger(__name__)
 
@@ -111,8 +112,11 @@ class GenericInference(InferenceBase):
                 results = await asyncio.gather(*(ao.get() for ao in self._async_outputs))
                 for data in results:
                     logger.debug(f"Got output data: {data}")
-                    if isinstance(data, Error) or isinstance(data, Stop):
-                        logger.info(f"Inference batch ended with {data}")
+                    if isinstance(data, Error):
+                        logger.info(f"Got Error: {data.message}")
+                        return
+                    elif isinstance(data, Stop):
+                        logger.info(f"Got Stop: {data.reason}")
                         return
                     # collect the output
                     for k, v in data.items():
@@ -170,6 +174,8 @@ class GenericInference(InferenceBase):
                         value_list.append(v.tolist())
                     elif isinstance(v, torch.Tensor):
                         value_list.append(v.tolist())
+                    elif dataclasses.is_dataclass(v):
+                        value_list.append(dataclasses.asdict(v))
                     else:
                         value_list.append(v)
                 processed[key] = value_list
@@ -178,4 +184,6 @@ class GenericInference(InferenceBase):
                     processed[key] = value.tolist()
                 elif isinstance(value, torch.Tensor):
                     processed[key] = value.tolist()
+                elif dataclasses.is_dataclass(value):
+                    processed[key] = dataclasses.asdict(value)
         return processed

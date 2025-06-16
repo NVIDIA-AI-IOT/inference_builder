@@ -1,5 +1,6 @@
 from transformers import AutoProcessor
 import torch
+import numpy as np
 
 class QwenVLProcessor:
     name = "qwen-vl-processor"
@@ -34,17 +35,69 @@ class QwenVLVideoProcessor:
 
     def __call__(self, *args):
         # Convert from DLPack to torch tensor, then transform from HWC to CHW and normalize
-        tensors = [
-            torch.utils.dlpack.from_dlpack(i).permute(2, 0, 1).float() / 255.0
-            for i in args[1]
-        ]
-        input = {
-            "prompt": args[0],
-            "multi_modal_data": {
-                "video": [tensors]
+        prompts = args[0]
+        videos = args[1]
+        if isinstance(prompts, np.ndarray):
+            prompts = prompts.tolist()
+        elif not isinstance(prompts, list):
+            prompts = [prompts]
+            videos = [videos]
+
+        inputs = []
+        for prompt, frames in zip(prompts, videos):
+            tensors = [
+                torch.utils.dlpack.from_dlpack(i).permute(2, 0, 1).float() / 255.0
+                for i in frames
+            ]
+            inputs.append({
+                "prompt": prompt,
+                "multi_modal_data": {
+                    "video": [tensors]
+                }
+            })
+        return inputs
+
+
+class QwenVLImageProcessor:
+    name = "qwen-vl-image-processor"
+    def __init__(self, config):
+        pass
+
+    def __call__(self, *args):
+        # Convert from DLPack to torch tensor, then transform from HWC to CHW and normalize
+        prompts = args[0]
+        images = args[1]
+        if isinstance(prompts, np.ndarray):
+            prompts = prompts.tolist()
+        elif not isinstance(prompts, list):
+            prompts = [prompts]
+            images = [images]
+
+        inputs = []
+        for prompt, image in zip(prompts, images):
+            tensors = [image.permute(2, 0, 1).float() / 255.0]
+            inputs.append({
+                "prompt": prompt,
+                "multi_modal_data": {
+                    "image": tensors
             }
-        }
-        return input
+            })
+        return inputs
+
+
+class QwenVLImageLoader:
+    name = "qwen-vl-image-loader"
+    def __init__(self, config):
+        from tensorrt_llm.inputs import default_image_loader
+        self._default_image_loader = default_image_loader
+        self._model_home = config["model_home"]
+
+    def __call__(self, *args):
+        prompts = args[0].tolist() if isinstance(args[0], np.ndarray) else args[0]
+        images = args[1].tolist() if isinstance(args[1], np.ndarray) else args[1]
+        assert len(images) == len(prompts)
+        inputs = self._default_image_loader(prompts, images)
+        return inputs
 
 class QwenVLVideoLoader:
     name = "qwen-vl-video-loader"
@@ -55,11 +108,20 @@ class QwenVLVideoLoader:
         self._num_frames = config.get("num_frames", 8)
 
     def __call__(self, *args):
-        prompts = args[0] if isinstance(args[0], list) else [args[0]]
-        videos = args[1] if isinstance(args[1], list) else [args[1]]
+        prompts = args[0]
+        if isinstance(prompts, np.ndarray):
+            prompts = prompts.tolist()
+        elif not isinstance(prompts, list):
+            prompts = [prompts]
+        videos = args[1]
+        if isinstance(videos, np.ndarray):
+            videos = videos.tolist()
+        elif not isinstance(videos, list):
+            videos = [videos]
         assert len(videos) == len(prompts)
         inputs = self._default_video_loader(prompts, videos, num_frames=self._num_frames)
         return inputs
+
 
 class QwenVLTokenizer:
     name = "qwen-vl-tokenizer"

@@ -12,6 +12,11 @@ input:
   - name: "videos"
     data_type: TYPE_CUSTOM_BINARY_URLS
     dims: [ -1 ]
+    optional: true
+  - name: "images"
+    data_type: TYPE_STRING
+    dims: [ -1 ]
+    optional: true
   - name: "max_tokens"
     data_type: TYPE_INT32
     dims: [1]
@@ -38,26 +43,16 @@ server:
       operation: create_chat_completion_v1_chat_completions_post
       requests:
         NIMLLMChatCompletionRequest: >
+          {% set contents = request.messages | selectattr("role", "equalto", "user")| map(attribute="content")| sum(start=[]) %}
           {
             "prompts": [
-                {% for item in request.messages %}
-                    {% if item.role == "user" %}
-                        {% for content in item.content %}
-                            {% if content.type == "text" %} {{ (content.text+"\n")|tojson }} {% endif %}
-                        {% endfor %}
-                    {% endif %}
-                {% if not loop.last %}, {% endif %}
-                {% endfor %}
+                {{ contents | selectattr("type", "equalto", "text") | map(attribute="text") | map("tojson") | join(", ") }}
             ],
             "videos": [
-                {% for item in request.messages %}
-                    {% if item.role == "user" %}
-                        {% for content in item.content %}
-                            {% if content.type == "video" %} {{ content.video|tojson }} {% endif %}
-                        {% endfor %}
-                    {% endif %}
-                {% if not loop.last %}, {% endif %}
-                {% endfor %}
+                {{ contents | selectattr("type", "equalto", "video") | map(attribute="video") | map("tojson") | join(", ") }}
+            ],
+            "images": [
+                {{ contents | selectattr("type", "equalto", "image") | map(attribute="image") | map("tojson") | join(", ") }}
             ]
             {% if 'max_tokens' in request %}
             , "max_tokens": {{ request.max_tokens }}
@@ -149,13 +144,17 @@ models:
         dims: [1]
         optional: true
     output:
-      - name: "text"
+      - name: "outputs"
         data_type: TYPE_STRING
         dims: [ -1 ]
     parameters:
       max_num_tokens: 19200
       disable_kv_cache_reuse: true
     preprocessors:
+      - kind: "custom"
+        name: "qwen-vl-image-loader"
+        input: ["prompts", "images"]
+        output: ["inputs"]
       - kind: "custom"
         name: "qwen-vl-video-loader"
         input: ["prompts", "videos"]

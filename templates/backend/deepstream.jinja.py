@@ -1,6 +1,6 @@
 from pyservicemaker import Pipeline, Flow, BufferProvider, Buffer, RenderMode, BatchMetadataOperator, Probe, as_tensor, StateTransitionMessage
 from typing import Dict, List
-from queue import Queue, Empty
+from queue import Queue, Empty, Full
 from dataclasses import dataclass, field
 import base64
 import numpy as np
@@ -22,11 +22,20 @@ class PerfConfig:
 class RenderConfig:
     enable_display: bool = False
     enable_osd: bool = False
+    enable_stream: bool = False
+    rtsp_mount_point: str | None = "/ds-test"
+    rtsp_port: int | None = 8554
 
     def __bool__(self) -> bool:
         """Check if render configuration is valid."""
-        if self.enable_osd and not self.enable_display:
-            logger.warning("RenderConfig: enable_osd is True but enable_display is False. Display will be disabled.")
+        if self.enable_display and self.enable_stream:
+            logger.warning("RenderConfig: Both enable_display and enable_stream are True. both will be disabled.")
+            return False
+        if self.enable_osd and not self.enable_display and not self.enable_stream:
+            logger.warning("RenderConfig: enable_osd is True but both enable_display and enable_stream are False. OSD requires an output method.")
+            return False
+        if self.enable_stream and (self.rtsp_mount_point is None or self.rtsp_port is None):
+            logger.warning("RenderConfig: enable_stream is True but rtsp_mount_point or rtsp_port is None.")
             return False
         return True
 
@@ -186,6 +195,7 @@ class BulkVideoInputPool(TensorInputPool):
         batch_timeout,
         media_url_tensor_name,
         source_tensor_name,
+        mime_tensor_name,
         infer_config_paths,
         preprocess_config_paths,
         tracker_config: TrackerConfig,
@@ -202,6 +212,7 @@ class BulkVideoInputPool(TensorInputPool):
         self._batch_timeout = batch_timeout
         self._media_url_tensor_name = media_url_tensor_name
         self._source_tensor_name = source_tensor_name
+        self._mime_tensor_name = mime_tensor_name
         self._infer_config_paths = infer_config_paths
         self._engine_file_names = engine_file_names
         self._preprocess_config_paths = preprocess_config_paths
@@ -219,6 +230,8 @@ class BulkVideoInputPool(TensorInputPool):
         url_list = []
         source_config_file = None
         for item in data:
+            if self._mime_tensor_name and self._mime_tensor_name in item:
+                item.pop(self._mime_tensor_name)
             if self._media_url_tensor_name and self._media_url_tensor_name in item:
                 url_list.append(item.pop(self._media_url_tensor_name))
             elif self._source_tensor_name and self._source_tensor_name in data[0]:
@@ -295,8 +308,15 @@ class BulkVideoInputPool(TensorInputPool):
                 msg_conv_config=self._msgbroker_config.msgconv_config_path,
                 sync=False
             )
-        flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
-                   enable_osd=self._render_config.enable_osd, sync=False)
+        if self._render_config.enable_stream:
+            flow.render(RenderMode.STREAM,
+                       enable_osd=self._render_config.enable_osd,
+                       rtsp_mount_point=self._render_config.rtsp_mount_point,
+                       rtsp_port=self._render_config.rtsp_port,
+                       sync=False)
+        else:
+            flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
+                       enable_osd=self._render_config.enable_osd, sync=False)
 
         if self._pipeline is not None:
             self._pipeline.wait()
@@ -310,31 +330,62 @@ class BulkVideoInputPool(TensorInputPool):
             self._pipeline.stop()
             self._pipeline.wait()
 
+
 class BaseTensorOutput(BatchMetadataOperator):
     def __init__(self, n_outputs, name: str = None):
         super().__init__()
-        self._queues = [Queue() for _ in range(n_outputs)]
+        self._queue = Queue(maxsize=n_outputs)
+        self._stashed = None
         self._name = name
 
     def handle_metadata(self, batch_meta):
         pass
 
     def collect(self, indices: List, timeout=None) -> List | None:
-        try:
-            results = [self._queues[i].get(timeout=timeout) if i >= 0 else None for i in indices]
-        except Empty:
+        # expected results for a batch
+        collected = [None] * (max(indices) + 1)
+
+        # first check the for stashed results for the batch
+        if self._stashed is not None:
+            collected[self._stashed[0]] = self._stashed[1]
+            self._stashed = None
+
+        # read from the thread queue
+        while not all(collected[i] is not None for i in indices):
+            try:
+                i, data = self._queue.get(timeout=timeout)
+                if collected[i] is None:
+                    collected[i] = data
+                else:
+                    # this is a new batch, stash the results and break
+                    self._stashed = (i, data)
+                    break
+            except Empty:
+                break
+        if all(i is None for i in collected):
+            # signal the end of the inference run
             return None
-        if any (x is None for x in results):
-            return None
-        return results if self._name is None else [{self._name: r} for r in results]
+        # rearrange the results to the required order
+        collected = [collected[i] for i in indices]
+        return collected if self._name is None else [
+            {self._name: r} for r in collected
+        ]
 
     def reset(self):
-        self._queues = [Queue() for _ in range(len(self._queues))]
+        self._queue = Queue(maxsize=self._queue.maxsize)
+        self._stashed = None
 
     def _deposit(self, index: int, data: dict):
-        logger.debug(f"DeepstreamBackend: Depositing data to index {index}: {data}")
-        q = self._queues[index]
-        q.put(data)
+        logger.debug(
+            f"DeepstreamBackend: Depositing data to index {index}: {data}"
+        )
+        try:
+            self._queue.put((index, data))
+        except Full:
+            logger.warning(
+                f"DeepstreamBackend: Queue is full, dropping data from "
+                f"index {index}"
+            )
 
 
 class TensorOutput(BaseTensorOutput):
@@ -417,7 +468,7 @@ class PreprocessMetadataOutput(BaseTensorOutput):
                         labels.append(classifier.get_n_label(i))
                     metadata.labels.append(labels)
                 metadata.timestamp = roi.frame_meta.buffer_pts
-                self._deposit(roi.frame_meta.pad_index, {"data": metadata})
+                self._deposit(roi.frame_meta.pad_index, metadata)
 
 class MetadataOutput(BaseTensorOutput):
     def __init__(self, n_outputs, output_name, dims):
@@ -447,7 +498,7 @@ class MetadataOutput(BaseTensorOutput):
                     metadata.shape = [seg_meta.height, seg_meta.width]
                     metadata.seg_maps.append(seg_meta.class_map)
             metadata.timestamp = frame_meta.buffer_pts
-            self._deposit(frame_meta.pad_index, {"data": metadata})
+            self._deposit(frame_meta.pad_index, metadata)
 
 class DeepstreamBackend(ModelBackend):
     """Deepstream backend using pyservicemaker"""
@@ -461,6 +512,7 @@ class DeepstreamBackend(ModelBackend):
         self._media_url_tensor_name = None
         self._mime_tensor_name = None
         self._source_tensor_name = None
+        self._inference_timeout = model_config["parameters"].get("inference_timeout", 3)
 
         if len(self._output_names) > 1 and self._output_types[0] == "TYPE_CUSTOM_DS_METADATA":
             raise Exception(f"No more than one output is allowed for DS metadata!")
@@ -477,8 +529,8 @@ class DeepstreamBackend(ModelBackend):
         if "tracker_config" in model_config["parameters"]:
             tracker_config = TrackerConfig(
                 config_path=self._correct_config_paths(
-                    [model_config["parameters"]["tracker_config"]["ll_config_file"]]
-                )[0],
+                    [model_config["parameters"]["tracker_config"].get("ll_config_file")]
+                )[0] if model_config["parameters"]["tracker_config"].get("ll_config_file") else None,
                 lib_path=self._correct_config_paths(
                     [model_config["parameters"]["tracker_config"]["ll_lib_file"]]
                 )[0]
@@ -504,15 +556,18 @@ class DeepstreamBackend(ModelBackend):
             msgbroker_config = MessageBrokerConfig()
         if "render_config" in model_config["parameters"]:
             render_config = RenderConfig(
-                enable_display=model_config["parameters"]["render_config"]["enable_display"],
-                enable_osd=model_config["parameters"]["render_config"]["enable_osd"]
+                enable_display=model_config["parameters"]["render_config"].get("enable_display", False),
+                enable_osd=model_config["parameters"]["render_config"].get("enable_osd", False),
+                enable_stream=model_config["parameters"]["render_config"].get("enable_stream", False),
+                rtsp_mount_point=model_config["parameters"]["render_config"].get("rtsp_mount_point", "/ds-test"),
+                rtsp_port=model_config["parameters"]["render_config"].get("rtsp_port", 8554)
             )
         else:
             render_config = RenderConfig()
         if "perf_config" in model_config["parameters"]:
             perf_config = PerfConfig(
-                enable_fps_logs=model_config["parameters"]["perf_config"]["enable_fps_logs"],
-                enable_latency_logs=model_config["parameters"]["perf_config"]["enable_latency_logs"]
+                enable_fps_logs=model_config["parameters"]["perf_config"].get("enable_fps_logs", False),
+                enable_latency_logs=model_config["parameters"]["perf_config"].get("enable_latency_logs", False)
             )
         else:
             perf_config = PerfConfig()
@@ -639,9 +694,10 @@ class DeepstreamBackend(ModelBackend):
             ]
             in_pool = BulkVideoInputPool(
                 max_batch_size=self._max_batch_size,
-                batch_timeout=model_config["parameters"].get("batch_timeout", -1),
+                batch_timeout=model_config["parameters"].get("batch_timeout", 1000 * self._max_batch_size),
                 media_url_tensor_name=self._media_url_tensor_name,
                 source_tensor_name=self._source_tensor_name,
+                mime_tensor_name=self._mime_tensor_name,
                 infer_config_paths=infer_config_paths,
                 preprocess_config_paths=preprocess_config_paths,
                 tracker_config=tracker_config,
@@ -706,9 +762,9 @@ class DeepstreamBackend(ModelBackend):
         indices = self._in_pools[media].submit(in_data_list)
         # collect the results
         while True:
-            # TODO: timeout should be runtime configurable
-            results = self._outputs[media].collect(indices, timeout=3)
-            if results is None:
+            # TODO: timeout should be runtime configurabl
+            results = self._outputs[media].collect(indices, timeout=self._inference_timeout)
+            if not results:
                 logger.info("DeepstreamBackend: No more data from this batch")
                 break
             out_data_list = []

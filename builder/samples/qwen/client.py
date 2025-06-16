@@ -1,51 +1,54 @@
 import time
 import argparse
 from openai import OpenAI
-
+import base64
+import mimetypes
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--image-url", type=str, help="Image URL to send for inference", default=None)
-    parser.add_argument("--video-path", type=str, help="Video path to send for inference", default=None)
+    parser.add_argument("--images", type=str, help="Image paths to send for inference", default=None, nargs="*")
+    parser.add_argument("--videos", type=str, help="Video paths to send for inference", default=None, nargs="*")
+    parser.add_argument("--endpoint", type=str, help="Endpoint to send for inference", default="http://0.0.0.0:8803/v1", nargs="?")
     args = parser.parse_args()
 
-    image_url = args.image_url if args.image_url else ""
-    video_path = args.video_path if args.video_path else ""
-
-    if image_url:
-        messages = [
-            {
+    messages = []
+    if args.images:
+        for image in args.images:
+            with open(image, "rb") as f:
+                data = base64.b64encode(f.read()).decode()
+                mime_type = mimetypes.guess_type(image)[0]
+                messages.append({
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Please describe the image in detail."
+                        },
+                        {
+                            "type": "image",
+                            "image": f"data:{mime_type};base64,{data}"
+                        }
+                    ]
+                })
+    elif args.videos:
+        for video in args.videos:
+            messages.append({
                 "role": "user",
                 "content": [
                     {
                         "type": "text",
-                        "text": "Describe what you see in this image."
-                    },
-                    {
-                        "type": "image",
-                        "image": f"{image_url}"
-                    }
-                ]
-            }
-        ]
-    elif video_path:
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "Describe what you see in this video."
+                        "text": "Please describe the video in detail."
                     },
                     {
                         "type": "video",
-                        "video": f"{video_path}"
+                        "video": f"{video}"
                     }
                 ]
-            }
-        ]
+            })
+    else:
+        raise ValueError("No images or videos provided")
 
-    client = OpenAI(base_url="http://0.0.0.0:8803/v1", api_key="not-used")
+    client = OpenAI(base_url=args.endpoint, api_key="not-used")
     start_time = time.time()
     chat_response = client.chat.completions.create(
         model="nvidia/vila",
