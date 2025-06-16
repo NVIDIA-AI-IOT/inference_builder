@@ -141,7 +141,7 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 0
-      TAO_MODEL_NAME: mask_gdino
+      TAO_MODEL_NAME: rtdetr
   dry-run:
     user: nvs:1000
     build:

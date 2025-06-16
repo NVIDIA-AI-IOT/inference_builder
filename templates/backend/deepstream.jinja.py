@@ -182,7 +182,8 @@ class ImageTensorInputPool(TensorInputPool):
 
 class BulkVideoInputPool(TensorInputPool):
     def __init__(self,
-        batch_size,
+        max_batch_size,
+        batch_timeout,
         media_url_tensor_name,
         source_tensor_name,
         infer_config_paths,
@@ -197,7 +198,8 @@ class BulkVideoInputPool(TensorInputPool):
         engine_file_names,
         dims
     ):
-        self._batch_size = batch_size
+        self._max_batch_size = max_batch_size
+        self._batch_timeout = batch_timeout
         self._media_url_tensor_name = media_url_tensor_name
         self._source_tensor_name = source_tensor_name
         self._infer_config_paths = infer_config_paths
@@ -251,7 +253,11 @@ class BulkVideoInputPool(TensorInputPool):
                 batch_size=self._batch_size
             )
         else:
-            flow = Flow(pipeline).batch_capture(url_list, width=self._dims[1], height=self._dims[0])
+            flow = Flow(pipeline).batch_capture(
+                url_list,
+                width=self._dims[1],
+                height=self._dims[0],
+                batched_push_timeout=self._batch_timeout)
 
         for config in self._preprocess_config_paths:
             flow = flow.preprocess(config, None if not self._generic_input else lambda: self._generic_input.generate())
@@ -586,7 +592,7 @@ class DeepstreamBackend(ModelBackend):
             # build the inference flow
             flow = Flow(pipeline)
             probe = Probe('tensor_retriver', output)
-            batch_timeout = 1000 * self._max_batch_size
+            batch_timeout = model_config["parameters"].get("batch_timeout", 1000 * self._max_batch_size)
             flow = flow.inject(in_pool.image_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=batch_timeout, live_source=False, width=dims[1], height=dims[0])
             for config_file in preprocess_config_paths:
                 input = self._in_pools[media].generic_input if require_extra_input else None
@@ -632,20 +638,21 @@ class DeepstreamBackend(ModelBackend):
                 for config_file in infer_config_paths
             ]
             in_pool = BulkVideoInputPool(
-                self._max_batch_size,
-                self._media_url_tensor_name,
-                self._source_tensor_name,
-                infer_config_paths,
-                preprocess_config_paths,
-                tracker_config,
-                msgbroker_config,
-                render_config,
-                perf_config,
-                output,
-                device_id,
-                require_extra_input,
-                engine_files,
-                dims,
+                max_batch_size=self._max_batch_size,
+                batch_timeout=model_config["parameters"].get("batch_timeout", -1),
+                media_url_tensor_name=self._media_url_tensor_name,
+                source_tensor_name=self._source_tensor_name,
+                infer_config_paths=infer_config_paths,
+                preprocess_config_paths=preprocess_config_paths,
+                tracker_config=tracker_config,
+                msgbroker_config=msgbroker_config,
+                render_config=render_config,
+                perf_config=perf_config,
+                output=output,
+                device_id=device_id,
+                require_extra_input=require_extra_input,
+                engine_file_names=engine_files,
+                dims=dims,
             )
             if not all(os.path.exists(e) for e in engine_files):
                 # generate the engine files
