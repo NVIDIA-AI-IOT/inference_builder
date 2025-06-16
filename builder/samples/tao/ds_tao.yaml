@@ -1,5 +1,5 @@
 name: "tao"
-model_repo: "/opt/nim/.cache/model-repo"
+model_repo: "/workspace/.cache/model-repo"
 
 input:
 - name: image
