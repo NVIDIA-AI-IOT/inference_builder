@@ -25,7 +25,8 @@ LABEL com.nvidia.nim.version=0.0.1
 LABEL com.nvidia.nim.nspect=NSPECT-Z39R-IVVG
 LABEL com.nvidia.nim.inference_protocol=http
 
-ENV NIM_CACHE_PATH="/opt/nim/.cache" \
+# NIM_CACHE_PATH="/opt/nim/.cache"
+ENV NIM_CACHE_PATH="/workspace/.cache" \
     NIM_NAME=nv-tao-inference \
     PYTHONUNBUFFERED=1 \
     NGC_API_KEY=
