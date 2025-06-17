@@ -39,6 +39,7 @@ py_datatype_mapping = {
     "TYPE_CUSTOM_DS_MIME": str,
     "TYPE_CUSTOM_BINARY_URLS": str,
     "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
+    "TYPE_CUSTOM_BINARY_BASE64": str,
 }
 
 np_datatype_mapping = {

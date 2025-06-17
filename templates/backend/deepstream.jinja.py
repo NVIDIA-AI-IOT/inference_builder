@@ -626,7 +626,7 @@ class DeepstreamBackend(ModelBackend):
         self._in_pools = {}
         self._outputs = {}
         self._pipelines = {}
-        if self._image_tensor_name is not None:
+        if self._image_tensor_name is not None or self._media_url_tensor_name is not None:
             # image input support
             media = "image"
             formats = ["JPEG", "PNG"]
