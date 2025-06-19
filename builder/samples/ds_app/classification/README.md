@@ -46,7 +46,7 @@ docker run --rm --net=host --gpus all \
     --mime image/jpeg
 ```
 
-**Note:**For changenet classification model, it requires two images as input. Here we are using the sample images provided in the sample_input directory as a reference.
+**Note:** For changenet classification model, it requires two images as input. Here we are using the sample images provided in the sample_input directory as a reference.
 
 ```bash
 docker run --rm --net=host --gpus all \

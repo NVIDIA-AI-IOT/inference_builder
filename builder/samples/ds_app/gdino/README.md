@@ -47,17 +47,6 @@ docker run --rm --net=host --gpus all \
     --mime video/mp4
 ```
 
-### Run with source config
-
-```bash
-docker run --rm --net=host --gpus all \
-    -v $MODEL_REPO:/workspace/models \
-    -v /tmp/.X11-unix/:/tmp/.X11-unix \
-    -e DISPLAY=$DISPLAY \
-    deepstream-app \
-    --source-config /opt/nvidia/deepstream/deepstream/service-maker/sources/apps/python/pipeline_api/deepstream_test5_app/source_list_dynamic.yaml
-```
-
 ### Run with image input
 
 ```bash
