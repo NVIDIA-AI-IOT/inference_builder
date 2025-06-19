@@ -58,6 +58,18 @@ docker run --rm --net=host --gpus all \
     --source-config /opt/nvidia/deepstream/deepstream/service-maker/sources/apps/python/pipeline_api/deepstream_test5_app/source_list_dynamic.yaml
 ```
 
+**Note:** To use a custom source configuration file, you need to mount your file into the docker container and reference it from within the container's filesystem. This allows you to use your own source configuration instead of the default one.
+
+```bash
+docker run --rm --net=host --gpus all \
+    -v $MODEL_REPO:/workspace/models \
+    -v $SAMPLE_INPUT:/workspace/inputs \
+    -v /tmp/.X11-unix/:/tmp/.X11-unix \
+    -e DISPLAY=$DISPLAY \
+    deepstream-app \
+    --source-config /workspace/inputs/source_list_dynamic.yaml
+```
+
 ### Run with image input
 
 ```bash
