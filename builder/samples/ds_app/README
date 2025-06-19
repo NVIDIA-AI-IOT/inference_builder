@@ -3,6 +3,15 @@ This sample demonstrates how to build a deepstream application using Inference B
 Model files are loaded from '/workspace/models/{MODEL_NAME}' within the container, thus the volume must be correctly mapped from the host.
 For example: if you define a model with name "resnet", you must put all the model files include nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/resnet' for the model to be correctly loaded.
 
+Reference configurations for tao models to be used with Inference Microservices: 
+
+- Image Classification: https://catalog.ngc.nvidia.com/orgs/nvaie/models/pcbclassification
+- Visual Changenet Classification: https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/visual_changenet_classification
+- Semantic Segmentation: https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/citysemsegformer
+- Object Detection:
+- Mask Grounding Dino: https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask_grounding_dino
+- Grounding Dino: https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/grounding_dino
+
 Generate the application package and build it into a docker image:
 
 # Build the deepstream application package

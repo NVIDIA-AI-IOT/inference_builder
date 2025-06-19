@@ -1,0 +1,15 @@
+property:
+  gie-unique-id: 1
+  infer-dims: 3;224;224
+  maintain-aspect-ratio: 1
+  # 0.226
+  net-scale-factor: 0.0173520735728
+  network-mode: 2
+  network-type: 1 # classification
+  onnx-file: pcbclassification.onnx
+  model-engine-file: ./pcbclassification.onnx_b1_gpu0_fp16.engine
+  workspace-size: 1048576
+  classifier-threshold: 0
+  scaling-filter: 1
+  scaling-compute-hw: 1
+  labelfile-path: labels.txt

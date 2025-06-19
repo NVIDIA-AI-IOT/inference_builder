@@ -1,0 +1,22 @@
+property:
+  gpu-id: 0
+  net-scale-factor: 0.00392156862745098
+  onnx-file: resnet18_trafficcamnet_pruned.onnx
+  model-engine-file: resnet18_trafficcamnet_pruned.onnx_b4_gpu0_fp32.engine
+  labelfile-path: labels.txt
+  process-mode: 1
+  model-color-format: 0
+  network-mode: 0
+  num-detected-classes: 4
+  interval: 0
+  gie-unique-id: 1
+  cluster-mode: 2
+  infer-dims: 3;544;960
+class-attrs-all:
+  topk: 20
+  nms-iou-threshold: 0.5
+  pre-cluster-threshold: 0.2
+class-attrs-0:
+  topk: 20
+  nms-iou-threshold: 0.5
+  pre-cluster-threshold: 0.4
