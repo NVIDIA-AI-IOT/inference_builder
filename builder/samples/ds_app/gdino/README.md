@@ -45,6 +45,7 @@ docker run --rm --net=host --gpus all \
     deepstream-app \
     --media-url /opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4 \
     --mime video/mp4
+    --text "car"
 ```
 
 ### Run with image input
