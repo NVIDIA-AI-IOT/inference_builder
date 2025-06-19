@@ -44,8 +44,18 @@ docker run --rm --net=host --gpus all \
     -e DISPLAY=$DISPLAY \
     deepstream-app \
     --media-url /opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4 \
-    --mime video/mp4 \
-    --text "car"
+    --mime video/mp4
+```
+
+### Run with source config
+
+```bash
+docker run --rm --net=host --gpus all \
+    -v $MODEL_REPO:/workspace/models \
+    -v /tmp/.X11-unix/:/tmp/.X11-unix \
+    -e DISPLAY=$DISPLAY \
+    deepstream-app \
+    --source-config /opt/nvidia/deepstream/deepstream/service-maker/sources/apps/python/pipeline_api/deepstream_test5_app/source_list_dynamic.yaml
 ```
 
 ### Run with source config
@@ -69,7 +79,6 @@ docker run --rm --net=host --gpus all \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
     deepstream-app \
-    --media-url /sample_input/test.jpg \
+    --media-url /sample_input/test_1.jpg \
     --mime image/jpeg
-    --text "car"
 ```

@@ -56,6 +56,7 @@ docker run --rm --net=host --gpus all \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
     deepstream-app \
-    --media-url /sample_input/test_1.jpg \
+    --media-url /sample_input/test.jpg \
     --mime image/jpeg
+    --text "car"
 ```
