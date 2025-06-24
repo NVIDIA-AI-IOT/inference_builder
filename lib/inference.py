@@ -40,6 +40,7 @@ py_datatype_mapping = {
     "TYPE_CUSTOM_BINARY_URLS": str,
     "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
     "TYPE_CUSTOM_BINARY_BASE64": str,
+    "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": str,
 }
 
 np_datatype_mapping = {
@@ -268,6 +269,9 @@ class VideoFrameSamplingDataFlow(DataFlow):
                 )
                 qs.append(self._media_extractor.append(chunk))
                 expected_frames.append(int(n_frames) if n_frames else None)
+            else:
+                logger.error(f"Asset not found: {asset_id}")
+                return results
 
         for q, expected in zip(qs, expected_frames):
             frames = []

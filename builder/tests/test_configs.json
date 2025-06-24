@@ -1,0 +1,25 @@
+[
+  {
+    "name": "Default Configuration",
+    "description": "Test with default TensorRT and CUDA versions",
+    "build_args": {
+      "TEST_APP_NAME": "frame_sampling",
+      "CACHE_BUSTER": "default_test"
+    },
+    "test_config": {
+      "timeout": 5,
+      "env": {
+        "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes"
+      },
+      "volumes": {
+        "frame_sampling/models": "/workspace/models"
+      },
+      "cmd": [
+        "--video-streams", "34888cef-8d7a-4de9-80f2-7a6a11974d6f?frames=10"
+      ],
+      "error_detection": {
+        "enabled": false
+      }
+    }
+  }
+]
