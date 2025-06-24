@@ -113,10 +113,38 @@ server:
               "contentType": {{response.mime_type|tojson}}
             }
           }
+    add_live_stream:
+      operation: add_live_stream
+      requests:
+        AddLiveStreamRequest: >
+          {
+            "url": {{request.url|tojson}},
+            "description": {{request.description|tojson}},
+            "username": {{request.username|tojson}},
+            "password": {{request.password|tojson}}
+          }
+      responses:
+        AddLiveStreamResponse: >
+          {
+            "data": {
+              "id": {{response.id|tojson}},
+              "path": {{response.path|tojson}},
+              "size": {{response.size|tojson}},
+              "contentType": {{response.mime_type|tojson}},
+              "description": {{response.description|tojson}}
+            }
+          }
     del_file:
       operation: delete_media_file
       responses:
-        DeleteFileResponse: >
+        DeleteAssetResponse: >
+            {
+              "deleted": {{response.status|tojson}}
+            }
+    del_live_stream:
+      operation: delete_live_stream
+      responses:
+        DeleteAssetResponse: >
           {
             "deleted": {{response.status|tojson}}
           }
@@ -124,6 +152,20 @@ server:
       operation: list_media_files
       responses:
         ListFilesResponse: >
+          {
+            "data": [
+              {% for item in response.assets %} {
+                "id": {{item.id|tojson}},
+                "path": {{item.path|tojson}},
+                "size": {{item.size|tojson}},
+                "contentType": {{item.mime_type|tojson}}
+              } {% if not loop.last %}, {% endif %} {% endfor %}
+            ]
+          }
+    list_live_streams:
+      operation: list_live_streams
+      responses:
+        ListLiveStreamsResponse: >
           {
             "data": [
               {% for item in response.assets %} {

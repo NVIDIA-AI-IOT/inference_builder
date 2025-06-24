@@ -15,7 +15,10 @@ class FramePickerProcessor:
         if len(frame_list) != self.num_frames:
             raise ValueError(
                 f"FramePickerProcessor expects a list of "
-                f"{self.num_frames} frames"
+                f"{self.num_frames} frames, while got {len(frame_list)}"
             )
-        torch_tensors = [torch.utils.dlpack.from_dlpack(frame) for frame in frame_list]
+        torch_tensors = [
+            torch.utils.dlpack.from_dlpack(frame)
+            for frame in frame_list
+        ]
         return torch.stack(torch_tensors)

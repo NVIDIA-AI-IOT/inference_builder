@@ -2,9 +2,14 @@ name: "test-app"
 model_repo: "/workspace/models"
 
 input:
-  - name: "video_streams"
+  - name: "video_files"
     data_type: TYPE_CUSTOM_VIDEO_CHUNK_ASSETS
     dims: [ -1 ]
+    optional: true
+  - name: "video_streams"
+    data_type: TYPE_CUSTOM_VIDEO_STREAM_ASSETS
+    dims: [ -1 ]
+    optional: true
 
 models:
 - name: dummy
@@ -24,3 +29,14 @@ models:
     input: ["video_streams"]
     output: ["media_frames"]
     config: { "num_frames": 10 }
+  - kind: "custom"
+    name: "frame-picker"
+    input: ["video_files"]
+    output: ["media_frames"]
+    config: { "num_frames": 10 }
+
+routes: {
+  ':["video_files"]': 'dummy',
+  ':["video_streams"]': 'dummy',
+  'dummy:["output"]': ':'
+}

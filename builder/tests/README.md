@@ -97,6 +97,12 @@ Each test configuration in `test_configs.json` has the following structure:
 - `env`: Environment variables to set in the container
 - `volumes`: Volume mounts (host_path: container_path)
 - `cmd`: Command line arguments to pass to the application
+- `prerequisite_script`: Script to run before launching the docker container (optional)
+  - Can be any shell command or script path
+  - Useful for setting up test environments (e.g., starting RTSP servers)
+  - Script logs are saved to `logs/prerequisite_{test_id}.log`
+  - If script fails, the test is marked as failed
+  - Automatic cleanup is performed after the test completes
 
 ## GITLAB_TOKEN Usage
 
@@ -204,6 +210,31 @@ The test script automatically substitutes `${GITLAB_TOKEN}` with the actual toke
       "--fps", "30",
       "--gpu-id", "0"
     ]
+  }
+}
+```
+
+### 4. RTSP Stream Test with Prerequisite Setup
+```json
+{
+  "name": "RTSP Stream Test",
+  "build_args": {
+    "TEST_APP_NAME": "frame_sampling",
+    "GITLAB_TOKEN": "${GITLAB_TOKEN}",
+    "CACHE_BUSTER": "rtsp_test"
+  },
+  "test_config": {
+    "timeout": 30,
+    "env": {
+      "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes"
+    },
+    "volumes": {
+      "frame_sampling/models": "/workspace/models"
+    },
+    "cmd": [
+      "--video-streams", "rtsp://localhost:8554/file-stream?frames=10"
+    ],
+    "prerequisite_script": "./setup_rtsp_server.sh sample_video.mp4 --daemon"
   }
 }
 ```

@@ -1,6 +1,6 @@
 [
   {
-    "name": "Default Configuration",
+    "name": "Frame Sampling on Files",
     "description": "Test with default TensorRT and CUDA versions",
     "build_args": {
       "TEST_APP_NAME": "frame_sampling",
@@ -15,11 +15,37 @@
         "frame_sampling/models": "/workspace/models"
       },
       "cmd": [
-        "--video-streams", "34888cef-8d7a-4de9-80f2-7a6a11974d6f?frames=10"
+        "--video-files", "34888cef-8d7a-4de9-80f2-7a6a11974d6f?frames=10"
+      ],
+      "error_detection": {
+        "enabled": true
+      },
+      "prerequisite_script": null
+    }
+  },
+  {
+    "name": "Frame Sampling on Live Streams",
+    "description": "Test with default TensorRT and CUDA versions",
+    "build_args": {
+      "TEST_APP_NAME": "frame_sampling",
+      "CACHE_BUSTER": "default_test"
+    },
+    "test_config": {
+      "timeout": 5,
+      "env": {
+        "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
+        "GST_DEBUG": "*:3"
+      },
+      "volumes": {
+        "frame_sampling/models": "/workspace/models"
+      },
+      "cmd": [
+        "--video-streams", "fcf490e3-a64b-4dc9-95db-dcdba90032b3?frames=10&start=500000000&end=1000000000"
       ],
       "error_detection": {
         "enabled": false
-      }
+      },
+      "prerequisite_script": "./setup_rtsp_server.sh frame.jpg -m test -f 30 --daemon"
     }
   }
 ]

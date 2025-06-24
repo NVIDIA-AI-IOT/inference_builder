@@ -99,6 +99,81 @@ class DockerBuildTester:
             logger.error(f"❌ {error_msg}")
             return False, error_msg
 
+    def run_prerequisite_script(self, script_command: str, test_id: int) -> Tuple[bool, str]:
+        """Run a prerequisite script before testing the docker container."""
+        if not script_command:
+            return True, "No prerequisite script specified"
+
+        log_file = self.log_dir / f"prerequisite_{test_id}.log"
+
+        try:
+            logger.info(f"🔧 Running prerequisite script: {script_command}")
+            logger.info(f"📄 Prerequisite logs will be saved to: {log_file}")
+
+            # Run the prerequisite script
+            result = subprocess.run(
+                script_command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout for prerequisite scripts
+            )
+
+            # Save prerequisite script logs
+            with open(log_file, 'w') as f:
+                f.write("=== Prerequisite Script Execution ===\n")
+                f.write(f"Command: {script_command}\n")
+                f.write(f"Return Code: {result.returncode}\n")
+                f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("\n=== STDOUT ===\n")
+                f.write(result.stdout)
+                f.write("\n=== STDERR ===\n")
+                f.write(result.stderr)
+                f.write("\n=== END LOG ===\n")
+
+            if result.returncode == 0:
+                logger.info(f"✅ Prerequisite script completed successfully")
+                if result.stdout:
+                    logger.info(f"Prerequisite output: {result.stdout}")
+                return True, result.stdout
+            else:
+                error_msg = f"Prerequisite script failed with return code {result.returncode}"
+                logger.error(f"❌ {error_msg}")
+                logger.error(f"Prerequisite stderr: {result.stderr}")
+                return False, error_msg
+
+        except subprocess.TimeoutExpired:
+            error_msg = f"Prerequisite script timed out after 300 seconds"
+            logger.error(f"❌ {error_msg}")
+
+            # Save timeout log
+            with open(log_file, 'w') as f:
+                f.write("=== Prerequisite Script Execution ===\n")
+                f.write(f"Command: {script_command}\n")
+                f.write(f"Status: TIMEOUT\n")
+                f.write(f"Timeout: 300 seconds\n")
+                f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("\n=== ERROR ===\n")
+                f.write(error_msg)
+                f.write("\n=== END LOG ===\n")
+
+            return False, error_msg
+        except Exception as e:
+            error_msg = f"Exception during prerequisite script execution: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+
+            # Save exception log
+            with open(log_file, 'w') as f:
+                f.write("=== Prerequisite Script Execution ===\n")
+                f.write(f"Command: {script_command}\n")
+                f.write(f"Status: EXCEPTION\n")
+                f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("\n=== ERROR ===\n")
+                f.write(error_msg)
+                f.write("\n=== END LOG ===\n")
+
+            return False, error_msg
+
     def test_image(self, image_name: str, test_config: Dict, test_id: int) -> Tuple[bool, str, str]:
         """Test the built image by running it and capture logs."""
         log_file = self.log_dir / f"test_{test_id}_{image_name.replace(':', '_')}.log"
@@ -117,8 +192,17 @@ class DockerBuildTester:
             if result.returncode != 0:
                 return False, f"Image {image_name} not found", ""
 
+            # Run prerequisite script if specified
+            prerequisite_script = test_config.get("prerequisite_script")
+            if prerequisite_script:
+                prerequisite_success, prerequisite_output = self.run_prerequisite_script(
+                    prerequisite_script, test_id
+                )
+                if not prerequisite_success:
+                    return False, f"Prerequisite script failed: {prerequisite_output}", ""
+
             # Run the container with test configuration
-            cmd = ["docker", "run", "--rm"]
+            cmd = ["docker", "run", "--rm", "--network=host"]
 
             # Add environment variables if specified
             if "env" in test_config:
@@ -345,6 +429,39 @@ class DockerBuildTester:
 
             return False, error_msg, str(log_file)
 
+    def cleanup_prerequisite_script(self, test_config: Dict, test_id: int) -> bool:
+        """Clean up resources created by prerequisite scripts."""
+        prerequisite_script = test_config.get("prerequisite_script")
+        if not prerequisite_script:
+            return True
+
+        try:
+            # Check if the script is the RTSP server setup script
+            if "setup_rtsp_server.sh" in prerequisite_script:
+                logger.info("🧹 Cleaning up RTSP server...")
+                cleanup_result = subprocess.run(
+                    "./setup_rtsp_server.sh --kill",
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+
+                if cleanup_result.returncode == 0:
+                    logger.info("✅ RTSP server cleanup completed")
+                    return True
+                else:
+                    logger.warning(f"⚠️  RTSP server cleanup failed: {cleanup_result.stderr}")
+                    return False
+
+            # Add more cleanup logic for other prerequisite scripts here
+            logger.info("🧹 No specific cleanup needed for prerequisite script")
+            return True
+
+        except Exception as e:
+            logger.warning(f"⚠️  Exception during prerequisite cleanup: {str(e)}")
+            return False
+
     def cleanup_image(self, image_name: str) -> bool:
         """Remove the test image."""
         try:
@@ -414,6 +531,8 @@ class DockerBuildTester:
             # Cleanup
             if cleanup:
                 self.cleanup_image(image_name)
+                # Clean up prerequisite scripts
+                self.cleanup_prerequisite_script(config.get("test_config", {}), i)
 
             # Store result
             test_result = {
