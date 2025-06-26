@@ -85,8 +85,8 @@ services:
     user: nvs:1000
     build:
       context: tao
-      target: cv_tao_base
-      dockerfile: Dockerfile
+      target: nim_final
+      dockerfile: Dockerfile.nim
       args:
         GITLAB_TOKEN: ${GITLAB_TOKEN}
     image: nim-tao
@@ -94,8 +94,8 @@ services:
     # # Keep container running
     # command: ["-c", "sleep infinity"]
     volumes:
-      - '~/.cache/nim:/workspace/.cache'
-#      - './tao/validation/rtdetr/model_manifest.yaml:/opt/configs/model_manifest.rtdetr.yaml:ro'
+      - '~/.cache/nim:/opt/nim/.cache'
+      - './tao/validation/rtdetr/model_manifest.yaml:/opt/configs/model_manifest.rtdetr.yaml:ro'
     ipc: host
     # init: true
     ports:
@@ -110,9 +110,9 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 0
-      TAO_MODEL_NAME: rtdetr
-      #NIM_MANIFEST_PATH: /opt/configs/model_manifest.rtdetr.yaml
-      #NGC_API_KEY: ${NGC_API_KEY}
+      # NIM_MODEL_NAME: rtdetr
+      NIM_MANIFEST_PATH: /opt/configs/model_manifest.rtdetr.yaml
+      NGC_API_KEY: ${NGC_API_KEY}
   tao-cv:
     user: nvs:1000
     build:
