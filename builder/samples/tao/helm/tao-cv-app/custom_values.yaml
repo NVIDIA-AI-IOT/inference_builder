@@ -13,7 +13,7 @@ tao-cv:
             value: rtdetr
           image:
             repository: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-tao
-            tag: "61ba5e0a56fad97b865fa69f5c0f5ced2850398e"
+            tag: "users_nim_cache_path0"
   imagePullSecrets:
   - name: gitlab-docker-reg-secret
   - name: ngc-docker-reg-secret
