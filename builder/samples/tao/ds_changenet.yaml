@@ -1,5 +1,5 @@
 name: "tao"
-model_repo: /opt/nim/.cache/model-repo/
+model_repo: /workspace/.cache/model-repo/
 
 input:
 - name: images
@@ -59,11 +59,11 @@ server:
             "data": [
               {% for item in response.output %} {
                 "index": {{loop.index0}},
-                "shape": {{item.data.shape}},
-                "bboxes": {{item.data.bboxes}},
-                "probs": {{item.data.probs}},
-                "labels": {{item.data.labels|tojson}},
-                "masks": {{item.data.seg_maps}}
+                "shape": {{item.shape}},
+                "bboxes": {{item.bboxes}},
+                "probs": {{item.probs}},
+                "labels": {{item.labels|tojson}},
+                "masks": {{item.seg_maps}}
               } {% if not loop.last %}, {% endif %} {% endfor %} ],
             "usage": { "num_images": 1},
             "model": "nvidia/nvdinov2"

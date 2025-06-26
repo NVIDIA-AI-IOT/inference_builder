@@ -372,7 +372,7 @@ To build the microservice, run the following command:
 
 ```bash
 cd ..
-docker compose build nim-tao
+docker compose build tao-cv
 
 ```
 

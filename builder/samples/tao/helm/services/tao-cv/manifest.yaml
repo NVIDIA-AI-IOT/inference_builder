@@ -85,7 +85,7 @@ spec:
         name: http
       volumeMounts:
         - name: localvol
-          mountPath: /opt/nim/.cache
+          mountPath: /workspace/.cache
       startupProbe:
         httpGet:
           path: /v1/health/ready

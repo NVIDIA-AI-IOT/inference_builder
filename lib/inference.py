@@ -234,6 +234,11 @@ class VideoFrameSamplingDataFlow(DataFlow):
         super().__init__(configs, tensor_names, True, False, timeout)
         self._media_extractor = MediaExtractor(chunks=[],n_thread=1) # TODO: make it configurable
         self._video_tensor_type = key_tensor_type
+        self._video_tensor_names = []
+        for tensor_name in tensor_names:
+            config = next((c for c in configs if c["name"] == tensor_name[0]), None)
+            if config and config["data_type"] == key_tensor_type:
+                self._video_tensor_names.append(tensor_name[1])
         self._media_extractor()
         logger.info(f"VideoFrameSamplingDataFlow initialized")
 
@@ -284,8 +289,10 @@ class VideoFrameSamplingDataFlow(DataFlow):
         return results
 
     def _is_collected_valid(self, collected: Dict):
-        # TODO
-        return super()._is_collected_valid(collected)
+        result = super()._is_collected_valid(collected)
+        if not result:
+            return False
+        return all([n in collected for n in self._video_tensor_names])
 
     def _parse_asset_string(self, asset: str):
         pieces = asset.split("?")
@@ -509,7 +516,8 @@ class CustomProcessor(Processor):
     def __init__(self, config: Dict, model_home: str):
         super().__init__(config, model_home)
         if not hasattr(custom, "create_instance"):
-            raise Exception("Custom processor module not valid!!")
+            logger.error("Custom processor module not valid!!")
+            raise ValueError("Custom processor module not valid!!")
         self._processor = custom.create_instance(self.name, self.config)
         if self._processor is not None:
             logger.info(f"Custom processor {self._processor.name} created")
@@ -723,11 +731,22 @@ class ModelOperator:
                         logger.debug(f"Passing error or stop message to {out.in_names}")
                         out.put(data)
                     continue
+                logger.info(f"Input collected from {collector}: {data}")
+
                 # convert data to args and kwargs based on if explicit batching is required
-                logger.debug(f"Input collected from {collector}: {data}")
                 args = []
                 kwargs = data
-                if any([isinstance(v, list) for _, v in kwargs.items()]):
+                values = [v for v in data.values()]
+                lengths = [
+                    len(v) if isinstance(v, list) or v.ndim > 0 else 0
+                    for v in values
+                ]
+                if any(isinstance(v, list) for v in values) and \
+                   all(length == lengths[0] for length in lengths):
+                    logger.info(
+                        "Explicit batching detected, "
+                        "splitting the data into multiple inference requests"
+                    )
                     # construct multiple inference requests
                     args = split_tensor_in_dict(kwargs)
                     kwargs = {}
@@ -784,7 +803,7 @@ class ModelOperator:
                             if not all([n in output_data for n in out.in_names]):
                                 logger.error(f"Data received from model {self._model_name} is incomplete, expected: {out.in_names}, received: {output_data.keys()}. Post-processor missing?")
                                 continue
-                        logger.debug(f"Deposit result: {output_data}")
+                        logger.debug(f"ModelOperator of {self._model_name} deposits result: {output_data}")
                         out.put(output_data)
             except Empty:
                 continue

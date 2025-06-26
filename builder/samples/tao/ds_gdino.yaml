@@ -1,5 +1,5 @@
 name: "tao"
-model_repo: /opt/nim/.cache/model-repo/
+model_repo: /workspace/.cache/model-repo/
 
 input:
 - name: image
@@ -69,11 +69,11 @@ server:
             "data": [
               {% for item in response.output %} {
                 "index": {{loop.index0}},
-                "shape": {{item.data.shape}},
-                "bboxes": {{item.data.bboxes}},
-                "probs": {{item.data.probs}},
-                "labels": {{item.data.labels|tojson}},
-                "masks": {{item.data.mask}}
+                "shape": {{item.shape}},
+                "bboxes": {{item.bboxes}},
+                "probs": {{item.probs}},
+                "labels": {{item.labels|tojson}},
+                "masks": {{item.mask}}
               } {% if not loop.last %}, {% endif %} {% endfor %} ],
             "usage": { "num_images": 1},
             "model": "nvidia/nvdinov2"
@@ -152,6 +152,8 @@ models:
     data_type: TYPE_FP32
     dims: [ -1, -1, -1, -1 ]
   parameters:
+    # timeout in nanoseconds for batching multiple inputs
+    # batch_timeout: 33000000
     infer_config_path:
       - nvdsinfer_config.yaml
     preprocess_config_path:

@@ -34,12 +34,12 @@ deploy_test_common:
   variables:
     FLAVOR: "tao"
   dependencies:
-    - build_docker_common
+    - build_docker_common_nim
   needs:
-    - build_docker_common
+    - build_docker_common_nim
   rules:
-    - if: '$CI_JOB_TRIGGERED_BY =~ /build_docker_common/'
-      when: always  # Must run after build_docker_gdino
+    - if: '$CI_JOB_TRIGGERED_BY =~ /build_docker_common_nim/'
+      when: always  # Must run after build_docker_common_nim
     - when: manual  # Also allow manual trigger
 
 deploy_test_changenet:
@@ -47,12 +47,12 @@ deploy_test_changenet:
   variables:
     FLAVOR: "changenet"
   dependencies:
-    - build_docker_changenet
+    - build_docker_changenet_nim
   needs:
-    - build_docker_changenet
+    - build_docker_changenet_nim
   rules:
-    - if: '$CI_JOB_TRIGGERED_BY =~ /build_docker_changenet/'
-      when: always  # Must run after build_docker_changenet
+    - if: '$CI_JOB_TRIGGERED_BY =~ /build_docker_changenet_nim/'
+      when: always  # Must run after build_docker_changenet_nim
     - when: manual  # Also allow manual trigger
 
 deploy_test_gdino:
@@ -60,12 +60,12 @@ deploy_test_gdino:
   variables:
     FLAVOR: "gdino"
   dependencies:
-    - build_docker_gdino
+    - build_docker_gdino_nim
   needs:
-    - build_docker_gdino
+    - build_docker_gdino_nim
   rules:
-    - if: '$CI_JOB_TRIGGERED_BY =~ /build_docker_gdino/'
-      when: always  # Must run after build_docker_gdino
+    - if: '$CI_JOB_TRIGGERED_BY =~ /build_docker_gdino_nim/'
+      when: always  # Must run after build_docker_gdino_nim
     - when: manual  # Also allow manual trigger
 
 
