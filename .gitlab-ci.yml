@@ -8,7 +8,7 @@ stages:
   - build-builder     # Only runs when build dependencies change
   - build-deployer    # Only runs when deploy dependencies change
   - build-inference   # Generates tao.tgz package
-  - build-docker      # Builds and pushes final NIM container
+  - build-docker     # Builds and pushes tao container
   - deploy-test       # For each combination: deploy -> validate -> teardown
   - deploy            # Deploys the helm chart to the cluster
   - build-validator   # Builds and pushes validator container
@@ -162,8 +162,8 @@ build_tao_gdino.val_mgdino:
     VALIDATION_MODEL: "mgdino"
 
 
-# Template for building and pushing the final NIM container
-.build_tao_docker_template: &build_tao_docker_template
+# Template for building and pushing the final container (NIM or MS)
+.build_docker_template_tao: &build_docker_template_tao
   stage: build-docker
   image: docker:24.0
   services:
@@ -188,10 +188,10 @@ build_tao_gdino.val_mgdino:
     # Copy the specific flavor's tgz file to tao.tgz for Docker build
     - cp tao/tao.${FLAVOR}.tgz tao/tao.tgz
     # tao.tgz is copied in Dockerfile, no need to extract
-    - docker compose build --build-arg CACHE_BUSTER="$CI_COMMIT_SHA" nim-tao
+    - docker compose build --build-arg CACHE_BUSTER="$CI_COMMIT_SHA" ${DOCKER_TARGET}
     # Tag and push to registry
-    - docker tag nim-tao ${CI_REGISTRY_IMAGE}/cv-tao-${FLAVOR}:${CI_COMMIT_SHA}
-    - docker push ${CI_REGISTRY_IMAGE}/cv-tao-${FLAVOR}:${CI_COMMIT_SHA}
+    - docker tag ${DOCKER_TARGET} ${CI_REGISTRY_IMAGE}/${IMAGE_TAG_PREFIX}-${FLAVOR}:${CI_COMMIT_SHA}
+    - docker push ${CI_REGISTRY_IMAGE}/${IMAGE_TAG_PREFIX}-${FLAVOR}:${CI_COMMIT_SHA}
   rules:
     # - changes:
     #     - builder/samples/tao/**/*
@@ -208,30 +208,66 @@ build_tao_gdino.val_mgdino:
   allow_failure: true  # This makes the job optional for pipeline success
 
 
-# Docker builds for each flavor
-build_docker_common:
-  <<: *build_tao_docker_template
+# Docker builds for each flavor as NIM
+build_docker_common_nim:
+  <<: *build_docker_template_tao
   variables:
     FLAVOR: "tao"
+    DOCKER_TARGET: "nim-tao"
+    IMAGE_TAG_PREFIX: "nim-tao"
   dependencies:
     - build_tao_common.val_rtdetr
     - build_tao_common.val_cls
 
-build_docker_changenet:
-  <<: *build_tao_docker_template
+build_docker_changenet_nim:
+  <<: *build_docker_template_tao
   variables:
     FLAVOR: "changenet"
+    DOCKER_TARGET: "nim-tao"
+    IMAGE_TAG_PREFIX: "nim-tao"
   dependencies:
     - build_tao_changenet
 
-build_docker_gdino:
-  <<: *build_tao_docker_template
+build_docker_gdino_nim:
+  <<: *build_docker_template_tao
   variables:
     FLAVOR: "gdino"
+    DOCKER_TARGET: "nim-tao"
+    IMAGE_TAG_PREFIX: "nim-tao"
   dependencies:
     - build_tao_gdino.val_gdino
     - build_tao_gdino.val_mgdino
 
+
+# Docker builds for each flavor as MS
+build_docker_common_ms:
+  <<: *build_docker_template_tao
+  variables:
+    FLAVOR: "tao"
+    DOCKER_TARGET: "tao-cv"
+    IMAGE_TAG_PREFIX: "ms-tao"
+  dependencies:
+    - build_tao_common.val_rtdetr
+    - build_tao_common.val_cls
+
+build_docker_changenet_ms:
+  <<: *build_docker_template_tao
+  variables:
+    FLAVOR: "changenet"
+    DOCKER_TARGET: "tao-cv"
+    IMAGE_TAG_PREFIX: "ms-tao"
+  dependencies:
+    - build_tao_changenet
+
+build_docker_gdino_ms:
+  <<: *build_docker_template_tao
+  variables:
+    FLAVOR: "gdino"
+    DOCKER_TARGET: "tao-cv"
+    IMAGE_TAG_PREFIX: "ms-tao"
+  dependencies:
+    - build_tao_gdino.val_gdino
+    - build_tao_gdino.val_mgdino
 
 # Cache pip packages between jobs
 cache:

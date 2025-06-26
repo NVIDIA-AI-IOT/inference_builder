@@ -9,7 +9,7 @@
 # its affiliates is strictly prohibited.
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev156" AS nim_builder_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev182" AS nim_builder_base
 
 ENV NIM_DIR_PATH="/opt/nim" \
     PIP_INDEX_URL=https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple \

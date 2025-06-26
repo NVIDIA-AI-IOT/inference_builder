@@ -429,6 +429,18 @@ class DeepstreamMetadata:
     objects: list[int] = field(default_factory=list)
     timestamp: int = 0
 
+def _to_list(array):
+    """Adapt data to python list[int], mainly for NumPy array to list[int]"""
+    if hasattr(array, 'tolist'):
+        # Convert NumPy array to list and flatten to 1D
+        return array.flatten().tolist()
+    elif isinstance(array, list):
+        # Already a list, return as is
+        return array
+    else:
+        # Fallback: try to convert to list
+        return list(array)
+
 class PreprocessMetadataOutput(BaseTensorOutput):
     def __init__(self, n_outputs, output_name, dims):
         super().__init__(n_outputs, name=output_name)
@@ -446,7 +458,7 @@ class PreprocessMetadataOutput(BaseTensorOutput):
                     seg_meta = u_meta.as_segmentation()
                     if seg_meta:
                         metadata.shape = [seg_meta.height, seg_meta.width]
-                        metadata.seg_maps.append(seg_meta.class_map)
+                        metadata.seg_maps.append(_to_list(seg_meta.class_map))
                 # object metadata
                 for object_meta in roi.frame_meta.object_items:
                     labels = [object_meta.label] if object_meta.label else []
@@ -496,7 +508,7 @@ class MetadataOutput(BaseTensorOutput):
                 seg_meta = user_meta.as_segmentation()
                 if seg_meta:
                     metadata.shape = [seg_meta.height, seg_meta.width]
-                    metadata.seg_maps.append(seg_meta.class_map)
+                    metadata.seg_maps.append(_to_list(seg_meta.class_map))
             metadata.timestamp = frame_meta.buffer_pts
             self._deposit(frame_meta.pad_index, metadata)
 
