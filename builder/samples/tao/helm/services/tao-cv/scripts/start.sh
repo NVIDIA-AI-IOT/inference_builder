@@ -19,11 +19,10 @@ fi
 
 # Set NIM_MANIFEST_PATH based on NIM_MODEL_NAME
 export NIM_MANIFEST_PATH="/opt/configs/model_manifest.${NIM_MODEL_NAME}.yaml"
-echo "Set NIM_MANIFEST_PATH to: $NIM_MANIFEST_PATH"
+echo "NIM_MANIFEST_PATH: $NIM_MANIFEST_PATH"
 
 # Set NIM_CACHE_PATH
-export NIM_CACHE_PATH="/opt/nim/.cache"
-echo "Set NIM_CACHE_PATH to: $NIM_CACHE_PATH"
+echo "NIM_CACHE_PATH: $NIM_CACHE_PATH"
 
 # Execute Docker entrypoint
 /opt/nim/start_server.sh
