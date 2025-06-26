@@ -172,6 +172,10 @@ build_tao_gdino.val_mgdino:
     DOCKER_TLS_CERTDIR: ""  # Keep this for Docker-in-Docker
   dependencies:
     - build_tao_inference
+  before_script:
+    - echo "Waiting for Docker daemon to be ready..."
+    - timeout 60 bash -c 'until docker info >/dev/null 2>&1; do echo "Waiting for Docker daemon..."; sleep 2; done'
+    - echo "Docker daemon is ready!"
   script:
     # Check if GITLAB_TOKEN is set
     - |
