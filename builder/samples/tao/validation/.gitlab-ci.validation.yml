@@ -53,8 +53,12 @@ build_validation_container:
   before_script:
     - echo "Waiting for Docker daemon to be ready..."
     - |
-      until docker info >/dev/null 2>&1; do
-        echo "Waiting for Docker daemon..."
+      for i in {1..30}; do
+        if docker info >/dev/null 2>&1; then
+          echo "Docker daemon is ready!"
+          break
+        fi
+        echo "Waiting for Docker daemon... (attempt $i/30)"
         sleep 2
       done
     - echo "Docker daemon is ready!"
