@@ -42,7 +42,7 @@ py_datatype_mapping = {
     "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
     "TYPE_CUSTOM_BINARY_BASE64": str,
     "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": str,
-    "TYPE_CUSTOM_VIDEO_STREAM_ASSETS": str
+    "TYPE_CUSTOM_VIDEO_ASSETS": str
 }
 
 np_datatype_mapping = {
@@ -248,7 +248,7 @@ class DataFlow:
         return asset, params
 
 
-class LiveStreamDataFlow(DataFlow):
+class VideoInputDataFlow(DataFlow):
     """A data flow for live stream data"""
     def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=None):
         super().__init__(configs, tensor_names, True, False, timeout)
@@ -389,59 +389,6 @@ class VideoFrameSamplingDataFlow(DataFlow):
     def stop(self):
         self._media_extractor = None
         super().stop()
-
-class VideoInputDataFlow(DataFlow):
-    """A data flow for video data"""
-    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=None):
-        super().__init__(configs, tensor_names, True, False, timeout)
-        self._media_extractor = None
-        self._video_tensor_type = key_tensor_type
-
-    def _process_custom_data(self, tensor: np.ndarray, data_type: str):
-        logger.debug(f"VideoInputDataFlow._process_custom_data: {data_type}")
-        if data_type == self._video_tensor_type:
-            return self._process_video_assets(tensor)
-        else:
-            return super()._process_custom_data(tensor, data_type)
-
-    def _is_collected_valid(self, collected: Dict):
-        result = super()._is_collected_valid(collected)
-        if not result:
-            return False
-        return any([isinstance(v, types.GeneratorType) for k, v in collected.items()])
-
-    def _process_video_assets(self, assets: np.ndarray):
-        urls = []
-        duration = -1
-        for asset in assets:
-            asset_manager = AssetManager()
-            asset = asset_manager.get_asset(asset)
-            if asset:
-                urls.append(asset.path)
-                if duration == -1:
-                    duration = asset.duration
-                elif duration != asset.duration:
-                    logger.error(f"Batched video assets must have the same duration!")
-                    return
-        if not urls:
-            logger.error(f"No video assets found: {assets}")
-            return
-        self._media_extractor = MediaExtractor([MediaChunk(url, duration=duration) for url in urls])
-        qs = self._media_extractor()
-        try:
-            while True:
-                data = []
-                for q in qs:
-                    frame = q.get(timeout=1.0)
-                    if frame is None:
-                        logger.info(f"Duration reached: {assets}")
-                        break
-                    data.append(frame.tensor)
-                yield data
-        except Empty:
-            logger.info(f"EOS on videos: {assets}")
-        self._media_extractor = None
-
 class ImageInputDataFlow(DataFlow):
     """A data flow for image data"""
     def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str,timeout=None):
@@ -522,8 +469,7 @@ inbound_dataflow_mapping = {
     "TYPE_CUSTOM_IMAGE_BASE64": ImageInputDataFlow,
     "TYPE_CUSTOM_IMAGE_ASSETS": ImageInputDataFlow,
     "TYPE_CUSTOM_VIDEO_ASSETS": VideoInputDataFlow,
-    "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": VideoFrameSamplingDataFlow,
-    "TYPE_CUSTOM_VIDEO_STREAM_ASSETS": LiveStreamDataFlow,
+    "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": VideoFrameSamplingDataFlow
 }
 class ModelBackend(ABC):
     """Interface for standardizing the model backend """

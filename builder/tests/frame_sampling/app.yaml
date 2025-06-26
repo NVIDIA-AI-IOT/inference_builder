@@ -7,7 +7,7 @@ input:
     dims: [ -1 ]
     optional: true
   - name: "video_streams"
-    data_type: TYPE_CUSTOM_VIDEO_STREAM_ASSETS
+    data_type: TYPE_CUSTOM_VIDEO_ASSETS
     dims: [ -1 ]
     optional: true
 
