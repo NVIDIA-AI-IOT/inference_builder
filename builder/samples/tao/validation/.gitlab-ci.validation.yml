@@ -50,18 +50,6 @@ build_validation_container:
     - build_validation_context
   dependencies:
     - build_validation_context  # Add this to get the artifacts
-  before_script:
-    - echo "Waiting for Docker daemon to be ready..."
-    - |
-      for i in {1..30}; do
-        if docker info >/dev/null 2>&1; then
-          echo "Docker daemon is ready!"
-          break
-        fi
-        echo "Waiting for Docker daemon... (attempt $i/30)"
-        sleep 2
-      done
-    - echo "Docker daemon is ready!"
   script:
     # Verify artifacts before building
     - |
