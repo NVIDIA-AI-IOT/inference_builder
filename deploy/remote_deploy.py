@@ -379,7 +379,7 @@ class HelmDeployer:
                 # Split docker image path into repository and tag
                 repo, image_name, tag  = self.split_docker_image(self.override_image)
                 # Validate image name matches expected format
-                expected_image_name = f"cv-tao-{self.flavor}"
+                expected_image_name = f"nim-tao-{self.flavor}"
                 if image_name != expected_image_name:
                     raise ValueError(
                         f"Invalid image name: {image_name}. "
@@ -391,7 +391,7 @@ class HelmDeployer:
                 }
             elif self.registry_image and self.commit_sha:
                 # Construct image repository path matching docker push format
-                image_repository = f"{self.registry_image}/cv-tao-{self.flavor}"
+                image_repository = f"{self.registry_image}/nim-tao-{self.flavor}"
                 logger.info(f"Setting image repository to: {image_repository}")
                 
                 tao_cv_container['image'] = {
