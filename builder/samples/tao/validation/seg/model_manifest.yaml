@@ -3,7 +3,7 @@ profile_selection_criteria: auto
 model: eevaigoeixww/dev/tao_cv
 release: rc1
 profiles:
-- id: 425dcb3ef646e497d5a50bbd1eb1169c9f33f4253f36669bb428ef250e2447ce
+- id: 425dcb3ef646e497d5a50bbd1eb1169c9f33f4253f36669bb428ef250e2447cd
   tags:
     gpu: a6000
   workspace:

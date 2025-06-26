@@ -16,7 +16,7 @@ class DeploymentPreparation:
     def __init__(self):
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         # Helm chart info
-        self.chart_url = os.getenv('HELM_CHART_URL', "https://helm.ngc.nvidia.com/eevaigoeixww/dev/charts/tao-cv-app-0.1.1.tgz")
+        self.chart_url = os.getenv('HELM_CHART_URL', "https://helm.ngc.nvidia.com/eevaigoeixww/dev/charts/tao-cv-app-0.2.2.tgz")
         self.charts_dir = os.path.join(self.base_dir, 'builder/samples/tao/helm/charts')
         self.values_file = os.path.join(self.base_dir, 'builder/samples/tao/helm/tao-cv-app/custom_values.yaml')
         # Update image for helm chart values override
