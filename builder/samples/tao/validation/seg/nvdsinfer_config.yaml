@@ -14,5 +14,5 @@ property:
   # output-tensor-meta: 1
   segmentation-output-order: 1
   workspace-size: 1048576
-  parse-segmentation-func-name: NvDsInferParseCustomSegformerTAOArgmax
+  parse-segmentation-func-name: NvDsInferParseCustomSegformerTAO2
   custom-lib-path: /opt/nvidia/deepstream/deepstream/lib/libnvds_infercustomparser_tao.so

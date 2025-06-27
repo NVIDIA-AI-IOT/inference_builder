@@ -1,0 +1,20 @@
+property:
+  gie-unique-id: 6
+  infer-dims: 3;1024;1820
+  network-input-order: 0
+  model-color-format: 1
+  maintain-aspect-ratio: 1
+  # std 0.226
+  net-scale-factor: 0.01735207357279195
+  network-mode: 2
+  model-color-format: 1
+  offsets: 123.675;116.28;103.53
+  network-type: 2 # seg
+  num-detected-classes: 19
+  onnx-file: citysemsegformer.onnx
+  model-engine-file: ./citysemsegformer.onnx_b1_gpu0_fp16.engine
+  workspace-size: 1048576
+  parse-segmentation-func-name: NvDsInferParseCustomSegformerTAO
+  custom-lib-path: /opt/nvidia/deepstream/deepstream/lib/libnvds_infercustomparser_tao.so
+  labelfile-path: labels.txt
+

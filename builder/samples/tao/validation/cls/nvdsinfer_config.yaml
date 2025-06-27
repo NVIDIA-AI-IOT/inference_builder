@@ -1,16 +1,18 @@
+class-attrs-all:
+  pre-cluster-threshold: 0
+  topk: 2
 property:
   cluster-mode: 4
   gie-unique-id: 1
   infer-dims: 3;224;224
   maintain-aspect-ratio: 1
-  net-scale-factor: 0.0173520735728
-  network-mode: 1
+  net-scale-factor: 0.01508295626  # 1 / (255 * 0.26)
+  offsets: 122.7709;116.746;104.09373  # 255 * mean
+  network-mode: 2  # 0 FP32, 2 FP16
   network-type: 1 # classification
-  # num-detected-classes: 19
   onnx-file: classifier.onnx
   model-engine-file: ./classifier.onnx_b1_gpu0_fp16.engine
   output-blob-names: output
-  # output-tensor-meta: 1
   workspace-size: 1048576
-  classifier-threshold: 0.5
+  classifier-threshold: 0
   labelfile-path: ./labels.txt

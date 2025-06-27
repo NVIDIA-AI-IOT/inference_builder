@@ -1,0 +1,14 @@
+property:
+  gie-unique-id: 1
+  net-scale-factor: 0.00392156862745098
+  onnx-file: changenet-classify.onnx
+  model-engine-file: changenet-classify.onnx_b2_gpu0_fp16.engine
+  network-mode: 2
+  network-type: 1
+  offsets: 127.5;127.5;127.5
+  num-detected-classes: 2
+  input-tensor-from-meta: 1
+  infer-dims: 3;128;128
+  classifier-threshold: 0
+  labelfile-path: labels.txt
+  custom-lib-path: /opt/nvidia/deepstream/deepstream/lib/libnvds_infercustomparser_tao.so

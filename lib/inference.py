@@ -22,6 +22,26 @@ from .asset_manager import AssetManager
 
 logger = get_logger(__name__)
 
+py_datatype_mapping = {
+    "TYPE_UINT8": int,
+    "TYPE_UINT16": int,
+    "TYPE_UINT32": int,
+    "TYPE_UINT64": int,
+    "TYPE_INT8": int,
+    "TYPE_INT16": int,
+    "TYPE_INT32": int,
+    "TYPE_INT64": int,
+    "TYPE_FP16": float,
+    "TYPE_FP32": float,
+    "TYPE_FP64": float,
+    "TYPE_STRING": str,
+    "TYPE_CUSTOM_DS_IMAGE": str,
+    "TYPE_CUSTOM_DS_MIME": str,
+    "TYPE_CUSTOM_BINARY_URLS": str,
+    "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
+    "TYPE_CUSTOM_BINARY_BASE64": str,
+}
+
 np_datatype_mapping = {
     "TYPE_INVALID": None,
     "TYPE_BOOL": np.bool_,
@@ -39,14 +59,15 @@ np_datatype_mapping = {
     "TYPE_STRING": np.string_,
     "TYPE_CUSTOM_DS_IMAGE": np.ubyte,
     "TYPE_CUSTOM_DS_MIME": np.string_,
-    "TYPE_CUSTOM_DS_PASSTHROUGH": None,
-    "TYPE_BF16": None
+    "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
+    "TYPE_BF16": None,
+    "TYPE_CUSTOM_OBJECT": None
 }
 
 torch_datatype_mapping = {
     "TYPE_INVALID": None,
     "TYPE_BOOL": torch.bool,
-    "TYPE_UINT8": torch.int8,
+    "TYPE_UINT8": torch.uint8,
     "TYPE_UINT16": torch.int16,
     "TYPE_UINT32": torch.int32,
     "TYPE_UINT64": torch.int64,
@@ -60,8 +81,9 @@ torch_datatype_mapping = {
     "TYPE_STRING": None,
     "TYPE_CUSTOM_DS_IMAGE": torch.int8,
     "TYPE_CUSTOM_DS_MIME": None,
-    "TYPE_CUSTOM_DS_PASSTHROUGH": None,
-    "TYPE_BF16": None
+    "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
+    "TYPE_BF16": None,
+    "TYPE_CUSTOM_OBJECT": None
 }
 
 @dataclass
@@ -89,7 +111,7 @@ class DataFlow:
             tensor_names: List[Tuple[str, str]],
             inbound: bool = False,
             outbound: bool = False,
-            timeout=None
+            timeout=1.0
         ):
         self._configs = configs
         self._tensor_names = tensor_names
@@ -97,6 +119,12 @@ class DataFlow:
         self._outbound = outbound
         self._timeout = timeout
         self._queue = Queue()
+        self._optional = False
+        if self._inbound or self._outbound:
+            self._optional = all([
+                config["optional"] if "optional" in config else False
+                for config in self._configs
+            ])
 
     def _process_custom_data(self, tensor: np.ndarray, data_type: str):
         processed = tensor
@@ -137,6 +165,10 @@ class DataFlow:
     @property
     def o_names(self):
         return [i[1] for i in self._tensor_names]
+
+    @property
+    def optional(self):
+        return self._optional
 
     def get_config(self, name: str):
         if not self._configs:
@@ -195,11 +227,85 @@ class DataFlow:
             self._queue.put(values, timeout=self._timeout)
 
     def get(self):
-        try:
-            item = self._queue.get(timeout=self._timeout)
-        except Empty:
-            item = Error("timeout")
-        return item
+        return self._queue.get(timeout=self._timeout)
+
+class VideoFrameSamplingDataFlow(DataFlow):
+    """A data flow for video frame sampling"""
+    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=None):
+        super().__init__(configs, tensor_names, True, False, timeout)
+        self._media_extractor = MediaExtractor(chunks=[],n_thread=1) # TODO: make it configurable
+        self._video_tensor_type = key_tensor_type
+        self._video_tensor_names = []
+        for tensor_name in tensor_names:
+            config = next((c for c in configs if c["name"] == tensor_name[0]), None)
+            if config and config["data_type"] == key_tensor_type:
+                self._video_tensor_names.append(tensor_name[1])
+        self._media_extractor()
+        logger.info(f"VideoFrameSamplingDataFlow initialized")
+
+    def _process_custom_data(self, tensor: np.ndarray, data_type: str):
+        logger.debug(f"VideoFrameSamplingDataFlow._process_custom_data: {data_type}")
+        if data_type == self._video_tensor_type:
+            return self._do_video_frame_sampling(tensor)
+        else:
+            return super()._process_custom_data(tensor, data_type)
+
+    def _do_video_frame_sampling(self, assets: np.ndarray):
+        qs = []
+        expected_frames = []
+        results = []
+        for asset in assets:
+            asset_manager = AssetManager()
+            asset_id, params = self._parse_asset_string(asset)
+            asset = asset_manager.get_asset(asset_id)
+            if asset:
+                n_frames = params.get("frames", None)
+                interval = asset.duration / int(n_frames) if n_frames else 0
+                chunk = MediaChunk(
+                    asset.path,
+                    duration=asset.duration,
+                    interval=interval
+                )
+                qs.append(self._media_extractor.append(chunk))
+                expected_frames.append(int(n_frames) if n_frames else None)
+
+        for q, expected in zip(qs, expected_frames):
+            frames = []
+            while True:
+                try:
+                    frame = q.get(timeout=10.0)
+                except Empty:
+                    logger.info(f"Decoder Queue is empty: {assets}")
+                    break
+                if frame is None:
+                    logger.info(f"Duration reached: {assets}")
+                    break
+                frames.append(frame.tensor)
+                if expected is not None and len(frames) == expected:
+                    logger.info(f"Got all {len(frames)} frames, dropping the rest")
+                    break
+            if expected is not None and len(frames) < expected:
+                logger.warning(f"Expected {expected} frames, but got {len(frames)}")
+            results.append(frames)
+        return results
+
+    def _is_collected_valid(self, collected: Dict):
+        result = super()._is_collected_valid(collected)
+        if not result:
+            return False
+        return all([n in collected for n in self._video_tensor_names])
+
+    def _parse_asset_string(self, asset: str):
+        pieces = asset.split("?")
+        asset = pieces[0]
+        params = {}
+        if len(pieces) > 1:
+            query_string = pieces[1]
+            query_params = query_string.split("&")
+            for param in query_params:
+                key, value = param.split("=")
+                params[key] = value
+        return asset, params
 
 class VideoInputDataFlow(DataFlow):
     """A data flow for video data"""
@@ -210,7 +316,7 @@ class VideoInputDataFlow(DataFlow):
 
     def _process_custom_data(self, tensor: np.ndarray, data_type: str):
         logger.debug(f"VideoInputDataFlow._process_custom_data: {data_type}")
-        if data_type == "TYPE_CUSTOM_VIDEO_ASSETS":
+        if data_type == self._video_tensor_type:
             return self._process_video_assets(tensor)
         else:
             return super()._process_custom_data(tensor, data_type)
@@ -333,6 +439,7 @@ inbound_dataflow_mapping = {
     "TYPE_CUSTOM_IMAGE_BASE64": ImageInputDataFlow,
     "TYPE_CUSTOM_IMAGE_ASSETS": ImageInputDataFlow,
     "TYPE_CUSTOM_VIDEO_ASSETS": VideoInputDataFlow,
+    "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": VideoFrameSamplingDataFlow,
 }
 class ModelBackend(ABC):
     """Interface for standardizing the model backend """
@@ -410,7 +517,8 @@ class CustomProcessor(Processor):
     def __init__(self, config: Dict, model_home: str):
         super().__init__(config, model_home)
         if not hasattr(custom, "create_instance"):
-            raise Exception("Custom processor module not valid!!")
+            logger.error("Custom processor module not valid!!")
+            raise ValueError("Custom processor module not valid!!")
         self._processor = custom.create_instance(self.name, self.config)
         if self._processor is not None:
             logger.info(f"Custom processor {self._processor.name} created")
@@ -454,13 +562,19 @@ class AggregationFlowCollector(Collector):
             result = {}
             completed = []
             for data_flow in self._data_flows:
-                data = data_flow.get()
-                if isinstance(data, Error) or isinstance(data, Stop):
-                    completed.append(data)
-                    continue
-                else:
-                    result.update(data)
-            self._queue.put(result)
+                # continue reading from each data flow until we get some data
+                while not self._stop_event.is_set():
+                    try:
+                        data = data_flow.get()
+                        if isinstance(data, Error) or isinstance(data, Stop):
+                            completed.append(data)
+                        else:
+                            result.update(data)
+                        break
+                    except Empty:
+                        continue
+            if result:
+                self._queue.put(result)
             if all([isinstance(c, Stop) for c in completed]):
                 self._queue.put(Stop("All data flows completed"))
             elif any([isinstance(c, Error) for c in completed]):
@@ -487,24 +601,33 @@ class MultiFlowCollector(Collector):
     def _poll(self, index: int):
         logger.info(f"Start polling data flow {self._data_flows[index].in_names}")
         data_flow = self._data_flows[index]
+        n_data = 0
         while not self._stop_event.is_set():
             try:
                 data = data_flow.get()
+                is_stop = isinstance(data, Error) or isinstance(data, Stop)
+                if is_stop and n_data == 0:
+                    # empty data flow, skip it
+                    logger.info(f"Empty data flow {data_flow.in_names}, skip it")
+                    continue
+                elif not is_stop:
+                    n_data += 1
+                # try grabbing the queue
                 with self._condition:
                     while self._active_flow != index and self._active_flow != -1:
-                        logger.debug(f"Data flow {data_flow.in_names} is waiting for output to be free")
                         self._condition.wait()
                     if self._active_flow == -1:
                         self._active_flow = index
-                if isinstance(data, Error) or isinstance(data, Stop):
-                    logger.error(f"Data flow {data_flow.in_names} ended in: {data}")
-                    self._queue.put(data)
-                    self._active_flow = -1
-                    self._condition.notify_all()
-                else:
-                    self._queue.put(data)
+                self._queue.put(data)
+                with self._condition:
+                    if isinstance(data, Error) or isinstance(data, Stop):
+                        logger.info(f"Data flow {data_flow.in_names} ended in: {data}")
+                        self._active_flow = -1
+                        n_data = 0
+                        self._condition.notify_all()
             except Empty:
                 continue
+
 
     def __del__(self):
         self._stop_event.set()
@@ -522,6 +645,7 @@ class ModelOperator:
         self._postprocessors = []
         self._model_config = model_config
         self._backend = None
+        self._stop_event = threading.Event()
 
     @property
     def model_name(self):
@@ -598,7 +722,7 @@ class ModelOperator:
         # backend loop
         self._backend = model_backend
         collector = self._create_collector()
-        while True:
+        while not self._stop_event.is_set():
             try:
                 # collect input data until Stop is received
                 data = collector.collect()
@@ -608,16 +732,28 @@ class ModelOperator:
                         logger.debug(f"Passing error or stop message to {out.in_names}")
                         out.put(data)
                     continue
+                logger.info(f"Input collected from {collector}: {data}")
+
                 # convert data to args and kwargs based on if explicit batching is required
-                logger.debug(f"Input collected: {data}")
                 args = []
                 kwargs = data
-                if any([isinstance(v, list) for _, v in kwargs.items()]):
+                values = [v for v in data.values()]
+                lengths = [
+                    len(v) if isinstance(v, list) or v.ndim > 0 else 0
+                    for v in values
+                ]
+                if any(isinstance(v, list) for v in values) and \
+                   all(length == lengths[0] for length in lengths):
+                    logger.info(
+                        "Explicit batching detected, "
+                        "splitting the data into multiple inference requests"
+                    )
                     # construct multiple inference requests
                     args = split_tensor_in_dict(kwargs)
                     kwargs = {}
                 # call preprocess() before passing args to the backend
-                processed = self._preprocess(args if args else [kwargs])
+                processed, passthrough_tensors = self._preprocess(args if args else [kwargs])
+                in_names = [i["name"] for i in self._model_config["input"]]
                 if not processed:
                     logger.error(f"Empty result from preprocess: {args} and {kwargs}")
                     continue
@@ -631,16 +767,25 @@ class ModelOperator:
                     logger.error(f"Invalid result from preprocess: {args} and {kwargs}")
                     continue
                 # execute inference backend and collect result
+                logger.debug(f"Model {self._model_name} invokes backend {self._backend.__class__.__name__} with {args if args else kwargs}")
                 for r in self._backend(*args, **kwargs):
+                    logger.debug(f"Model {self._model_name} generated result from backend {self._backend.__class__.__name__}: {r}")
                     if not self._out:
                         logger.error(f"No output data flow is bound to model {self._model_name}, please check the route configuration")
+                        continue
+                    if isinstance(r, Error):
+                        logger.error(f"Error from model {self._model_name}: {r}")
                         continue
                     # iterate the result list and postprocess each of them
                     for out in self._out:
                         output_data = {n : [] for n in out.in_names}
                         if isinstance(r, list):
                             # we get a batch
-                            for result in r:
+                            if len(passthrough_tensors) == 1:
+                                passthrough_tensors = passthrough_tensors*len(r)
+                            for i, result in enumerate(r):
+                                if passthrough_tensors:
+                                    result.update(passthrough_tensors[i])
                                 result = self._postprocess(result)
                                 if not all([n in result for n in out.in_names]):
                                     logger.error(f"Data received from model {self._model_name} is incomplete, expected: {out.in_names}, received: {result.keys()}. Post-processor missing?")
@@ -653,15 +798,23 @@ class ModelOperator:
                                         v.append(None)
                         else:
                             # implicit batching
+                            if passthrough_tensors:
+                                r.update(passthrough_tensors[0])
                             output_data = self._postprocess(r)
                             if not all([n in output_data for n in out.in_names]):
                                 logger.error(f"Data received from model {self._model_name} is incomplete, expected: {out.in_names}, received: {output_data.keys()}. Post-processor missing?")
                                 continue
-                        logger.debug(f"Deposit result: {output_data}")
+                        logger.debug(f"ModelOperator of {self._model_name} deposits result: {output_data}")
                         out.put(output_data)
+            except Empty:
+                continue
             except Exception as e:
                 logger.exception(e)
                 out.put(Error(str(e)))
+
+    def stop(self):
+        logger.info(f"Model operator {self._model_name} is stopping")
+        self._stop_event.set()
 
     def _preprocess(self, args: List):
         # go through the preprocess chain
@@ -685,20 +838,23 @@ class ModelOperator:
                         continue
                     # update as processed
                     for key, value in zip(preprocessor.output, output):
-                        processed[key] = value
+                        if value is not None:
+                            processed[key] = value
                 else:
                     logger.warning(f"Pre-processor {preprocessor.name} skipped because of missing input tensors")
                 result.append(processed)
             # update outcome
             outcome = result
-        # correct the data type
+        # correct the data type and extract the passthrough tensors
+        passthrough_tensors = []
         for data in outcome:
+            passthrough_tensor = {}
             for key in data:
                 value = data[key]
                 i_config = next((i for i in self._model_config['input'] if i["name"] == key), None)
                 if i_config is None:
-                    logger.warning(f"Unexpected data: {key}")
-                    continue
+                    logger.info(f"{key} from preprocessed is not found in the model input config, adding it as a passthrough tensor")
+                    passthrough_tensor[key] = value
                 else:
                     data_type = i_config["data_type"]
                     if isinstance(value, np.ndarray):
@@ -709,7 +865,10 @@ class ModelOperator:
                         data_type = torch_datatype_mapping[data_type]
                         if value.dtype != data_type:
                             data[key] = value.to(data_type)
-        return outcome
+            for key in passthrough_tensor:
+                data.pop(key)
+            passthrough_tensors.append(passthrough_tensor)
+        return outcome, passthrough_tensors
 
     def _postprocess(self, data: Dict):
         processed = {k: v for k, v in data.items()}
@@ -736,7 +895,7 @@ class ModelOperator:
         else:
             outputs = [set(d.o_names) for d in self._in]
             intersection = set.intersection(*outputs)
-            if len(intersection) == 0:
+            if len(intersection) == 0 and not any([d.optional for d in self._in]):
                 logger.info(f"Aggregation data flow input detected, using aggregation flow collector on model {self._model_name}")
                 return AggregationFlowCollector(self._in)
             else:
@@ -841,9 +1000,6 @@ class InferenceBase:
                             continue
                         flow = None
                         if route.data.source and route.data.target:
-                            if route.data.source != route.data.target:
-                                logger.error(f"Source and target are different, unable to bind output for model {operator1.model_name}, {route.data.source} -> {route.data.target}")
-                                continue
                             tensor_names = [(i, o) for i, o in zip(route.data.source, route.data.target)]
                             flow = DataFlow(configs=None, tensor_names=tensor_names)
                         elif route.data.source:
@@ -913,7 +1069,10 @@ class InferenceBase:
             logger.exception(e)
 
     def finalize(self):
+        for operator in self._operators:
+            operator.stop()
         self._executor.shutdown()
+        logger.info("Inference pipeline is finalized")
 
     def _submit(self, op: ModelOperator, backend: ModelBackend):
         self._future = self._executor.submit(lambda: op.run(backend))

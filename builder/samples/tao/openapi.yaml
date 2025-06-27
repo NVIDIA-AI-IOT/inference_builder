@@ -11,20 +11,6 @@ info:
     name: NVIDIA AI Foundation Models Community License
     url: https://docs.nvidia.com/ai-foundation-models-community-license.pdf
 paths:
-  /v1/health/ready:
-    get:
-      tags:
-        - "NVIDIA METROPOLIS INFERENCE API"
-      summary: Health Ready
-      description: Provide your implementation of readiness to know when container
-        ready to accept traffic
-      operationId: health_ready_v1_health_ready_get
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
   /v1/files:
     post:
       tags:
@@ -182,9 +168,7 @@ components:
       additionalProperties: false
       type: object
       required:
-        - id
         - path
-        - size
         - contentType
       title: MediaAsset
       description: Represents a media asset.
@@ -371,6 +355,14 @@ components:
                 The mask vector as base64 string. The length of the vector depends on the model.
               format: ^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)$
           title: Mask
+        objects:
+          type: array
+          default: []
+          items:
+            type: integer
+            format: int32
+          title: Objects
+          description: The IDs of the objects in the inference result.
         timestamp:
           type: integer
           format: int64

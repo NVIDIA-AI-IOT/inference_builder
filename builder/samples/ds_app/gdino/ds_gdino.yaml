@@ -1,0 +1,74 @@
+name: "deepstream-app"
+model_repo: /workspace/models
+
+input:
+- name: media_url
+  data_type: TYPE_CUSTOM_BINARY_URLS
+  dims: [ -1 ]
+- name: mime
+  data_type: TYPE_STRING
+  dims: [ -1 ]
+- name: text
+  data_type: TYPE_STRING
+  dims: [ -1 ]
+
+output:
+  - name: output
+    data_type: TYPE_CUSTOM_DS_METADATA
+    dims: [ -1 ]
+
+models:
+- name: gdino
+  backend: deepstream/nvinfer
+  max_batch_size: 1
+  input:
+  - name: media_url
+    data_type: TYPE_CUSTOM_BINARY_URLS
+    dims: [ -1 ]
+  - name: mime
+    data_type: TYPE_CUSTOM_DS_MIME
+    dims: [ -1 ]
+  - name: input_ids
+    data_type: TYPE_INT64
+    dims: [ 256 ]
+  - name: attention_mask
+    data_type: TYPE_BOOL
+    dims: [ 256 ]
+  - name: position_ids
+    data_type: TYPE_INT64
+    dims: [ 256 ]
+  - name: token_type_ids
+    data_type: TYPE_INT64
+    dims: [ 256 ]
+  - name: text_token_mask
+    data_type: TYPE_BOOL
+    dims: [ 256, 256 ]
+  output:
+  - name: pred_logits
+    data_type: TYPE_FP32
+    dims: [ -1, -1 ]
+  - name: pred_boxes
+    data_type: TYPE_FP32
+    dims: [ -1, 4 ]
+  - name: pred_masks
+    data_type: TYPE_FP32
+    dims: [ -1, -1, -1, -1 ]
+  parameters:
+    infer_config_path:
+      - nvdsinfer_config.yaml
+    preprocess_config_path:
+      - nvdspreprocess_config.yaml
+  preprocessors:
+    - kind: "custom"
+      name: "gdino-tokenizer"
+      input: ["text"]
+      output: ["input_ids", "attention_mask", "position_ids", "token_type_ids", "text_token_mask", "pos_map"]
+  postprocessors:
+    - kind: "custom"
+      name: "gdino-postprocessor"
+      input: ["pred_logits", "pred_boxes", "pred_masks", "pos_map"]
+      output: ["output"]
+      config:
+        infer_config_path: /workspace/models/gdino/nvdsinfer_config.yaml
+
+

@@ -90,10 +90,13 @@ class TritonPythonModel(InferenceBase):
             await queue.put(item)
         def thread_to_async_bridge(thread_queue, async_queue, loop):
             while True:
-                item = thread_queue.get()
-                asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
-                if not item:
-                    break
+                try:
+                    item = thread_queue.get()
+                    asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
+                    if isinstance(item, Stop) or isinstance(item, Error):
+                        break
+                except Empty:
+                    continue
 
 
         logger.info(f"Received {len(requests)} request(s)")
@@ -133,15 +136,15 @@ class TritonPythonModel(InferenceBase):
             # fetch result
             loop = asyncio.get_event_loop()
             for a_output, output in zip(self._async_outputs, self._outputs):
+                logger.error(f"Submitting {output._timeout} to async executor")
                 self._async_executor.submit(thread_to_async_bridge, output, a_output, loop)
             stop = False
             while not stop:
                 try:
                     logger.debug("Waiting for tensors from async queue")
                     response_data = dict()
-                    done, _ = await asyncio.wait([ao.get() for ao in self._async_outputs], return_when=asyncio.ALL_COMPLETED)
-                    for f in done:
-                        data = f.result()
+                    results = await asyncio.gather(*(ao.get() for ao in self._async_outputs))
+                    for data in results:
                         logger.debug(f"Got output data: {data}")
                         if isinstance(data, Error):
                             error = pb_utils.TritonError(f"steam llm_response, error received: {data.message}")

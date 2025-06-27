@@ -1,15 +1,23 @@
-# nim-templates/.gitlab-ci.yml
+# inference-builder/.gitlab-ci.yml
+include:
+  - local: 'builder/samples/tao/validation/.gitlab-ci.validation.yml'
+  - local: 'deploy/.gitlab-ci.deploy.yml'
 
 # Define stages in order of execution
 stages:
-  - build-builder  # Only runs when build dependencies change
+  - build-builder     # Only runs when build dependencies change
+  - build-deployer    # Only runs when deploy dependencies change
   - build-inference   # Generates tao.tgz package
   - build-docker      # Builds and pushes final NIM container
+  - deploy-test       # For each combination: deploy -> validate -> teardown
+  - deploy            # Deploys the helm chart to the cluster
+  - build-validator   # Builds and pushes validator container
 
 # Global variables used across jobs
 variables:
   # GitLab's container registry URL for this project
   BUILDER_IMAGE: ${CI_REGISTRY_IMAGE}/builder:latest
+  DEPLOYER_IMAGE: ${CI_REGISTRY_IMAGE}/deployer:latest
   NIM_TAO_IMAGE: ${CI_REGISTRY_IMAGE}/nim-tao:${CI_COMMIT_SHA}
   # Cache pip packages between jobs
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
@@ -43,6 +51,25 @@ build_builder_image:
         - .Dockerfile.builder
       when: always
 
+# Build the deployer image
+build_deployer_image:
+  stage: build-deployer
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+    - cd deploy
+    - docker build -t $DEPLOYER_IMAGE -f Dockerfile.deployer .
+    - docker push $DEPLOYER_IMAGE
+  rules:
+    - changes:
+        - deploy/requirements.deployer.sh
+        - deploy/Dockerfile.deployer
+      when: always
+
 # Template for building the inference package (tao.tgz)
 .build_tao_base_template: &build_tao_base_template
   stage: build-inference
@@ -50,7 +77,7 @@ build_builder_image:
   image: $BUILDER_IMAGE
   script:
     - python builder/main.py builder/samples/tao/ds_${FLAVOR}.yaml
-      --server-type fastapi
+      --server-type nim
       -a builder/samples/tao/openapi.yaml
       --no-docker
       -o builder/samples/tao
@@ -73,7 +100,7 @@ build_builder_image:
   <<: *build_tao_base_template
   script:
     - python builder/main.py builder/samples/tao/ds_${FLAVOR}.yaml
-      --server-type fastapi
+      --server-type nim
       -a builder/samples/tao/openapi.yaml
       -v builder/samples/tao/validation/${VALIDATION_MODEL}
       --no-docker
@@ -86,7 +113,7 @@ build_builder_image:
   <<: *build_tao_validation_template
   script:
     - python builder/main.py builder/samples/tao/ds_${FLAVOR}.yaml
-      --server-type fastapi
+      --server-type nim
       -a builder/samples/tao/openapi.yaml
       --no-docker
       -o builder/samples/tao
@@ -154,6 +181,8 @@ build_tao_gdino.val_mgdino:
       fi
     # Login to GitLab container registry
     - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+    # login to nvcr.io
+    # - docker login nvcr.io -u '$oauthtoken' -p $NGC_API_KEY
     # Build using docker compose
     - cd builder/samples
     # Copy the specific flavor's tgz file to tao.tgz for Docker build
@@ -175,6 +204,7 @@ build_tao_gdino.val_mgdino:
     # - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     #   when: manual
     - when: manual   # Always allow manual trigger
+    - when: on_success  # Allow pipeline to continue to next stage
   allow_failure: true  # This makes the job optional for pipeline success
 
 

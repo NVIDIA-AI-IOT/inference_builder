@@ -10,11 +10,9 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import torch
 from pathlib import Path
+import dataclasses
 
 logger = get_logger(__name__)
-
-CHECKPOINTS_DIR = os.getenv("CHECKPOINTS_DIR", Path(__file__).resolve().parent.parent.parent)
-
 
 {% for backend in backends %}
 {{ backend }}
@@ -39,10 +37,12 @@ class GenericInference(InferenceBase):
                 backend_class = DeepstreamBackend
             elif backend_spec[0] == 'polygraphy':
                 backend_class = PolygraphBackend
-            elif backend_spec[0] == 'tensorrt_llm':
-                backend_class = TensorrtLlmBackend
+            elif backend_spec[0] == 'tensorrtllm':
+                backend_class = TensorRTLLMBackend
             elif backend_spec[0] == 'dummy':
                 backend_class = DummyBackend
+            elif backend_spec[0] == 'pytorch':
+                backend_class = PytorchBackend
             else:
                 raise Exception(f"Backend {model_config.backend} not supported")
             backend_instance = backend_class(
@@ -64,6 +64,7 @@ class GenericInference(InferenceBase):
         self._async_executor = ThreadPoolExecutor(max_workers=len(self._outputs))
         # async queues
         self._async_outputs = [asyncio.Queue() for o in self._outputs]
+        self._stop_event = threading.Event()
         logger.info(f"GenericInference {global_config.name} initialized:")
         logger.info(f"Inputs: {[f.o_names for f in self._inputs]}, Outputs:  {[f.o_names for f in self._outputs]}")
 
@@ -72,19 +73,22 @@ class GenericInference(InferenceBase):
         async def async_put(queue, item):
             await queue.put(item)
         def thread_to_async_bridge(thread_queue, async_queue, loop):
-            while True:
-                item = thread_queue.get()
-                asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
-                if not item:
-                    break
+            while not self._stop_event.is_set():
+                try:
+                    item = thread_queue.get()
+                    asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
+                except Empty:
+                    continue
+            logger.info(f"thread_to_async_bridge {thread_queue} stopped")
 
-        logger.info(f"Received request {request}")
+        logger.debug(f"Received request {request}")
         matched = [[n for n in input.in_names if n in request] for input in self._inputs]
         reshuffled = sorted(range(len(matched)), key=lambda x: len(matched[x]), reverse=True)
         for i in reshuffled:
             input = self._inputs[i]
             # select the tensors for the input
-            tensors = { n: request[n] for n in input.in_names if n in request }
+            tensors = { n: request[n] for n in input.in_names if n in request and request[n] is not None }
+
             # the tensors need to be transformed to generic type
             for name in tensors:
                 tensor = tensors[name]
@@ -92,12 +96,7 @@ class GenericInference(InferenceBase):
                 if config is None:
                     logger.warning(f"Invalid input parsed: {name}")
                     continue
-                dims = config['dims']
-                if len(dims) == 1 and dims[0] == 1:
-                    tensor = np.array([tensor])
-                else:
-                    tensor = np.array(tensor)
-                tensors[name] = tensor
+                tensors[name] = np.array(tensor)
             if tensors:
                 logger.debug(f"Injecting tensors {tensors}")
                 input.put(tensors)
@@ -106,19 +105,18 @@ class GenericInference(InferenceBase):
         loop = asyncio.get_event_loop()
         for a_output, output in zip(self._async_outputs, self._outputs):
             self._async_executor.submit(thread_to_async_bridge, output, a_output, loop)
-        while True:
+        while not self._stop_event.is_set():
             try:
                 logger.debug("Waiting for tensors from async queue")
                 response_data = dict()
-                done, _ = await asyncio.wait([ao.get() for ao in self._async_outputs], return_when=asyncio.ALL_COMPLETED)
-                for f in done:
-                    data = f.result()
+                results = await asyncio.gather(*(ao.get() for ao in self._async_outputs))
+                for data in results:
                     logger.debug(f"Got output data: {data}")
                     if isinstance(data, Error):
-                        logger.debug(f"Got Error: {data.message}")
+                        logger.info(f"Got Error: {data.message}")
                         return
                     elif isinstance(data, Stop):
-                        logger.debug(f"Got Stop: {data.reason}")
+                        logger.info(f"Got Stop: {data.reason}")
                         return
                     # collect the output
                     for k, v in data.items():
@@ -131,6 +129,7 @@ class GenericInference(InferenceBase):
 
 
     def finalize(self):
+        self._stop_event.set()
         super().finalize()
 
     def _post_process(self, data: Dict):
@@ -175,6 +174,8 @@ class GenericInference(InferenceBase):
                         value_list.append(v.tolist())
                     elif isinstance(v, torch.Tensor):
                         value_list.append(v.tolist())
+                    elif dataclasses.is_dataclass(v):
+                        value_list.append(dataclasses.asdict(v))
                     else:
                         value_list.append(v)
                 processed[key] = value_list
@@ -183,4 +184,6 @@ class GenericInference(InferenceBase):
                     processed[key] = value.tolist()
                 elif isinstance(value, torch.Tensor):
                     processed[key] = value.tolist()
+                elif dataclasses.is_dataclass(value):
+                    processed[key] = dataclasses.asdict(value)
         return processed

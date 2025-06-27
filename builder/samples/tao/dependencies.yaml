@@ -17,7 +17,7 @@ dependencies:
     - name: "aiofiles"
       version: "23.2.1"
     - name: "aiohttp"
-      version: "3.8.5"
+      version: "3.11.0"
     - name: "annotated-types"
       version: "0.7.0"
     - name: "python-magic"
@@ -31,6 +31,6 @@ dependencies:
     - name: "transformers"
       version: "4.36.2"
   deb:
-    - name: "libyaml-cpp0.7"
+    - name: "libyaml-cpp-dev"
     - name: "pkg-config"
     - name: "cmake"

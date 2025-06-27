@@ -2,7 +2,7 @@
 
 ## Overview
 
-Inference Builder is a tool for generating inference pipelines and integrating them into a microservice automatically. It takes an inference configuration file and an OpenAPI specification as inputs, and in some cases, also requires custom code snippets.
+Inference Builder is a tool for generating inference pipelines and integrating them into a microservice or standalone application automatically. It takes an inference configuration file, an OpenAPI specification while integrated with an HTTP server as inputs, and in some cases, also requires custom code snippets.
 
 The output of the tool is a Python package that can be used to build a microservice container image with a customized Dockerfile.
 
@@ -204,7 +204,6 @@ Input and Output definitions are required both at the top level and model level.
   - TYPE_CUSTOM_DS_IMAGE: Encoded image specificially for Deepstream pipeline
   - TYPE_CUSTOM_DS_MIME: Mime type used by Deepstream pipeline to determine the decoder type
   - TYPE_CUSTOM_DS_METADATA: Structured output data specifically for Deepstream pipeline
-  - TYPE_CUSTOM_DS_PASSTHROUGH: Passthrough data, the DS pipeline will pass it to the output without modification
 - dims: The dimensions of the input or output in the form of a list. Each item in the list specifies the maximum length of the dimension and -1 means it is dynamic.
 - optional(optional): Whether the input or output is optional. By default, it is false.
 - force_cpu(optional): Whether to force the input or output to be on CPU. By default, it is false.

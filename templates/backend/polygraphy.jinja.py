@@ -21,7 +21,6 @@ class PolygraphBackend(ModelBackend):
 
 
     def __call__(self, *args, **kwargs):
-        logger.debug(f"PolygraphBackend {self._model_name} triggerred with  {args if args else kwargs}")
         in_data = stack_tensors_in_dict(args) if args else dict(kwargs)
         for k, v in in_data.items():
             if isinstance(v, np.ndarray):
@@ -31,6 +30,5 @@ class PolygraphBackend(ModelBackend):
             logger.error(f"Not all the expected output in {self._output_names} are not found in the result")
             return
         o_data = { o: result[o] for o in self._output_names}
-        logger.debug(f"PolygraphBackend {self._model_name} generated output: {o_data}")
         yield o_data
 

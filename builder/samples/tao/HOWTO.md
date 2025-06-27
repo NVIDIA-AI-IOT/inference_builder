@@ -29,7 +29,7 @@ Create the docker compose file from the below sample and save it as docker-compo
 ```yaml
 services:
   tao-cv:
-    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-common:rc0
+    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-tao:ddd13060b329506d18db27da780757a8a448f39c
     volumes:
       - '~/.cache/nim:/opt/nim/.cache'
     ipc: host
@@ -179,10 +179,19 @@ Eg:
 
 Make sure the each model sub directory name {NIM_MODEL_NAME} matches that in the custom_values.yaml
 
-#### 2.2 Create image pull secret, if not yet created
+#### 2.2 Create secrets, if not yet created
 ```bash
+# First delete the existing secret if necessary
+microk8s kubectl delete secret ngc-secret
+
 # create secret docker-registry ngc-docker-reg-secret for pulling containers from nvcr.io
-microk8s kubectl create secret docker-registry ngc-docker-reg-secret --docker-server=nvcr.io --docker-username='$oauthtoken' --docker-password=$NGC_CLI_API_KEY
+microk8s kubectl create secret docker-registry ngc-docker-reg-secret --docker-server=nvcr.io --docker-username='$oauthtoken' --docker-password=$NGC_API_KEY
+
+# create secret docker-registry gitlab-docker-reg-secret for pulling containers from gitlab-master.nvidia.com:5005
+microk8s kubectl create secret docker-registry gitlab-docker-reg-secret --docker-server=gitlab-master.nvidia.com:5005 --docker-username=$GITLAB_USERNAME --docker-password=$GITLAB_TOKEN
+
+# ngc CLI key secret, nim to download model
+microk8s kubectl create secret generic ngc-secret --from-literal=ngc-api-key=$NGC_API_KEY
 ```
 
 #### 2.3 Fetch the helm chart from NGC
@@ -414,5 +423,5 @@ $ ngc registry chart push <org_id>/<team_name>/<helm_chart_ngc_page_name>:<new_v
 
 Eg:
 ```bash
-$ ngc registry chart push eevaigoeixww/staging/tao-cv-app:<new_version>
+$ ngc registry chart push eevaigoeixww/dev/tao-cv-app:<new_version>
 ```

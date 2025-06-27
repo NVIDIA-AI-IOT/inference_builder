@@ -19,7 +19,7 @@ import os
 import subprocess
 import validate
 
-ALLOWED_SERVER = ["triton", "fastapi", "nim"]
+ALLOWED_SERVER = ["triton", "fastapi", "nim", "serverless"]
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Main")
@@ -79,6 +79,11 @@ def build_args(parser):
         "--no-docker",
         action="store_true",
         help="Use local OpenAPI Generator instead of Docker for OpenAPI client generation")
+    parser.add_argument(
+        "--test-cases-abs-path",
+        action="store_true",
+        help="Use absolute paths in generated test_cases.yaml"
+    )
 
 def build_tree(server_type, config, temp_dir):
     cookiecutter.main.cookiecutter(
@@ -173,7 +178,12 @@ def build_inference(server_type, config, output_dir: Path):
 
     # create backends and model.py
     backends = []
-    target_dir = triton_model_repo_dir/f"{config.name}"/"1/" if server_type == "triton" else output_dir / "server"
+    if server_type == "serverless":
+        target_dir = output_dir / "app"
+    elif server_type == "triton":
+        target_dir = triton_model_repo_dir/f"{config.name}"/"1/"
+    else:
+        target_dir = output_dir / "server"
     for backend in t_backends:
         backend_tpl = jinja_env.get_template(f"backend/{backend}.jinja.py")
         backends.append(backend_tpl.render(server_type=server_type))
@@ -186,7 +196,14 @@ def build_inference(server_type, config, output_dir: Path):
         with open (target_dir/"model.py", 'w') as o:
             o.write(output)
 
-
+def build_serverless(name: str, output_dir: Path):
+    output_dir = output_dir / "app"
+    tpl_dir = get_resource_path("templates")
+    jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
+    app_tpl = jinja_env.get_template("serverless/inference.jinja.py")
+    output = app_tpl.render(service_name=name)
+    with open(output_dir/"inference.py", 'w') as f:
+        f.write(output)
 
 def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
     output_dir = output_dir / "server"
@@ -226,7 +243,7 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
             responders=responders,
             triton=triton_config
         )
-    elif server_type == "fastapi":
+    elif server_type == "fastapi" or server_type == "nim":
         output = svr_tpl.render(
             service_name=model_name,
             responders=responders
@@ -236,11 +253,13 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
     with open(output_dir/"responder.py", 'w') as f:
         f.write(output)
 
+
 def generate_configuration(config, tree):
     def encode_templates(templates):
         encoded_templates = dict()
         for key, value in templates.items():
-            # these are json templates and need be encoded before being embeded as yaml strings
+            # these are json templates and need be encoded before being
+            # embeded as yaml strings
             if isinstance(value, str):
                 encoded_templates[key] = base64.b64encode(value.encode())
             else:
@@ -248,16 +267,27 @@ def generate_configuration(config, tree):
         return encoded_templates
     # base64 encode the templates if found in the config
     config_map = OmegaConf.to_container(config)
-    try:
-        for responder in config_map["server"]["responders"].values():
-            input_templates = responder.get("requests", None)
-            output_templates = responder.get("responses", None)
-            if input_templates:
-                responder["requests"] = encode_templates(input_templates)
-            if output_templates:
-                responder["responses"] = encode_templates(output_templates)
-    except ConfigKeyError:
-        raise ValueError("Server config error: responders not found")
+    if "input" not in config_map:
+        config_map["input"] = []
+        for m in config_map["models"]:
+            for i in m["input"]:
+                config_map["input"].append(i)
+    if "output" not in config_map:
+        config_map["output"] = []
+        for m in config_map["models"]:
+            for o in m["output"]:
+                config_map["output"].append(o)
+    if "server" in config_map:
+        try:
+            for responder in config_map["server"]["responders"].values():
+                input_templates = responder.get("requests", None)
+                output_templates = responder.get("responses", None)
+                if input_templates:
+                    responder["requests"] = encode_templates(input_templates)
+                if output_templates:
+                    responder["responses"] = encode_templates(output_templates)
+        except ConfigKeyError:
+            raise ValueError("Server config error: responders not found")
     # write the config to a python file
     tpl_dir = get_resource_path("templates")
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
@@ -272,7 +302,10 @@ def main(args):
     config = OmegaConf.load(args.config)
     with tempfile.TemporaryDirectory() as temp_dir:
         tree = build_tree(args.server_type, config, temp_dir)
-        build_server(args.server_type, config.name, args.api_spec, OmegaConf.to_container(config.server), tree)
+        if args.server_type == "serverless":
+            build_serverless(config.name, tree)
+        else:
+            build_server(args.server_type, config.name, args.api_spec, OmegaConf.to_container(config.server), tree)
         build_inference(args.server_type, config, tree)
         generate_configuration(config, tree)
         if not args.exclude_lib :
@@ -293,7 +326,7 @@ def main(args):
             try:
                 validation_dir = Path(args.validation_dir).resolve()
                 api_spec_path = Path(args.api_spec.name).resolve()
-                if validate.build_validation(api_spec_path, validation_dir, not args.no_docker):
+                if validate.build_validation(api_spec_path, validation_dir, not args.no_docker, args.test_cases_abs_path):
                     logger.info("✓ Successfully built validation")
                 else:
                     logger.error("✗ Failed to build validation")
