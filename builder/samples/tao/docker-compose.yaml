@@ -1,6 +1,6 @@
 services:
   tao-cv:
-    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/ms-tao-tao:beeaf27e8365ca124fa7ea1b11512aba7874bf01
+    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/ms-tao-tao:d6ab14e1e911fb4b53f72b7def0beceb9fe598be
     volumes:
       - '~/.cache/nim:/workspace/.cache'
       # - './validation/rtdetr/model_manifest.yaml:/opt/configs/model_manifest.rtdetr.yaml:ro'
@@ -18,11 +18,11 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 0
-      NIM_MODEL_NAME: fm_rtdetr
+      TAO_MODEL_NAME: fm_rtdetr
       # NGC_API_KEY: ${NGC_API_KEY}
       # NIM_MANIFEST_PATH: /opt/configs/model_manifest.rtdetr.yaml
   tao-cv-gdino:
-    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/ms-tao-gdino:ac691407825a4e809deb49f3a95123a0888a9664
+    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/ms-tao-gdino:d6ab14e1e911fb4b53f72b7def0beceb9fe598be
     volumes:
       - '~/.cache/nim:/workspace/.cache'
       # - './validation/rtdetr/model_manifest.yaml:/opt/configs/model_manifest.rtdetr.yaml:ro'
@@ -40,9 +40,9 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 0
-      NIM_MODEL_NAME: gdino
+      TAO_MODEL_NAME: gdino
   tao-cv-changenet:
-    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/ms-tao-changenet:beeaf27e8365ca124fa7ea1b11512aba7874bf01
+    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/ms-tao-changenet:d6ab14e1e911fb4b53f72b7def0beceb9fe598be
     volumes:
       - '~/.cache/nim:/workspace/.cache'
       # - './validation/rtdetr/model_manifest.yaml:/opt/configs/model_manifest.rtdetr.yaml:ro'
@@ -60,4 +60,4 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 0
-      NIM_MODEL_NAME: changenet
+      TAO_MODEL_NAME: changenet

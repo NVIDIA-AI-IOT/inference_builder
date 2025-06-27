@@ -82,10 +82,10 @@ build_deployer_image:
       --no-docker
       -o builder/samples/tao
       -t
-    - mv builder/samples/tao/tao.tgz builder/samples/tao/tao.${FLAVOR}-${SERVER_TYPE}.tgz
+    - mv builder/samples/tao/tao.tgz builder/samples/tao/tao.${FLAVOR}.${SERVER_TYPE}.tgz
   artifacts:
     paths:
-      - builder/samples/tao/tao.${FLAVOR}-${SERVER_TYPE}.tgz
+      - builder/samples/tao/tao.${FLAVOR}.${SERVER_TYPE}.tgz
     expire_in: 1 week
   rules:
     - changes:
@@ -95,120 +95,43 @@ build_deployer_image:
         - .gitlab-ci.yml
         - "!**/*.md"  # Exclude all markdown files using ! prefix
 
-# Template that extends base with validation build
-.build_tao_validation_template: &build_tao_validation_template
-  <<: *build_tao_base_template
-  script:
-    - python builder/main.py builder/samples/tao/ds_${FLAVOR}.yaml
-      --server-type ${SERVER_TYPE}
-      -a builder/samples/tao/openapi.yaml
-      -v builder/samples/tao/validation/${VALIDATION_MODEL}
-      --no-docker
-      -o builder/samples/tao
-      -t
-    - mv builder/samples/tao/tao.tgz builder/samples/tao/tao.${FLAVOR}-${SERVER_TYPE}.tgz
-
-# Template specifically for GDINO builds that need processors.py
-.build_tao_gdino_validation_template: &build_tao_gdino_validation_template
-  <<: *build_tao_validation_template
-  script:
-    - python builder/main.py builder/samples/tao/ds_${FLAVOR}.yaml
-      --server-type ${SERVER_TYPE}
-      -a builder/samples/tao/openapi.yaml
-      --no-docker
-      -o builder/samples/tao
-      -t
-      -v builder/samples/tao/validation/${VALIDATION_MODEL}
-      -c builder/samples/tao/processors.py
-    - mv builder/samples/tao/tao.tgz builder/samples/tao/tao.${FLAVOR}-${SERVER_TYPE}.tgz
-
 
 # NIM package: Basic TAO builds with different validations
-build_tao_common.val_rtdetr:
-  <<: *build_tao_validation_template
+build_tao_common_nim:
+  <<: *build_tao_base_template
   variables:
     FLAVOR: "tao"
-    VALIDATION_MODEL: "rtdetr"
     SERVER_TYPE: "nim"
 
-build_tao_common.val_cls:
-  <<: *build_tao_validation_template
-  variables:
-    FLAVOR: "tao"
-    VALIDATION_MODEL: "cls"
-    SERVER_TYPE: "nim"
-
-build_tao_common.val_seg:
-  <<: *build_tao_validation_template
-  variables:
-    FLAVOR: "tao"
-    VALIDATION_MODEL: "seg"
-    SERVER_TYPE: "nim"
-
-# Changenet build (no validation)
-build_tao_changenet:
+build_tao_changenet_nim:
   <<: *build_tao_base_template
   variables:
     FLAVOR: "changenet"
     SERVER_TYPE: "nim"
 
-# GDINO builds with validations
-build_tao_gdino.val_gdino:
-  <<: *build_tao_gdino_validation_template
+build_tao_gdino_nim:
+  <<: *build_tao_base_template
   variables:
     FLAVOR: "gdino"
-    VALIDATION_MODEL: "gdino"
-    SERVER_TYPE: "nim"
-
-build_tao_gdino.val_mgdino:
-  <<: *build_tao_gdino_validation_template
-  variables:
-    FLAVOR: "gdino"
-    VALIDATION_MODEL: "mgdino"
     SERVER_TYPE: "nim"
 
 # MS package: Basic TAO builds with different validations
-build_tao_common_fastapi.val_rtdetr:
-  <<: *build_tao_validation_template
+build_tao_common_fastapi:
+  <<: *build_tao_base_template
   variables:
     FLAVOR: "tao"
-    VALIDATION_MODEL: "rtdetr"
     SERVER_TYPE: "fastapi"
 
-build_tao_common_fastapi.val_cls:
-  <<: *build_tao_validation_template
-  variables:
-    FLAVOR: "tao"
-    VALIDATION_MODEL: "cls"
-    SERVER_TYPE: "fastapi"
-
-build_tao_common_fastapi.val_seg:
-  <<: *build_tao_validation_template
-  variables:
-    FLAVOR: "tao"
-    VALIDATION_MODEL: "seg"
-    SERVER_TYPE: "fastapi"
-
-# Changenet build with FastAPI (no validation)
 build_tao_changenet_fastapi:
   <<: *build_tao_base_template
   variables:
     FLAVOR: "changenet"
     SERVER_TYPE: "fastapi"
 
-# GDINO builds with FastAPI validations
-build_tao_gdino_fastapi.val_gdino:
-  <<: *build_tao_gdino_validation_template
+build_tao_gdino_fastapi:
+  <<: *build_tao_base_template
   variables:
     FLAVOR: "gdino"
-    VALIDATION_MODEL: "gdino"
-    SERVER_TYPE: "fastapi"
-
-build_tao_gdino_fastapi.val_mgdino:
-  <<: *build_tao_gdino_validation_template
-  variables:
-    FLAVOR: "gdino"
-    VALIDATION_MODEL: "mgdino"
     SERVER_TYPE: "fastapi"
 
 # Template for building and pushing the final container (NIM or MS)
@@ -235,7 +158,7 @@ build_tao_gdino_fastapi.val_mgdino:
     # Build using docker compose
     - cd builder/samples
     # Copy the specific flavor's tgz file to tao.tgz for Docker build
-    - cp tao/tao.${FLAVOR}-${SERVER_TYPE}.tgz tao/tao.tgz
+    - cp tao/tao.${FLAVOR}.${SERVER_TYPE}.tgz tao/tao.tgz
     # tao.tgz is copied in Dockerfile, no need to extract
     - docker compose build --build-arg CACHE_BUSTER="$CI_COMMIT_SHA" ${DOCKER_TARGET}
     # Tag and push to registry
@@ -266,8 +189,7 @@ build_docker_common_nim:
     IMAGE_TAG_PREFIX: "nim-tao"
     SERVER_TYPE: "nim"
   dependencies:
-    - build_tao_common.val_rtdetr
-    - build_tao_common.val_cls
+    - build_tao_common_nim
 
 build_docker_changenet_nim:
   <<: *build_docker_template_tao
@@ -277,7 +199,7 @@ build_docker_changenet_nim:
     IMAGE_TAG_PREFIX: "nim-tao"
     SERVER_TYPE: "nim"
   dependencies:
-    - build_tao_changenet
+    - build_tao_changenet_nim
 
 build_docker_gdino_nim:
   <<: *build_docker_template_tao
@@ -287,8 +209,7 @@ build_docker_gdino_nim:
     IMAGE_TAG_PREFIX: "nim-tao"
     SERVER_TYPE: "nim"
   dependencies:
-    - build_tao_gdino.val_gdino
-    - build_tao_gdino.val_mgdino
+    - build_tao_gdino_nim
 
 
 # Docker builds for each flavor as MS
@@ -300,8 +221,7 @@ build_docker_common_ms:
     IMAGE_TAG_PREFIX: "ms-tao"
     SERVER_TYPE: "fastapi"
   dependencies:
-    - build_tao_common.val_rtdetr
-    - build_tao_common.val_cls
+    - build_tao_common_fastapi
 
 build_docker_changenet_ms:
   <<: *build_docker_template_tao
@@ -311,7 +231,7 @@ build_docker_changenet_ms:
     IMAGE_TAG_PREFIX: "ms-tao"
     SERVER_TYPE: "fastapi"
   dependencies:
-    - build_tao_changenet
+    - build_tao_changenet_fastapi
 
 build_docker_gdino_ms:
   <<: *build_docker_template_tao
@@ -321,8 +241,7 @@ build_docker_gdino_ms:
     IMAGE_TAG_PREFIX: "ms-tao"
     SERVER_TYPE: "fastapi"
   dependencies:
-    - build_tao_gdino.val_gdino
-    - build_tao_gdino.val_mgdino
+    - build_tao_gdino_fastapi
 
 # Cache pip packages between jobs
 cache:
