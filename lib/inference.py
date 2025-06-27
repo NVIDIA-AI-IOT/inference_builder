@@ -19,6 +19,7 @@ from pyservicemaker import Pipeline, as_tensor
 from pyservicemaker.utils import MediaExtractor, MediaChunk
 import torch
 from .asset_manager import AssetManager
+import time
 
 logger = get_logger(__name__)
 
@@ -40,6 +41,8 @@ py_datatype_mapping = {
     "TYPE_CUSTOM_BINARY_URLS": str,
     "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
     "TYPE_CUSTOM_BINARY_BASE64": str,
+    "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": str,
+    "TYPE_CUSTOM_VIDEO_ASSETS": str
 }
 
 np_datatype_mapping = {
@@ -229,6 +232,88 @@ class DataFlow:
     def get(self):
         return self._queue.get(timeout=self._timeout)
 
+    def stop(self):
+        self._queue.put(Stop("Shutdown"))
+
+    def parse_asset_string(self, asset: str):
+        pieces = asset.split("?")
+        asset = pieces[0]
+        params = {}
+        if len(pieces) > 1:
+            query_string = pieces[1]
+            query_params = query_string.split("&")
+            for param in query_params:
+                key, value = param.split("=")
+                params[key] = value
+        return asset, params
+
+
+class VideoInputDataFlow(DataFlow):
+    """A data flow for live stream data"""
+    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=None):
+        super().__init__(configs, tensor_names, True, False, timeout)
+        self._video_tensor_type = key_tensor_type
+        self._video_tensor_names = []
+        for tensor_name in tensor_names:
+            config = next((c for c in configs if c["name"] == tensor_name[0]), None)
+            if config and config["data_type"] == key_tensor_type:
+                self._video_tensor_names.append(tensor_name[1])
+
+    def _process_custom_data(self, tensor: np.ndarray, data_type: str):
+        logger.debug(f"LiveStreamDataFlow._process_custom_data: {data_type}")
+        if data_type == self._video_tensor_type:
+            return self._process_live_stream(tensor)
+        else:
+            return super()._process_custom_data(tensor, data_type)
+
+    def _process_live_stream(self, assets: np.ndarray):
+        logger.debug(f"LiveStreamDataFlow._process_live_stream: {assets}")
+        media_chunks = []
+        results = []
+        for asset in assets:
+            asset_manager = AssetManager()
+            asset_id, params = self.parse_asset_string(asset)
+            asset = asset_manager.get_asset(asset_id)
+            if asset:
+                n_frames = int(params.get("frames", None))
+                start = int(params.get("start", 0))
+                end = int(params.get("end", asset.duration))
+                interval = (end - start) / n_frames if n_frames else 0
+                media_chunks.append(MediaChunk(
+                    asset.path,
+                    start_pts=start,
+                    duration=(end - start),
+                    interval=interval
+                ))
+            else:
+                logger.error(f"Asset not found: {asset_id}")
+                return results
+        with MediaExtractor(media_chunks, n_thread=1) as media_extractor:
+            qs = media_extractor()
+            for q in qs:
+                tensors = []
+                while True:
+                    try:
+                        frame = q.get(timeout=10.0)
+                        if frame is None:
+                            logger.info("Duration reached")
+                            break
+                        tensors.append(frame.tensor)
+                    except Empty:
+                        logger.info("EOS on live streams")
+                        break
+                results.append(tensors)
+                # TODO WAR on pyservicemaker error
+                time.sleep(0)
+        return results
+
+    def _is_collected_valid(self, collected: Dict):
+        result = super()._is_collected_valid(collected)
+        if not result:
+            return False
+        return all([n in collected for n in self._video_tensor_names])
+
+
 class VideoFrameSamplingDataFlow(DataFlow):
     """A data flow for video frame sampling"""
     def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=None):
@@ -256,18 +341,24 @@ class VideoFrameSamplingDataFlow(DataFlow):
         results = []
         for asset in assets:
             asset_manager = AssetManager()
-            asset_id, params = self._parse_asset_string(asset)
+            asset_id, params = self.parse_asset_string(asset)
             asset = asset_manager.get_asset(asset_id)
             if asset:
-                n_frames = params.get("frames", None)
-                interval = asset.duration / int(n_frames) if n_frames else 0
+                n_frames = int(params.get("frames", None))
+                start = int(params.get("start", 0))
+                end = int(params.get("end", asset.duration))
+                interval = (end - start) / n_frames if n_frames else 0
                 chunk = MediaChunk(
                     asset.path,
-                    duration=asset.duration,
+                    start_pts=start,
+                    duration=(end - start),
                     interval=interval
                 )
                 qs.append(self._media_extractor.append(chunk))
                 expected_frames.append(int(n_frames) if n_frames else None)
+            else:
+                logger.error(f"Asset not found: {asset_id}")
+                return results
 
         for q, expected in zip(qs, expected_frames):
             frames = []
@@ -295,70 +386,9 @@ class VideoFrameSamplingDataFlow(DataFlow):
             return False
         return all([n in collected for n in self._video_tensor_names])
 
-    def _parse_asset_string(self, asset: str):
-        pieces = asset.split("?")
-        asset = pieces[0]
-        params = {}
-        if len(pieces) > 1:
-            query_string = pieces[1]
-            query_params = query_string.split("&")
-            for param in query_params:
-                key, value = param.split("=")
-                params[key] = value
-        return asset, params
-
-class VideoInputDataFlow(DataFlow):
-    """A data flow for video data"""
-    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=None):
-        super().__init__(configs, tensor_names, True, False, timeout)
+    def stop(self):
         self._media_extractor = None
-        self._video_tensor_type = key_tensor_type
-
-    def _process_custom_data(self, tensor: np.ndarray, data_type: str):
-        logger.debug(f"VideoInputDataFlow._process_custom_data: {data_type}")
-        if data_type == self._video_tensor_type:
-            return self._process_video_assets(tensor)
-        else:
-            return super()._process_custom_data(tensor, data_type)
-
-    def _is_collected_valid(self, collected: Dict):
-        result = super()._is_collected_valid(collected)
-        if not result:
-            return False
-        return any([isinstance(v, types.GeneratorType) for k, v in collected.items()])
-
-    def _process_video_assets(self, assets: np.ndarray):
-        urls = []
-        duration = -1
-        for asset in assets:
-            asset_manager = AssetManager()
-            asset = asset_manager.get_asset(asset)
-            if asset:
-                urls.append(asset.path)
-                if duration == -1:
-                    duration = asset.duration
-                elif duration != asset.duration:
-                    logger.error(f"Batched video assets must have the same duration!")
-                    return
-        if not urls:
-            logger.error(f"No video assets found: {assets}")
-            return
-        self._media_extractor = MediaExtractor([MediaChunk(url, duration=duration) for url in urls])
-        qs = self._media_extractor()
-        try:
-            while True:
-                data = []
-                for q in qs:
-                    frame = q.get(timeout=1.0)
-                    if frame is None:
-                        logger.info(f"Duration reached: {assets}")
-                        break
-                    data.append(frame.tensor)
-                yield data
-        except Empty:
-            logger.info(f"EOS on videos: {assets}")
-        self._media_extractor = None
-
+        super().stop()
 class ImageInputDataFlow(DataFlow):
     """A data flow for image data"""
     def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str,timeout=None):
@@ -439,7 +469,7 @@ inbound_dataflow_mapping = {
     "TYPE_CUSTOM_IMAGE_BASE64": ImageInputDataFlow,
     "TYPE_CUSTOM_IMAGE_ASSETS": ImageInputDataFlow,
     "TYPE_CUSTOM_VIDEO_ASSETS": VideoInputDataFlow,
-    "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": VideoFrameSamplingDataFlow,
+    "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": VideoFrameSamplingDataFlow
 }
 class ModelBackend(ABC):
     """Interface for standardizing the model backend """
@@ -536,6 +566,9 @@ class Collector(ABC):
     def collect(self):
         raise NotImplementedError("Not implemented")
 
+    def stop(self):
+        raise NotImplementedError("Not implemented")
+
 class SingleFlowCollector(Collector):
     """SingleFlowCollector is a collector for a single data flow"""
     def __init__(self, data_flow: DataFlow):
@@ -543,6 +576,9 @@ class SingleFlowCollector(Collector):
 
     def collect(self):
         return self._data_flow.get()
+
+    def stop(self):
+        pass
 
 class AggregationFlowCollector(Collector):
     """AggregationFlowCollector is a collector aggregating multiple data flows"""
@@ -580,9 +616,14 @@ class AggregationFlowCollector(Collector):
             elif any([isinstance(c, Error) for c in completed]):
                 self._queue.put(Error("One or more data flows ended in error"))
 
-    def __del__(self):
+    def stop(self):
+        logger.info(f"AggregationFlowCollector destructing...")
         self._stop_event.set()
+        for data_flow in self._data_flows:
+            data_flow.stop()
         self._executor.shutdown(wait=True)
+        self._queue.put(Stop("Shutdown"))
+        logger.info(f"AggregationFlowCollector destructed")
 
 class MultiFlowCollector(Collector):
     """MultiFlowCollector is a collector for multiple data flows"""
@@ -629,9 +670,14 @@ class MultiFlowCollector(Collector):
                 continue
 
 
-    def __del__(self):
+    def stop(self):
+        logger.info(f"MultiFlowCollector destructing...")
         self._stop_event.set()
+        for data_flow in self._data_flows:
+            data_flow.stop()
         self._executor.shutdown(wait=True)
+        self._queue.put(Stop("Shutdown"))
+        logger.info(f"MultiFlowCollector destructed")
 
 class ModelOperator:
     """An model operator runs a single model"""
@@ -646,6 +692,7 @@ class ModelOperator:
         self._model_config = model_config
         self._backend = None
         self._stop_event = threading.Event()
+        self._collector = None
 
     @property
     def model_name(self):
@@ -721,18 +768,18 @@ class ModelOperator:
                         raise Exception("Invalid Processor")
         # backend loop
         self._backend = model_backend
-        collector = self._create_collector()
+        self._collector = self._create_collector()
         while not self._stop_event.is_set():
             try:
                 # collect input data until Stop is received
-                data = collector.collect()
+                data = self._collector.collect()
                 if isinstance(data, Stop) or isinstance(data, Error):
                     # pass the error or stop message downstream
                     for out in self._out:
                         logger.debug(f"Passing error or stop message to {out.in_names}")
                         out.put(data)
                     continue
-                logger.info(f"Input collected from {collector}: {data}")
+                logger.info(f"Input collected from {self._collector.__class__.__name__}: {data}")
 
                 # convert data to args and kwargs based on if explicit batching is required
                 args = []
@@ -811,10 +858,21 @@ class ModelOperator:
             except Exception as e:
                 logger.exception(e)
                 out.put(Error(str(e)))
+        logger.info(f"Model operator {self._model_name} stopped")
 
     def stop(self):
         logger.info(f"Model operator {self._model_name} is stopping")
         self._stop_event.set()
+        if self._collector is not None:
+            self._collector.stop()
+        self._in.clear()
+        self._out.clear()
+        self._preprocessors.clear()
+        self._postprocessors.clear()
+        self._backend = None
+        self._stop_event = None
+        self._collector = None
+        logger.info(f"Model operator {self._model_name} stopped")
 
     def _preprocess(self, args: List):
         # go through the preprocess chain

@@ -114,6 +114,38 @@ class AssetManager:
 
         return self._asset_map[asset_id]
 
+    def add_live_stream(self, url: str, description="", username="", password="") -> Asset | None:
+        asset_id = str(uuid.uuid4())
+        while asset_id in self._asset_map:
+            asset_id = str(uuid.uuid4())
+        asset_dir = os.path.join(self._asset_dir, asset_id)
+        try:
+            os.makedirs(asset_dir)
+        except Exception as e:
+            logger.error(f"Failed to create asset directory: {asset_dir}")
+            return None
+
+        with open(os.path.join(asset_dir, "info.json"), "w") as f:
+            json.dump(
+                {
+                    "assetId": asset_id,
+                    "path": url,
+                    "fileName": "",
+                    "mimeType": "",
+                    "duration": 0,
+                    "username": username,
+                    "password": password,
+                    "description": description,
+                    "size": 0
+                }, f)
+
+        self._asset_map[asset_id] = Asset.fromdir(asset_dir)
+
+        logger.info(f"Added live stream - asset-id: {asset_id} url: {url}")
+
+        return self._asset_map[asset_id]
+
+
     def list_assets(self):
         return list(self._asset_map.values())
 
