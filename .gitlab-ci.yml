@@ -95,6 +95,18 @@ build_deployer_image:
         - .gitlab-ci.yml
         - "!**/*.md"  # Exclude all markdown files using ! prefix
 
+# Template specifically for GDINO builds that need processors.py
+.build_tao_gdino_validation_template: &build_tao_gdino_validation_template
+  <<: *build_tao_base_template
+  script:
+    - python builder/main.py builder/samples/tao/ds_${FLAVOR}.yaml
+      --server-type ${SERVER_TYPE}
+      -a builder/samples/tao/openapi.yaml
+      --no-docker
+      -o builder/samples/tao
+      -t
+      -c builder/samples/tao/processors.py
+    - mv builder/samples/tao/tao.tgz builder/samples/tao/tao.${FLAVOR}-${SERVER_TYPE}.tgz
 
 # NIM package: Basic TAO builds with different validations
 build_tao_common_nim:
@@ -110,7 +122,7 @@ build_tao_changenet_nim:
     SERVER_TYPE: "nim"
 
 build_tao_gdino_nim:
-  <<: *build_tao_base_template
+  <<: *build_tao_gdino_validation_template
   variables:
     FLAVOR: "gdino"
     SERVER_TYPE: "nim"
