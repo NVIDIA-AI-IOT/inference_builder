@@ -106,7 +106,7 @@ build_deployer_image:
       -o builder/samples/tao
       -t
       -c builder/samples/tao/processors.py
-    - mv builder/samples/tao/tao.tgz builder/samples/tao/tao.${FLAVOR}-${SERVER_TYPE}.tgz
+    - mv builder/samples/tao/tao.tgz builder/samples/tao/tao.${FLAVOR}.${SERVER_TYPE}.tgz
 
 # NIM package: Basic TAO builds with different validations
 build_tao_common_nim:
