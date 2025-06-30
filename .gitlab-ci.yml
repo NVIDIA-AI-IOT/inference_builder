@@ -141,7 +141,7 @@ build_tao_changenet_fastapi:
     SERVER_TYPE: "fastapi"
 
 build_tao_gdino_fastapi:
-  <<: *build_tao_base_template
+  <<: *build_tao_gdino_validation_template
   variables:
     FLAVOR: "gdino"
     SERVER_TYPE: "fastapi"
