@@ -26,7 +26,7 @@ class VilaMuxer:
     name = "vila-muxer"
     def __init__(self, config):
         model_home = config["model_home"]
-        llm_config_path = os.path.join(model_home, "fp16", "1-gpu", "config.json")
+        llm_config_path = os.path.join(model_home, "int4_awq", "1-gpu", "config.json")
         with open(llm_config_path, "r") as f:
             config = json.load(f)
             self.vocab_size = config["pretrained_config"]["vocab_size"]

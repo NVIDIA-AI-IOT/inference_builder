@@ -7,39 +7,19 @@ set -e
 # ./api_client.sh [stream-option] [url]
 
 function usage() {
-  echo "$0 [stream_option] http://ip:80003/inference png_file, "
-  echo "    stream_option: select [true, false] "
-  echo "    ip: the IP address of the conatienr "
-  echo "    png_file: path to .png file, default [test.png] "
+  echo "$0 http://ip:port/inference image_file, "
+  echo "    ip: the IP address of the container "
+  echo "    image_file: path to image file"
 
 }
 
-if [[ $# -ge 1 && $1 == "--help" ]]; then
+if [[ $# -lt 2 ]]; then
   usage
   exit 0
 fi
 
-stream=false
-
-if [ $# -ge 1 ]; then
-  stream=$1
-fi
-
-url="http://localhost:8803/inference"
-if [ $# -ge 2 ]; then
-  url=$2
-fi
-
-if [ "$stream" = true ]; then
-    accept_header='Accept: text/event-stream'
-else
-    accept_header='Accept: application/json'
-fi
-
-image="test.png"
-if [ $# -ge 3 ]; then
-  image=$3
-fi
+url=$1
+image=$2
 
 image_b64=$( base64 $image )
 
@@ -54,10 +34,10 @@ echo '{
   "temperature": 0.20,
   "top_p": 0.70,
   "seed": 0,
-  "stream": '$stream'
+  "stream": false
 }' > payload.json
 
 curl -N -X POST $url \
   -H "Content-Type: application/json" \
-  -H "$accept_header" \
+  -H "Accept: application/json" \
   -d @payload.json

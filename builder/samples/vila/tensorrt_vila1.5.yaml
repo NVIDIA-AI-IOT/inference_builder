@@ -135,7 +135,7 @@ models:
         dims: [ -1 ]
     parameters:
       gpt_model_type: "inflight_fused_batching"
-      gpt_model_path: "/config/models/vila/vila1.5-13b/fp16/1-gpu/"
+      gpt_model_path: "/config/models/vila/vila1.5-13b/int4_awq/1-gpu/"
     preprocessors:
       - kind: "custom"
         name: "vila-tokenizer"
