@@ -1,8 +1,13 @@
     async def {{ name }}(self, request, body, **kwargs):
         accept = request.headers.get("accept", "")
         streaming = "application/x-ndjson" in accept
-        in_data = self.process_request("{{ name }}", body)
-        self.logger.debug(f"request processed as {in_data}")
+        try:
+            in_data = self.process_request("{{ name }}", body)
+            self.logger.debug(f"request processed as {in_data}")
+        except Exception as e:
+            self.logger.error(f"Request processing failed: {type(e).__name__}: {e}")
+            return 400, str(e)
+
         try:
             if streaming:
                 # If streaming, yield results as they are processed
