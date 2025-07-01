@@ -23,7 +23,7 @@ if [ -z "${PARALLEL_SIZE}" ]; then
     PARALLEL_SIZE=4
 fi
 
-MAX_BATCH_SIZE=$(jq -r '.build_config.max_batch_size' /config/models/vila/vila1.5-13b/fp16/${TP_SIZE}-gpu/config.json)
+MAX_BATCH_SIZE=$(jq -r '.build_config.max_batch_size' /config/models/vila/vila1.5-13b/int4_awq/${TP_SIZE}-gpu/config.json)
 
 echo '
 instance_group [
@@ -48,7 +48,7 @@ if [ -z "${TRITION_VERBOSE}" ]; then
     TRITION_VERBOSE=0
 fi
 
-world_size=$(jq -r '.pretrained_config.mapping.world_size' /config/models/vila/vila1.5-13b/fp16/${TP_SIZE}-gpu/config.json)
+world_size=$(jq -r '.pretrained_config.mapping.world_size' /config/models/vila/vila1.5-13b/int4_awq/${TP_SIZE}-gpu/config.json)
 export WORLD_SIZE=$world_size
 
 if [ $world_size -eq 1 ]; then
