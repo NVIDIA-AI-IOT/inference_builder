@@ -857,7 +857,9 @@ class ModelOperator:
                 continue
             except Exception as e:
                 logger.exception(e)
-                out.put(Error(str(e)))
+                for out in self._out:
+                    out.put(Error(str(e)))
+
         logger.info(f"Model operator {self._model_name} stopped")
 
     def stop(self):
