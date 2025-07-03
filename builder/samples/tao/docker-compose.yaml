@@ -22,7 +22,7 @@ services:
       # NGC_API_KEY: ${NGC_API_KEY}
       # NIM_MANIFEST_PATH: /opt/configs/model_manifest.rtdetr.yaml
   tao-cv-gdino:
-    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/ms-tao-gdino:1b7d2cc6f5b47a039f56d7c2711dc7a7b38f0b9e
+    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/ms-tao-gdino:096de54b837d8e9a71dc29fe7946d1414e7ed760
     volumes:
       - '~/.cache/nim:/workspace/.cache'
       # - './validation/rtdetr/model_manifest.yaml:/opt/configs/model_manifest.rtdetr.yaml:ro'
