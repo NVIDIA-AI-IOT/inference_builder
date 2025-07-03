@@ -35,12 +35,12 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 0
-  nim-nvclip:
+  ms-nvclip:
     build:
       context: nvclip
-      target: nim_builder_base
+      target: builder_base
       dockerfile: Dockerfile
-    image: nim-nvclip
+    image: ms-nvclip
     volumes:
       - '~/.cache/nim:/opt/nim/.cache'
     ipc: host
