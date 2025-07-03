@@ -1,5 +1,5 @@
 name: "changenet"
-model_repo: /opt/nim/model_repo/
+model_repo: /workspace/model_repo/
 
 input:
   - name: "reference_image"
@@ -36,7 +36,7 @@ server:
           }
 
 models:
-- name: trt_changenet
+- name: visual_changenet
   backend: "triton/tensorrt"
   max_batch_size: 1
   parameters:
@@ -86,6 +86,6 @@ models:
 # Model name is optional, so <:["TENSOR_NAME1", "TENSOR_NAME2", ...]> is valid
 # Tensor list is optional too and <my_model:> is valid
 routes: {
-  ':["reference_image", "test_image"]': 'trt_changenet',
-  'trt_changenet:["output_final"]': ':["output"]',
+  ':["reference_image", "test_image"]': 'visual_changenet',
+  'visual_changenet:["output_final"]': ':["output"]',
 }

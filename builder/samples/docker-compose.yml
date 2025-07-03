@@ -58,15 +58,14 @@ services:
     environment:
       NGC_API_KEY: ""
 #      DEBUG: 1
-  nim-changenet:
-    user: nvs:1000
+  ms-changenet:
     build:
       context: changenet
-      target: nim_final
+      target: builder_base
       dockerfile: Dockerfile
-    image: nim-changenet
+    image: ms-changenet
     volumes:
-      - '~/.cache/nim:/opt/nim/.cache'
+      - '~/.cache/nim/model-repo/visual_changenet:/workspace/model_repo/visual_changenet/1'
     ipc: host
     # init: true
     ports:
