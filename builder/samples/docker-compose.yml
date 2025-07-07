@@ -42,7 +42,7 @@ services:
       dockerfile: Dockerfile
     image: ms-nvclip
     volumes:
-      - '~/.cache/nim:/opt/nim/.cache'
+      - '~/.cache/nim/model-repo/:/workspace/model-repo'
     ipc: host
     # init: true
     ports:
