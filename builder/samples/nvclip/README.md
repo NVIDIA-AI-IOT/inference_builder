@@ -20,10 +20,10 @@ docker build -t trt-optimizer builder/samples/nvclip/optimizer
 
 Then generate the engine files using the trt-optimizer
 
-```
+```bash
 docker run -it --rm --gpus all \
            -v ~/.cache/nim/model-repo/:/workspace/checkpoints/optimized \
-           -v {Your downloaded checkpoints}/multi_modal_foundation_models_vNVCLIP_224_700M_ViTH14:/workspace/checkpoints/baseline \
+           -v {Your download directory}/multi_modal_foundation_models_vNVCLIP_224_700M_ViTH14:/workspace/checkpoints/baseline \
            -e CHECKPOINT_NAME=nvclip_clipa_vit_h14_700M.ckpt \
            trt-optimizer
 ```
@@ -31,6 +31,11 @@ docker run -it --rm --gpus all \
 If the above process is correct, there'll be 2 folders appearing under model-repo directory:
 - nvclip_clipa_vit_h14_700M_vision: for vision encoder
 - nvclip_clipa_vit_h14_700M_text: for text encoder
+
+Then copy the model config from source tree to the model folder:
+
+```
+cp builder/samples/nvclip/optimizer/configs/* ~/.cache/nim/model-repo/nvclip_clipa_vit_h14_700M_text
 
 # Build the NIM inference flow
 
