@@ -2,7 +2,7 @@ name: "deepstream-app"
 model_repo: "/workspace/models"
 
 models:
-- name: changenet
+- name: changenet-classify
   backend: deepstream/nvinfer
   max_batch_size: 2
   input:

@@ -1,6 +1,10 @@
+## Introduction
+
 This sample demonstrates how to build a deepstream application with Inference Builder using object detection models:
 1. resnet
 2. rtdetr
+
+## Prerequisites
 
 Model files are loaded from '/workspace/models/{MODEL_NAME}' within the container, thus the volume must be correctly mapped from the host.
 You need to export MODEL_REPO environment variable to the path where you want to store the model files.
@@ -9,24 +13,15 @@ You need to export MODEL_REPO environment variable to the path where you want to
 export MODEL_REPO=/path/to/your/model/repo
 ```
 
-For example: if you define a model with name "resnet", you must put all the model files include nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/resnet' for the model to be correctly loaded.
-Download the model files from the NGC catalog and put them in the $MODEL_REPO/resnet/ directory
+For example: if you define a model with name "rtdetr", you must put all the model files including nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/resnet' for the model to be correctly loaded.
 
-To copy the other required model files to the $MODEL_REPO/resnet/ directory, run the following command:
-
-```bash
-cp builder/samples/ds_app/detection/resnet/* $MODEL_REPO/resnet/
-```
-
-**Note:** You need to set the `$SAMPLE_INPUT` environment variable to point to your samples directory.
+You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/rtdetr/ directory, then copy the other required model files to the same directory:
 
 ```bash
-export SAMPLE_INPUT=/path/to/your/samples/directory
+cp builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/rtdetr/
 ```
 
-## Generate the application package and build it into a docker image:
-
-### Build the deepstream application package
+## Generate the deepstream application package and build it into a container image
 
 ```bash
 python builder/main.py builder/samples/ds_app/detection/ds_detect.yaml -o builder/samples/ds_app --server-type serverless -t \
@@ -34,6 +29,12 @@ python builder/main.py builder/samples/ds_app/detection/ds_detect.yaml -o builde
 ```
 
 ## Run the deepstream app with different inputs:
+
+**Note:** You need to set the `$SAMPLE_INPUT` environment variable to point to your samples directory.
+
+```bash
+export SAMPLE_INPUT=/path/to/your/samples/directory
+```
 
 ### Run with video input
 

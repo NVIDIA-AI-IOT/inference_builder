@@ -1,6 +1,10 @@
+## Introduction
+
 This sample demonstrates how to build a deepstream application with Inference Builder using classification models:
-1. changenet-classify
-2. pcbclassification
+1. changenet-classify: visual_changenet_nvpcb_deployable_v1.0 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/visual_changenet_classification
+2. pcbclassification: deployable_v1.1 from https://catalog.ngc.nvidia.com/orgs/nvaie/models/pcbclassification
+
+## Prerequisites
 
 Model files are loaded from '/workspace/models/{MODEL_NAME}' within the container, thus the volume must be correctly mapped from the host.
 You need to export MODEL_REPO environment variable to the path where you want to store the model files.
@@ -9,31 +13,41 @@ You need to export MODEL_REPO environment variable to the path where you want to
 export MODEL_REPO=/path/to/your/model/repo
 ```
 
-For example: if you define a model with name "pcbclassifier", you must put all the model files include nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/pcbclassifier' for the model to be correctly loaded.
-Download the model files from the NGC catalog and put them in the $MODEL_REPO/pcbclassifier/ directory
+For example: if you define a model with name "pcbclassification", you must put all the model files include nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/pcbclassification' for the model to be correctly loaded.
 
-To copy the other required model files to the $MODEL_REPO/pcbclassifier/ directory, run the following command:
-
-```bash
-cp builder/samples/ds_app/classification/pcbclassification/* $MODEL_REPO/pcbclassifier/
-```
-
-**Note:** You need to set the `$SAMPLE_INPUT` environment variable to point to your samples directory.
+You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/pcbclassification/ directory, then copy the other required model files to the same directory:
 
 ```bash
-export SAMPLE_INPUT=/path/to/your/samples/directory
+cp builder/samples/ds_app/classification/pcbclassification/* $MODEL_REPO/pcbclassification/
 ```
 
-## Generate the application package and build it into a docker image:
+The sample steps apply to the other classification model: changenet-classify
 
-### Build the deepstream application package
+
+## Generate the deepstream application package and build it into a container image
+
+For pcbclassification sample, please use ds_pcb.yaml as the configuration:
 
 ```bash
 python builder/main.py builder/samples/ds_app/classification/ds_pcb.yaml -o builder/samples/ds_app --server-type serverless -t \
 && docker build --build-arg GITLAB_TOKEN=$GITLAB_TOKEN -t deepstream-app builder/samples/ds_app
 ```
 
+For changenet-classify sample, please use ds_changenet.yaml as the configuration:
+
+```bash
+python builder/main.py builder/samples/ds_app/classification/ds_changenet.yaml -o builder/samples/ds_app --server-type serverless -t \
+&& docker build --build-arg GITLAB_TOKEN=$GITLAB_TOKEN -t deepstream-app builder/samples/ds_app
+```
+
+
 ## Run the deepstream app with image inputs:
+
+**Note:** You need to set the `$SAMPLE_INPUT` environment variable to point to your samples directory.
+
+```bash
+export SAMPLE_INPUT=/path/to/your/samples/directory
+```
 
 ```bash
 docker run --rm --net=host --gpus all \
@@ -58,3 +72,5 @@ docker run --rm --net=host --gpus all \
     --media-url /sample_input/test_1.jpg /sample_input/golden_1.jpg \
     --mime image/jpeg image/jpeg
 ```
+
+For classification samples, the output is a list of labels defined in labels.txt. e.g, for pcbclassification model, the output label will be "missing" if there is a part missing from the input image.
