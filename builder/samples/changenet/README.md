@@ -11,7 +11,7 @@ The model used in the sample can be found on NGC: https://catalog.ngc.nvidia.com
 ```bash
 ngc registry model download-version "nvidia/tao/visual_changenet_segmentation_landsatscd:deployable_v1.2"
 # Move the folder to the model-repo directory, and the sample uses ~/.cache/nim/model-repo by default
-mv visual_changenet_segmentation_landsatscd ~/.cache/nim/model-repo/visual_changenet
+mv visual_changenet_segmentation_landsatscd_vdeployable_v1.2 ~/.cache/nim/model-repo/visual_changenet
 ```
 
 ## Create the optimized TensorRT Engine:
@@ -21,19 +21,23 @@ docker run -it --rm --gpus all \
 -v ~/.cache/nim/model-repo/visual_changenet/:/changenet \
 nvcr.io/nvidia/tensorrt-pb25h1:25.03.02-py3 \
 trtexec --onnx=/changenet/changenet_768.onnx --saveEngine=/changenet/model.plan --fp16
-
 ```
 
 # Build the NIM inference flow:
 
 ```bash
-python builder/main.py --server-type triton builder/samples/changenet/trt_changenet.yaml -a builder/samples/changenet/openapi.yaml -c builder/samples/changenet/processors.py -o builder/samples/changenet -t
+python builder/main.py \
+  --server-type triton \
+  -a builder/samples/changenet/openapi.yaml \
+  -c builder/samples/changenet/processors.py \
+  -o builder/samples/changenet -t \
+  builder/samples/changenet/trt_changenet.yaml
 ```
 
 # Build and run the docker image:
 
 ```bash
-cd samples
+cd builder/samples
 docker compose up --build ms-changenet
 ```
 
@@ -41,5 +45,5 @@ docker compose up --build ms-changenet
 
 ```bash
 cd builder/samples/changenet
-python nim_client.py --host 127.0.0.1 --port 8803 --file test1.jpg test2.jpg
+python nim_client.py --host 127.0.0.1 --port 8803 --file <test1.jpg> <test2.jpg>
 ```
