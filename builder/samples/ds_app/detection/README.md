@@ -13,7 +13,7 @@ You need to export MODEL_REPO environment variable to the path where you want to
 export MODEL_REPO=/path/to/your/model/repo
 ```
 
-For example: if you define a model with name "rtdetr", you must put all the model files including nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/resnet' for the model to be correctly loaded.
+For example: if you define a model with name "rtdetr", you must put all the model files including nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/rtdetr' for the model to be correctly loaded.
 
 You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/rtdetr/ directory, then copy the other required model files to the same directory:
 
