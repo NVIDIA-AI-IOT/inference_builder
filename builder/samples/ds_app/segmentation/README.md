@@ -13,7 +13,6 @@ export MODEL_REPO=/path/to/your/model/repo
 ```
 
 For example: if you define a model with name "citysemsegformer", you must put all the model files include nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/citysemsegformer' for the model to be correctly loaded.
-Download the model files from the NGC catalog and put them in the $MODEL_REPO/segformer/ directory
 
 You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/citysemsegformer/ directory, then copy the other required model files to the same directory:
 
