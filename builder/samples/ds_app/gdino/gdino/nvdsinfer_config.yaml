@@ -5,8 +5,8 @@ property:
   gie-unique-id: 1
   # std: 0.5
   net-scale-factor: 0.0078431372549
-  onnx-file: gdino.onnx
-  model-engine-file: gdino.onnx_b1_gpu0_fp16.engine
+  onnx-file: grounding_dino_swin_tiny_commercial_deployable.onnx
+  model-engine-file: grounding_dino_swin_tiny_commercial_deployable.onnx_b1_gpu0_fp16.engine
   network-mode: 2
   network-type: 100 # detection
   offsets: 127.5;127.5;127.5

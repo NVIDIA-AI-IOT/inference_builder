@@ -8,7 +8,7 @@ property:
   offsets: 127.5;127.5;127.5
   num-detected-classes: 2
   input-tensor-from-meta: 1
-  infer-dims: 3;128;128
+  infer-dims: 3;512;128
   classifier-threshold: 0
   labelfile-path: labels.txt
   custom-lib-path: /opt/nvidia/deepstream/deepstream/lib/libnvds_infercustomparser_tao.so

@@ -2,9 +2,9 @@
 
 This directory contains sample configurations demonstrating how to build DeepStream applications using Inference Builder.
 
-## Available Model Samples
+## Models used in the Samples
 
-The following ONNX model download links from NGC are provided:
+All the models can be downloaded from NGC:
 
 ### Image Classification
 - **PCB Classification**: [PCB Classification Model](https://catalog.ngc.nvidia.com/orgs/nvaie/models/pcbclassification)
@@ -19,7 +19,10 @@ The following ONNX model download links from NGC are provided:
 - **Grounding DINO**: [Grounding DINO Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/grounding_dino)
 - **Mask Grounding DINO**: [Mask Grounding DINO Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask_grounding_dino)
 
+### Resnet50 RT-DETR Detector
+- **Reset50 RT-DETR**: [To be added]
+
 
 ## Getting Started
 
-Each model sample includes its own README with specific instructions for building and running the DeepStream application. Please refer to the individual sample directories for detailed setup and usage instructions.
+Each sample includes its own README with specific instructions for building and running the DeepStream application. Please refer to the individual sample directories for detailed setup and usage instructions.

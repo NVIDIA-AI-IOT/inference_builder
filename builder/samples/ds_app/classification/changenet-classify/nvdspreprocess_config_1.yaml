@@ -1,8 +1,8 @@
 property:
   tensor-name: input_2
   processing-width: 128
-  processing-height: 128
-  network-input-shape: 2;3;128;128
+  processing-height: 512
+  network-input-shape: 2;3;512;128
   network-color-format: 0
   network-input-order: 0
   tensor-data-type: 0

@@ -2,7 +2,7 @@ name: "deepstream-app"
 model_repo: "/workspace/models"
 
 models:
-- name: pcbclassifier
+- name: pcbclassification
   backend: deepstream/nvinfer
   max_batch_size: 1
   input:
