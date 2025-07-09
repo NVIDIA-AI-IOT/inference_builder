@@ -87,7 +87,7 @@ class GenericInference(InferenceBase):
         for i in reshuffled:
             input = self._inputs[i]
             # select the tensors for the input
-            tensors = { n: request[n] for n in input.in_names if n in request and request[n] is not None }
+            tensors = { n: request[n] for n in input.in_names if n in request and request[n]}
 
             # the tensors need to be transformed to generic type
             for name in tensors:

@@ -12,7 +12,7 @@ class QwenVLProcessor:
 
     def __call__(self, *args):
         messages = args[0]
-        max_new_tokens = args[1][0]
+        max_new_tokens = args[1]
         text = self._processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         image_inputs, video_inputs = self._process_vision_info(messages)
         inputs = self._processor(
