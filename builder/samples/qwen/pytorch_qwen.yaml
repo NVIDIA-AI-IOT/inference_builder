@@ -1,7 +1,7 @@
 # the name will be used to identify the microservice.
 name: "qwen"
 # the root path to the directory containing the model files (checkpoint, config, etc).
-model_repo: "/opt/nim/.cache/model-repo"
+model_repo: "/workspace/model-repo/"
 
 # top level inference input specification
 input:

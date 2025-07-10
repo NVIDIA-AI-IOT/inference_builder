@@ -54,5 +54,5 @@ docker compose up --build ms-nvclip
 
 ```bash
 cd builder/samples/nvclip
-./test_client.sh sample.png
+./test_client.sh <sample.png>
 ```
