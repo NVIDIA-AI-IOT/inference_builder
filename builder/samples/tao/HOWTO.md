@@ -48,8 +48,8 @@ Create the model-repo if it doesn't exist yet:
 ```bash
 mkdir -p ~/.cache/model-repo
 chmod 777 ~/.cache/model-repo
-mkdir ~/.cache/model-repo/{NIM_MODEL_NAME}
-chmod 777 ~/.cache/model-repo/{NIM_MODEL_NAME}
+mkdir ~/.cache/model-repo/{TAO_MODEL_NAME}
+chmod 777 ~/.cache/model-repo/{TAO_MODEL_NAME}
 ```
 
 Following files are expected to be present in the model directory:
