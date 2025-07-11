@@ -17,6 +17,8 @@ models:
     data_type: TYPE_CUSTOM_DS_METADATA
     dims: [ -1 ]
   parameters:
+    # timeout in nanoseconds for batching multiple inputs
+    batch_timeout: -1
     infer_config_path:
       - nvdsinfer_config.yaml
     render_config:

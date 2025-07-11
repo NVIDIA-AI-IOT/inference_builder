@@ -1,8 +1,8 @@
-# Metropolis Computer Vision Microservice HOWTO
+# Metropolis Computer Vision Inference Microservice HOWTO
 
 ## Introduction
 
-This document provides instructions for building the Metropolis Computer Vision microservice and using it to run inference on images and videos.
+This document provides instructions for building Metropolis Computer Vision Inference Microservices and using them to perform inference on images and videos.
 
 ## Prerequisites
 
@@ -12,209 +12,72 @@ Below packages are required to build and run the microservice:
 - Docker Compose
 - NVIDIA Container Toolkit
 
-## Run the microservice
+## Build the microservice
 
-### 1. Run the microservice using docker compose
+First, follow the instructions in the top-level README to set up Inference Builder. Once the setup is complete, you need to generate the inference package before building the microservice. This can be done using the Inference Builder tool as shown below:
 
-There're 3 inference microservices available for different use cases:
-- Common CV tasks for classification, detection and segmentation:
-  gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-common:rc0
-- Visual Change Net:
-  gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-changenet:rc0
-- Open Label detection and segmenation:
-  gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-gdino:rc0
-
-Create the docker compose file from the below sample and save it as docker-compose.yaml:
-
-```yaml
-services:
-  tao-cv:
-    image: gitlab-master.nvidia.com:5005/deepstreamsdk/inference-builder/cv-tao-tao:ddd13060b329506d18db27da780757a8a448f39c
-    volumes:
-      - '~/.cache/nim:/opt/nim/.cache'
-    ipc: host
-    # init: true
-    ports:
-      - "8800-8803:8000-8003"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              #count: 1
-              device_ids: ['0']
-              capabilities: [gpu]
-    environment:
-      NIM_MODEL_NAME: rtdetr
+For generic TAO CV models:
+```bash
+python builder/main.py builder/samples/tao/ds_tao.yaml \
+-a builder/samples/tao/openapi.yaml -o builder/samples/tao -t
 ```
 
-Before running the microservice, users must set the name of the model in the `docker-compose.yaml` file through the `NIM_MODEL_NAME` environment variable, meanwhile, users need to prepare the model files and drop them into the `~/.cache/nim/model_repo/{NIM_MODEL_NAME}` directory.
+For visual changenet:
+```bash
+python builder/main.py builder/samples/tao/ds_changenet.yaml \
+-a builder/samples/tao/openapi.yaml -o builder/samples/tao -t
+```
 
-Run below commands to create the model directory:
+For Grounding DINO and Mask Grounding DINO:
+```bash
+python builder/main.py builder/samples/tao/ds_gdino.yaml \
+-a builder/samples/tao/openapi.yaml -o builder/samples/tao -c builder/samples/tao/processors.py -t
+```
+
+## Build and Run the microservices using docker compose
+
+A tao-cv service is defined in the pre-configured docker-compose.yml file located in the builder/samples directory. It supports all the above three inference pipelines.
+
+Within the container image, the inference pipeline searches for model files in /workspace/.cache/model_repo. Therefore, the corresponding directory on the host machine must be created and mounted as a volume inside the container.
+By default, this directory on the host is $HOME/.cache/model-repo.
+
+Each model’s required files must be placed in a separate subdirectory under model-repo. These files may include the ONNX model, nvinfer configuration files, label files, and other relevant assets. To ensure the inference microservice selects the correct model, the TAO_MODEL_NAME environment variable must be set to the name of the corresponding subdirectory under model-repo.
+
+Create the model-repo if it doesn't exist yet:
 
 ```bash
-mkdir -p ~/.cache/nim/model-repo
-chmod 777 ~/.cache/nim/model-repo
-mkdir ~/.cache/nim/model-repo/{NIM_MODEL_NAME}
-chmod 777 ~/.cache/nim/model-repo/{NIM_MODEL_NAME}
+mkdir -p ~/.cache/model-repo
+chmod 777 ~/.cache/model-repo
+mkdir ~/.cache/model-repo/{TAO_MODEL_NAME}
+chmod 777 ~/.cache/model-repo/{TAO_MODEL_NAME}
 ```
 
-Following files are expected to be present in the directory:
+Following files are expected to be present in the model directory:
 
 - Deepstream inference config file : `nvdsinfer_config.yaml`
 - ONNX model file
 - Label file (optional, used for post-processing)
 - preprocessed config file (optional, used for pre-processing)
 
+Configurations for sample tao models can be found from builder/samples/ds_app:
+
+- builder/samples/ds_app/classification/changenet-classify/: Visual Changenet classification model with 2 image inputs
+- builder/samples/ds_app/classification/pcbclassification/: PCB classification model
+- builder/samples/ds_app/detection/rtdetr: RT-DETR detection model
+- builder/samples/ds_app/detection/resnet: Resnet18 detection model
+- builder/samples/ds_app/gdino/gdino: Grounding Dino detection model
+- builder/samples/ds_app/gdino/mask_gdino: Mask Grounding Dino detection model
+
 When being used along with the TAO Finetune Microservice, the microservice can directly use the model files and configs exported from Finetune Microservice.
 
-Once the model files are ready, users can run the following command to start the microservice:
+Once the model files are ready, you can set the TAO_MODEL_NAME to the model you want in docker-compose.yml and run the following command to build and start the microservice:
 
 ```bash
-docker compose up tao-cv
-
+cd builder/samples
+docker compose up tao-cv --build
 ```
 
-### 2. Run the Microservice as Helm Charts
-
-Users can also use the helm charts to deploy different TAO CV models simply by updating env NIM_MODEL_NAME, and there is no need to rebuild the helm charts.
-A values override file is provided to set the NIM_MODEL_NAME; and image.repository, image.tag in case there is a new image.
-
-Update the helm/tao-cv-app/custom_values.yaml for:
-1. NIM_MODEL_NAME, which is the TaskHead model name. It has to match the sub directory name in /opt/local-path-provisioner/pvc-*_default_local-path-pvc;
-2. image.repository, image.tag if necessary.
-
-
-#### 2.1 Prepare models on host path for k8s
-
-##### 2.1.1 Create storageClass with name "mdx-local-path", using Local Path Provisioner
-
-###### a) Check if storageClass with name "mdx-local-path" exists
-
-```bash
-$ microk8s kubectl get sc
-```
-
-eg:
-```bash
-$ microk8s kubectl get sc
-NAME                          PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
-mdx-local-path                rancher.io/local-path   Delete          WaitForFirstConsumer   false                  141d
-microk8s-hostpath (default)   microk8s.io/hostpath    Delete          WaitForFirstConsumer   false                  147d
-```
-
-###### b) If not, create storageClass with name "mdx-local-path". Otherwise, skip the following steps.
-
-```bash
-$ curl https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.23/deploy/local-path-storage.yaml | sed 's/^  name: local-path$/  name: mdx-local-path/g' | microk8s kubectl apply -f -
-```
-
-NOTE:
-1. A base path will be created at /opt/local-path-provisioner. But it won't be available until a PVC is created & the first pod accessing it.
-
-##### 2.1.2 Create PVC with default name "local-path-pvc", on the created storageClass "mdx-local-path"
-###### a) Check if PVC with name "local-path-pvc" exists and is on storageClass "mdx-local-path"
-
-```bash
-$ microk8s kubectl get pvc
-```
-
-eg:
-```bash
-$ microk8s kubectl get pvc
-NAME            STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
-local-path-pvc   Bound    pvc-68509dc3-2f07-4e8f-8298-4a044b59546b   10Gi       RWO            mdx-local-path   141d
-```
-
-###### b) If not, create PVC with default name "local-path-pvc", on the created storageClass "mdx-local-path"
-
-```bash
-$ curl https://raw.githubusercontent.com/rancher/local-path-provisioner/master/examples/pvc/pvc.yaml | \
-    sed -e 's/storageClassName: local-path$/storageClassName: mdx-local-path/g' \
-        -e 's/storage: 128Mi$/storage: 10Gi/g' | \
-    microk8s kubectl apply -f -
-```
-
-NOTE:
-1. This helm chart defines volume resolving to PVC "local-path-pvc"
-
-2. A sub directory will be created as /opt/local-path-provisioner/pvc-*_default_local-path-pvc. It won't be available until a pod accessing it.
-
-3. You might see status "Pending" for the PVC "local-path-pvc" before the first pod accessing it.
-
-##### 2.1.3 For each model, create a sub directory under the Local Path Provisioner PVC path, and copy model file including model, configs to it.
-
-Remember to grant 777 permission to model path, otherwise generating engine file will hang.
-
-```bash
-cd /opt/local-path-provisioner/pvc-*_default_local-path-pvc
-mkdir {NIM_MODEL_NAME}
-chmod 777 {NIM_MODEL_NAME}
-```
-
-Eg:
-```bash
-## On host at /opt/local-path-provisioner/pvc-*_default_local-path-pvc
-├── {NIM_MODEL_NAME}/
-│   ├── model.onnx
-│   └── config_nvinfer.yml
-├── rtdetr/
-│   ├── model.onnx
-│   └── config_nvinfer.yml
-└── segformer/
-    ├── model.onnx
-    └── config_nvinfer.yml
-
-## What containers can see at /opt/nim/.cache/model-repo/
-├── {NIM_MODEL_NAME}/
-│   ├── model.onnx
-│   └── config_nvinfer.yml
-├── rtdetr/
-│   ├── model.onnx
-│   └── config_nvinfer.yml
-└── segformer/
-    ├── model.onnx
-    └── config_nvinfer.yml
-```
-
-Make sure the each model sub directory name {NIM_MODEL_NAME} matches that in the custom_values.yaml
-
-#### 2.2 Create secrets, if not yet created
-```bash
-# First delete the existing secret if necessary
-microk8s kubectl delete secret ngc-secret
-
-# create secret docker-registry ngc-docker-reg-secret for pulling containers from nvcr.io
-microk8s kubectl create secret docker-registry ngc-docker-reg-secret --docker-server=nvcr.io --docker-username='$oauthtoken' --docker-password=$NGC_API_KEY
-
-# create secret docker-registry gitlab-docker-reg-secret for pulling containers from gitlab-master.nvidia.com:5005
-microk8s kubectl create secret docker-registry gitlab-docker-reg-secret --docker-server=gitlab-master.nvidia.com:5005 --docker-username=$GITLAB_USERNAME --docker-password=$GITLAB_TOKEN
-
-# ngc CLI key secret, nim to download model
-microk8s kubectl create secret generic ngc-secret --from-literal=ngc-api-key=$NGC_API_KEY
-```
-
-#### 2.3 Fetch the helm chart from NGC
-```bash
-$ helm fetch https://helm.ngc.nvidia.com/eevaigoeixww/staging/charts/tao-cv-app-0.0.2.tgz --username='$oauthtoken' --password=<YOUR API KEY>
-```
-
-#### 2.4 Start
-
-```bash
-$ microk8s helm3 install tao-cv-app tao-cv-app-0.0.2.tgz -f custom_values.yaml
-```
-OR if you don't want to use the values override file, you can run,
-```bash
-$ microk8s helm3 install tao-cv-app tao-cv-app-0.0.2.tgz --set tao-cv.applicationSpecs.tao-cv-deployment.containers.tao-cv-container.env[0].value={NIM_MODEL_NAME}
-```
-
-#### 2.5 Stop
-
-```bash
-microk8s helm3 delete tao-cv-app
-
-```
+**Note:** Regenerate the inference pipeline for the new model using Inference Builder after you switch the model and rebuild the microservice.
 
 ## Use the microservice
 
@@ -265,7 +128,7 @@ The expected response would be like:
 
 Use the received asset object for inference. ('accept' must be application/x-ndjson to get the inference result as a stream)
 
-```
+```base
 curl -X 'POST' \
   'http://localhost:8800/v1/inference' \
   -H 'accept: application/x-ndjson' \
@@ -285,143 +148,81 @@ curl -X 'POST' \
 
 The OpenAPI specification also serves as the guideline for developing customized inference client and integrate it to any application.
 
+## Validate the Inference Microservices
 
-## Build the microservice
+Inference Builder support generate automatic validation script against individual models.
 
-As a prerequisite to build the microservice, the inference package must be generated by inference builder tool as follows:
+### Build inference package with validation:
 
-### 1. Build inference package:
+Validation script will be generated when `-v <path_to_validation_src>` is appended to the build command.
+
+#### RTDETR detection model
 
 ```bash
-cd ../../..
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-For generic TAO CV models:
-```bash
-python builder/main.py builder/samples/tao/ds_tao.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -t
-```
-
-For visual changenet:
-```bash
-python builder/main.py builder/samples/tao/ds_changenet.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -t
+python builder/main.py builder/samples/tao/ds_tao.yaml \
+-a builder/samples/tao/openapi.yaml -o builder/samples/tao -t \
+-v builder/samples/tao/validation/rtdetr
 ```
 
-For Grounding DINO and Mask Grouding DINO:
+After running docker compose as specified in the previous section, run the validation script as follows:
+
 ```bash
-python builder/main.py builder/samples/tao/ds_gdino.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -c builder/samples/tao/processors.py -t
+cd builder/samples/tao/validation/rtdetr/.tmp/ && python test_runner.py
 ```
 
-### 2. Build inference package with validation:
 
-append `-v <path_to_validation_src>` to the command, eg for rtdetr model
+#### Image classification model (pcbclassification)
 
-#### 2.1 For generic TAO CV:
-
-##### 2.1.1 rtdetr detection:
 ```bash
-python builder/main.py builder/samples/tao/ds_tao.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -t -v builder/samples/tao/validation/rtdetr
-# finish building tao.tgz to docker image and start it
-python builder/samples/tao/validation/rtdetr/.tmp/test_runner.py
+python builder/main.py builder/samples/tao/ds_tao.yaml \
+-a builder/samples/tao/openapi.yaml -o builder/samples/tao -t \
+-v builder/samples/tao/validation/pcbclassification
 ```
 
-##### 2.1.2 classification:
+After running docker compose as specified in the previous section, run the validation script as follows:
+
 ```bash
-python builder/main.py builder/samples/tao/ds_tao.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -t -v builder/samples/tao/validation/cls
-# finish building tao.tgz to docker image and start it
-python builder/samples/tao/validation/cls/.tmp/test_runner.py
+cd builder/samples/tao/validation/pcbclassification/.tmp && python test_runner.py
 ```
 
-##### 2.1.3 segmentation:
+#### Segmentation model (citysemsegformer)
+
 ```bash
-python builder/main.py builder/samples/tao/ds_tao.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -t -v builder/samples/tao/validation/seg
-# finish building tao.tgz to docker image and start it
-python builder/samples/tao/validation/seg/.tmp/test_runner.py
+python builder/main.py builder/samples/tao/ds_tao.yaml \
+-a builder/samples/tao/openapi.yaml -o builder/samples/tao -t \
+-v builder/samples/tao/validation/citysemsegformer
 ```
 
-#### 2.2 For visual changenet:
+After running docker compose as specified in the previous section, run the validation script as follows:
+
 ```bash
-not added yet, feel free to add:
-builder/samples/tao/validation/changenet
+cd builder/samples/tao/validation/citysemsegformer/.tmp && python test_runner.py
 ```
 
-#### 2.3 For Grounding DINO and Mask Grouding DINO:
-##### 2.3.1 Grounding DINO
+#### Grounding DINO
+
 ```bash
-python builder/main.py builder/samples/tao/ds_gdino.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -c builder/samples/tao/processors.py -t -v builder/samples/tao/validation/gdino
-# finish building tao.tgz to docker image and start it
-python builder/samples/tao/validation/gdino/.tmp/test_runner.py
+python builder/main.py builder/samples/tao/ds_gdino.yaml \
+-a builder/samples/tao/openapi.yaml -o builder/samples/tao -c builder/samples/tao/processors.py -t \
+-v builder/samples/tao/validation/gdino
 ```
 
-##### 2.3.2 Mask Grouding DINO
+After running docker compose as specified in the previous section, run the validation script as follows:
+
 ```bash
-python builder/main.py builder/samples/tao/ds_gdino.yaml --server-type fastapi -a builder/samples/tao/openapi.yaml -o builder/samples/tao -c builder/samples/tao/processors.py -t -v builder/samples/tao/validation/mgdino
-# finish building tao.tgz to docker image and start it
-python builder/samples/tao/validation/mgdino/.tmp/test_runner.py
+cd builder/samples/tao/validation/gdino/.tmp/ && python test_runner.py
 ```
 
-### 3. Build the docker image
-
-The microservice uses post-processing to convert the output of the model to the format expected by the Metropolis Computer Vision endpoint, and to fetch and build the post processing library you need to have gitlab token and put it to environment variable `GITLAB_TOKEN`.
+#### Mask Grouding DINO
 
 ```bash
-export GITLAB_TOKEN=<your_gitlab_token>
+python builder/main.py builder/samples/tao/ds_gdino.yaml \
+-a builder/samples/tao/openapi.yaml -o builder/samples/tao -c builder/samples/tao/processors.py -t \
+-v builder/samples/tao/validation/mgdino
 ```
 
-To build the microservice, run the following command:
+After running docker compose as specified in the previous section, run the validation script as follows:
 
 ```bash
-cd ..
-docker compose build nim-tao
-
-```
-
-## Build the helm chart
-
-1. UCS tools is installed. https://ucf.gitlab-master-pages.nvidia.com/docs/master/text/UCS_Installation.html
-2. microk8s is installed
-
-### 1. Build TAO CV App Helm Chart
-#### 1.1 Build
-```bash
-cd helm
-make -C tao-cv-app
-```
-#### 1.2 Test (with models PVC configured, follow above steps)
-```bash
-# Overwrite the container image if necessary.
-make -C tao-cv-app install
-```
-#### 1.3 Stop
-```bash
-make -C tao-cv-app uninstall
-```
-
-### 2.Push helm chart to NGC
-#### 2.1 Prerequisites. RUN ONCE ONLY.
-```bash
-$NGC_API_KEY needs to be present for ngc CLI to work.
-$ ngc registry chart create <org_id>/<team_name>/<helm_chart_ngc_page_name> --short-desc <description>
-```
-
-#### 2.2 Update chart version
-update helm chart version field
-```bash
-$ vim helm/tao-cv-app/output/Chart.yaml
-```
-#### 2.3 Package helm chart to .tgz file
-```bash
-$ cd helm/tao-cv-app/output
-$ helm package .
-```
-
-#### 2.4 Push the .tgz file to NGC.
-```bash
-$NGC_API_KEY needs to be present for ngc CLI to work.
-$ ngc registry chart push <org_id>/<team_name>/<helm_chart_ngc_page_name>:<new_version>
-```
-
-Eg:
-```bash
-$ ngc registry chart push eevaigoeixww/dev/tao-cv-app:<new_version>
+cd builder/samples/tao/validation/mgdino/.tmp && python test_runner.py
 ```

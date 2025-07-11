@@ -1,7 +1,7 @@
 ---
 schema_version: '1.0'
 model: "eevaigoeixww/dev/tao_cv"
-release: 'rc0'
+release: 'rc1'
 simple:
   profiles:
     - model_version: rtdetr.engine-b1_fp16_A6000_trt10.9

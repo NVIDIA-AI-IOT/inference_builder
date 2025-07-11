@@ -1,4 +1,5 @@
 import numpy as np
+import os
 
 def generate_masks_with_special_tokens_and_transfer_map(tokenized, special_tokens_list):
     """Generate attention mask between each pair of special tokens.
@@ -128,7 +129,27 @@ class GDinoTokenizer:
 class GDinoPostProcessor:
     name = "gdino-postprocessor"
     def __init__(self, config):
-        self.infer_config_path = config.get("infer_config_path", None)
+        model_home = config["model_home"]
+        infer_config_path = config.get("infer_config_path", None)
+
+        # Handle path resolution
+        if infer_config_path:
+            # Check if it's an absolute path
+            if os.path.isabs(infer_config_path):
+                self.infer_config_path = infer_config_path
+                print(f"infer_config_path is an absolute path: {self.infer_config_path}")
+            else:
+                # If relative path, join with model_home
+                self.infer_config_path = os.path.join(model_home, infer_config_path)
+                print(f"infer_config_path is a relative path to model_home: {self.infer_config_path}")
+            # Check if the file exists
+            if not os.path.exists(self.infer_config_path):
+                print(f"Warning: infer_config_path does not exist: {self.infer_config_path}")
+                self.infer_config_path = None
+        else:
+            self.infer_config_path = None
+            print(f"Warning: infer_config_path is not set")
+
         # set default values
         self.top_k = 300
         self.item_threshold = 0.5  # threshold for the score per inferenced item

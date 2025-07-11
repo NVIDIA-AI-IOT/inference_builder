@@ -1,7 +1,7 @@
 schema_version: '2.0'
 profile_selection_criteria: auto
 model: eevaigoeixww/dev/tao_cv
-release: rc0
+release: rc1
 profiles:
 - id: 425dcb3ef646e497d5a50bbd1eb1169c9f33f4253f36669bb428ef250e2447cd
   tags:
@@ -9,10 +9,11 @@ profiles:
   workspace:
     files:
       classifier.onnx_b1_gpu0_fp16.engine:
-        uri: ngc://eevaigoeixww/dev/tao_cv:cls.nvdino_pretrain_0114_final_scale0.8.engine_b1_fp16_A6000?file=classifier.onnx_b1_gpu0_fp16.engine
-        checksum: blake3:a447b30fd37fbf7cbf65d57c58b647c89ad9943bb0673c47956bdcb32885af1b
+        uri: ngc://eevaigoeixww/dev/tao_cv:cls.nvdino_pretrain_0114_final_scale0.8.engine_b1_fp16_A6000_trt10.9?file=classifier.onnx_b1_gpu0_fp16.engine
+        checksum: blake3:27621bbfdbba1538a1ee6b5ae527b233e841fd405887c8ac9ea46c6d509c5adb
       labels.txt:
-        uri: ngc://eevaigoeixww/dev/tao_cv:cls.nvdino_pretrain_0114_final_scale0.8.engine_b1_fp16_A6000?file=labels.txt
+        uri: ngc://eevaigoeixww/dev/tao_cv:cls.nvdino_pretrain_0114_final_scale0.8.engine_b1_fp16_A6000_trt10.9?file=labels.txt
         checksum: blake3:7065fb33f25f05e562a0ac12acf084a95c2892ede4bec8b2af0b8c2df6f27172
       nvdsinfer_config.yaml:
-        uri: ngc://eevaigoeixww/dev/tao_cv:cls.nvdino_pretrain_0114_final_scale0.8.engine_b1_fp16_A6000?file=nvdsinfer_config.yaml
+        uri: ngc://eevaigoeixww/dev/tao_cv:cls.nvdino_pretrain_0114_final_scale0.8.engine_b1_fp16_A6000_trt10.9?file=nvdsinfer_config.yaml
+        checksum: blake3:c406a73ece6aae6700606a937fb5b0ff38ed1ba0690c47fcd1182ffc772e9a10

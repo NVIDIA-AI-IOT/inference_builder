@@ -27,7 +27,8 @@ Compared to manually crafting inference source code, Inference Builder offers de
 
 ```bash
 git clone ssh://git@gitlab-master.nvidia.com:12051/DeepStreamSDK/inference-builder.git
-git submodule update --init
+cd inference-builder
+git submodule update --init --recursive
 ```
 
 ### Install prerequisites

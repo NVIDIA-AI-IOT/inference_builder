@@ -1,7 +1,7 @@
 schema_version: '2.0'
 profile_selection_criteria: auto
 model: eevaigoeixww/dev/tao_cv
-release: rc0
+release: rc1
 profiles:
 - id: 425dcb3ef646e497d5a50bbd1eb1169c9f33f4253f36669bb428ef250e2447cd
   tags:
@@ -9,10 +9,11 @@ profiles:
   workspace:
     files:
       grounding_dino_swin_tiny_commercial_deployable.onnx_b1_gpu0_fp16.engine:
-        uri: ngc://eevaigoeixww/dev/tao_cv:gdino.engine_b1_fp16_A6000?file=grounding_dino_swin_tiny_commercial_deployable.onnx_b1_gpu0_fp16.engine
-        checksum: blake3:3be7f87da89dc9b723fe79c70cfd7e6c54cd9df6717f3ac9d161c95ce2fe27bb
+        uri: ngc://eevaigoeixww/dev/tao_cv:gdino.engine_b1_fp16_A6000_trt10.9?file=grounding_dino_swin_tiny_commercial_deployable.onnx_b1_gpu0_fp16.engine
+        checksum: blake3:092963900dd0b08fcdce6ab783fb7ab011051c51b92173a642dc82714af8d606
       nvdsinfer_config.yaml:
-        uri: ngc://eevaigoeixww/dev/tao_cv:gdino.engine_b1_fp16_A6000?file=nvdsinfer_config.yaml
+        uri: ngc://eevaigoeixww/dev/tao_cv:gdino.engine_b1_fp16_A6000_trt10.9?file=nvdsinfer_config.yaml
         checksum: blake3:a96518b01c399c0b22064ac73758b0555041badf26b11f20e29218e161f86c2c
       nvdspreprocess_config.yaml:
-        uri: ngc://eevaigoeixww/dev/tao_cv:gdino.engine_b1_fp16_A6000?file=nvdspreprocess_config.yaml
+        uri: ngc://eevaigoeixww/dev/tao_cv:gdino.engine_b1_fp16_A6000_trt10.9?file=nvdspreprocess_config.yaml
+        checksum: blake3:a261def4031c9a7f068ecf144c4285d26b0767b9e143b83f48ea92b75e383041
