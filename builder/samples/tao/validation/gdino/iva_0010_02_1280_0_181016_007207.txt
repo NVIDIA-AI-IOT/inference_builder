@@ -1,1 +1,1 @@
-cat,car,truck
+car,truck

@@ -54,6 +54,8 @@ models:
     data_type: TYPE_FP32
     dims: [ -1, -1, -1, -1 ]
   parameters:
+    # timeout in nanoseconds for batching multiple inputs
+    batch_timeout: -1
     infer_config_path:
       - nvdsinfer_config.yaml
     preprocess_config_path:

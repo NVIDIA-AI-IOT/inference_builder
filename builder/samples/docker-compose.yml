@@ -109,9 +109,9 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 0
-      # NIM_MODEL_NAME: rtdetr
-      NIM_MANIFEST_PATH: /opt/configs/model_manifest.rtdetr.yaml
-      NGC_API_KEY: ${NGC_API_KEY}
+      NIM_MODEL_NAME: rtdetr
+      #NIM_MANIFEST_PATH: /opt/configs/model_manifest.rtdetr.yaml
+      #NGC_API_KEY: ${NGC_API_KEY}
   tao-cv:
     user: nvs:1000
     build:
@@ -125,7 +125,7 @@ services:
     # # Keep container running
     # command: ["-c", "sleep infinity"]
     volumes:
-      - '~/.cache/nim:/workspace/.cache'
+      - '~/.cache/model-repo/:/workspace/.cache/model-repo'
     ipc: host
     # init: true
     ports:
