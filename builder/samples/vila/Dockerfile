@@ -70,7 +70,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends rapidjson-dev p
 FROM base_stage AS dev_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install nimlib[runtime]==0.8.4 inferencemodeltoolkit==1.0.11 --extra-index-url https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple
+    pip install inferencemodeltoolkit==1.0.11 --extra-index-url https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple
 
 # VILA dependencies
 RUN pip uninstall transformer-engine opencv -y
@@ -104,6 +104,8 @@ ENV PYTHONUNBUFFERED=1
 
 # Install VILA
 RUN git clone https://github.com/NVlabs/VILA.git && cd VILA && git checkout vila1.5
+# apply patch
+COPY ./trt_optimize/apply_patch.sh /workspace/VILA/demo_trt_llm/apply_patch.sh
 
 RUN site_pkg_path=$(python3 -c 'import site; print(site.getsitepackages()[0])') && echo "site_pkg_path: $site_pkg_path" && cp -rv /workspace/VILA/llava/train/transformers_replace/* $site_pkg_path/transformers/
 RUN cd /workspace/VILA/demo_trt_llm && sh apply_patch.sh

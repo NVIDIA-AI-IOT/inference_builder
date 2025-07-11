@@ -16,9 +16,7 @@ Three configurations are provided, allowing you to choose based on your specific
 The model checkpoints can be downloaded from huggingface (Be sure to have git-lfs installed):
 
 ```bash
-git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct
-# move the checkpoints to your model-repo, in this sample we use ~/.cache/nim/model-repo
-mv  Qwen2.5-VL-7B-Instruct ~/.cache/nim/model-repo/
+git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct  ~/.cache/model-repo/Qwen2.5-VL-7B-Instruct
 ```
 
 ## Generate the inference package

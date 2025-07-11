@@ -6,10 +6,10 @@ This sample demonstrates how to build the inference pipeline for VILA 1.5 and ho
 
 ## The model repo
 
-We need to prepare a folder to accommodate model data, and we use ~/.cache/nim/model-repo for this sample:
+We need to prepare a folder to accommodate model data, and we use ~/.cache/model-repo for this sample:
 
 ```bash
-mkdir -p ~/.cache/nim/model-repo
+mkdir -p ~/.cache/model-repo
 ```
 
 ## The model
@@ -17,7 +17,7 @@ mkdir -p ~/.cache/nim/model-repo
 VILA 1.5 checkpoints can be downloaded from huggingface using the following command:
 
 ```bash
-git clone https://huggingface.co/Efficient-Large-Model/VILA1.5-13b ~/.cache/nim/model-repo/vila1.5-13b
+git clone https://huggingface.co/Efficient-Large-Model/VILA1.5-13b ~/.cache/model-repo/vila1.5-13b
 ```
 
 ## Optimized engine files
@@ -25,11 +25,11 @@ git clone https://huggingface.co/Efficient-Large-Model/VILA1.5-13b ~/.cache/nim/
 Before generating the inference pipeline, we need the optimized engine files in hand. Please follow the command below to convert above checkpoints and generate optimized engine files:
 
 ```bash
-docker login nvcr.io
-docker run -it --rm --gpus all -v ~/.cache/nim/model-repo/vila:/workspace/checkpoints/optimized -v ~/.cache/nim/model-repo:/workspace/checkpoints/baseline -e LLM_BATCH_SIZE=8 -e LLM_PRECISION=int4_awq nvcr.io/ztko6yjat3l5/vlm/vila_trt_engine:0.6.4
+cd builder/samples/vila && docker build --target trt_optimize -t vila-trt-optimize .
+docker run -it --rm --gpus all -v ~/.cache/model-repo/vila:/workspace/checkpoints/optimized -v ~/.cache/model-repo:/workspace/checkpoints/baseline -e LLM_BATCH_SIZE=8 -e LLM_PRECISION=int4_awq vila-trt-optimize
 ```
 
-Once the above process is completed, we'll have the output under ~/.cache/nim/model-repo/vila:
+Once the above process is completed, we'll have the output under ~/.cache/model-repo/vila:
 
 ```
 └── vila1.5-13b

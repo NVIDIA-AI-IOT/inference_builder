@@ -22,7 +22,7 @@ Then generate the engine files using the trt-optimizer
 
 ```bash
 docker run -it --rm --gpus all \
-           -v ~/.cache/nim/model-repo/:/workspace/checkpoints/optimized \
+           -v ~/.cache/model-repo/:/workspace/checkpoints/optimized \
            -v {Your download directory}/multi_modal_foundation_models_vNVCLIP_224_700M_ViTH14:/workspace/checkpoints/baseline \
            -e CHECKPOINT_NAME=nvclip_clipa_vit_h14_700M.ckpt \
            trt-optimizer
@@ -35,7 +35,7 @@ If the above process is correct, there'll be 2 folders appearing under model-rep
 Then copy the model config from source tree to the model folder:
 
 ```
-cp builder/samples/nvclip/optimizer/configs/* ~/.cache/nim/model-repo/nvclip_clipa_vit_h14_700M_text
+cp builder/samples/nvclip/optimizer/configs/* ~/.cache/model-repo/nvclip_clipa_vit_h14_700M_text
 
 # Build the NIM inference flow
 
