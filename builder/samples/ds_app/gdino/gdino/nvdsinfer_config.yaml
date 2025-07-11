@@ -1,0 +1,17 @@
+class-attrs-all:
+  topk: 20
+  pre-cluster-threshold: 0.2
+property:
+  gie-unique-id: 1
+  # std: 0.5
+  net-scale-factor: 0.0078431372549
+  onnx-file: grounding_dino_swin_tiny_commercial_deployable.onnx
+  model-engine-file: grounding_dino_swin_tiny_commercial_deployable.onnx_b1_gpu0_fp16.engine
+  network-mode: 2
+  network-type: 100 # detection
+  offsets: 127.5;127.5;127.5
+  output-tensor-meta: 1
+  input-tensor-from-meta: 1
+  infer-dims: 3;544;960
+  custom-lib-path: /opt/nvidia/deepstream/deepstream/lib/libnvds_infercustomparser_tao.so
+

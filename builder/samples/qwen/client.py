@@ -8,7 +8,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--images", type=str, help="Image paths to send for inference", default=None, nargs="*")
     parser.add_argument("--videos", type=str, help="Video paths to send for inference", default=None, nargs="*")
-    parser.add_argument("--endpoint", type=str, help="Endpoint to send for inference", default="http://0.0.0.0:8803/v1", nargs="?")
+    parser.add_argument("--endpoint", type=str, help="Endpoint to send for inference", default="http://0.0.0.0:8800/v1", nargs="?")
     args = parser.parse_args()
 
     messages = []

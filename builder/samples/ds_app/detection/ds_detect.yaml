@@ -2,7 +2,7 @@ name: "deepstream-app"
 model_repo: "/workspace/models"
 
 models:
-- name: resnet
+- name: rtdetr
   backend: deepstream/nvinfer
   max_batch_size: 4
   input:
@@ -24,7 +24,7 @@ models:
     dims: [ -1 ]
   parameters:
     infer_config_path:
-      - config_infer_primary.yml
+      - nvdsinfer_config.yaml
     tracker_config:
       ll_lib_file: /opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so
       ll_config_file: /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_IOU.yml

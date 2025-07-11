@@ -54,7 +54,7 @@ def build_args(parser):
         "--custom-module",
         type=argparse.FileType('r'),
         nargs='*',
-        help="Custome python modules"
+        help="Custom python modules"
     )
     parser.add_argument(
         "-x",

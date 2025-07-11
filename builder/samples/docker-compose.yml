@@ -19,7 +19,7 @@ services:
     image: nim-vila:0.7.0
     volumes:
       # correct the below mapping for your vila checkpoints
-      - '~/.cache/nim/model-repo/vila/optimized/:/config/models/vila'
+      - '~/.cache/nim/model-repo/vila/:/config/models/vila'
 
     ipc: host
     # init: true
@@ -35,14 +35,14 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 0
-  nim-nvclip:
+  ms-nvclip:
     build:
       context: nvclip
-      target: nim_builder_base
+      target: builder_base
       dockerfile: Dockerfile
-    image: nim-nvclip
+    image: ms-nvclip
     volumes:
-      - '~/.cache/nim:/opt/nim/.cache'
+      - '~/.cache/nim/model-repo/:/workspace/model-repo'
     ipc: host
     # init: true
     ports:
@@ -58,15 +58,14 @@ services:
     environment:
       NGC_API_KEY: ""
 #      DEBUG: 1
-  nim-changenet:
-    user: nvs:1000
+  ms-changenet:
     build:
       context: changenet
-      target: nim_final
+      target: builder_base
       dockerfile: Dockerfile
-    image: nim-changenet
+    image: ms-changenet
     volumes:
-      - '~/.cache/nim:/opt/nim/.cache'
+      - '~/.cache/nim/model-repo/visual_changenet:/workspace/model_repo/visual_changenet/1'
     ipc: host
     # init: true
     ports:
@@ -172,12 +171,32 @@ services:
       context: qwen
       target: inference_base
       dockerfile: Dockerfile.nim
-      # used for creating NIM
-#      dockerfile: Dockerfile.nim
     image: nim-qwen
     volumes:
       - '~/.cache/nim:/opt/nim/.cache'
       - '$HOME/TensorRT-LLM:/workspace/TensorRT-LLM'
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              #count: 1
+              device_ids: ['0']
+              capabilities: [gpu]
+    environment:
+      DEBUG: 0
+  ms-qwen:
+    build:
+      context: qwen
+      target: inference_base
+      dockerfile: Dockerfile
+    image: ms-qwen
+    volumes:
+      - '~/.cache/nim/model-repo:/workspace/model-repo'
     ipc: host
     # init: true
     ports:

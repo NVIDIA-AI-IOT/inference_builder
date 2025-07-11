@@ -1,0 +1,22 @@
+name: "deepstream-app"
+model_repo: "/workspace/models"
+
+models:
+- name: pcbclassification
+  backend: deepstream/nvinfer
+  max_batch_size: 1
+  input:
+  - name: media_url
+    data_type: TYPE_CUSTOM_BINARY_URLS
+    dims: [ -1 ]
+  - name: mime
+    data_type: TYPE_CUSTOM_DS_MIME
+    dims: [ -1 ]
+  output:
+  - name: output
+    data_type: TYPE_CUSTOM_DS_METADATA
+    dims: [ -1 ]
+  parameters:
+    infer_config_path:
+      - nvdsinfer_config.yaml
+    inference_timeout: 5

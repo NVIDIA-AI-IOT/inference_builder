@@ -75,7 +75,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # VILA dependencies
 RUN pip uninstall transformer-engine opencv -y
 RUN pip install git+https://github.com/bfshi/scaling_on_scales.git \
-    flash-attn \
+    flash-attn==2.4.2 \
     transformers==4.36.2 \
     cupy-cuda12x==12.3.0 \
     grpcio==1.67.1 \
@@ -106,7 +106,7 @@ ENV PYTHONUNBUFFERED=1
 RUN git clone https://github.com/NVlabs/VILA.git && cd VILA && git checkout vila1.5
 
 RUN site_pkg_path=$(python3 -c 'import site; print(site.getsitepackages()[0])') && echo "site_pkg_path: $site_pkg_path" && cp -rv /workspace/VILA/llava/train/transformers_replace/* $site_pkg_path/transformers/
-#RUN cd /workspace/VILA/demo_trt_llm && sh apply_patch.sh
+RUN cd /workspace/VILA/demo_trt_llm && sh apply_patch.sh
 ENV PYTHONPATH="/workspace/VILA:${PYTHONPATH}"
 
 # triton model repo
@@ -152,11 +152,11 @@ CMD bash /workspace/server_run.sh
 
 FROM dev_base AS trt_optimize
 
-ADD ./build_visual_engine.py /workspace/VILA/demo_trt_llm/build_visual_engine.py
-ADD ./build_visual_engine_from_onnx.py /workspace/VILA/demo_trt_llm/build_visual_engine_from_onnx.py
+ADD ./trt_optimize/build_visual_engine.py /workspace/VILA/demo_trt_llm/build_visual_engine.py
+ADD ./trt_optimize/build_visual_engine_from_onnx.py /workspace/VILA/demo_trt_llm/build_visual_engine_from_onnx.py
 
 # ADD ./quantize.py /workspace/
-ADD ./trt_optimize.sh /workspace/
+ADD ./trt_optimize/trt_optimize.sh /workspace/
 
 #ENTRYPOINT ["bash", "/workspace/trt_optimize.sh"]
 CMD bash /workspace/trt_optimize.sh

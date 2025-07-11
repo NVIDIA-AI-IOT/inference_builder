@@ -9,7 +9,7 @@
 # its affiliates is strictly prohibited.
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev156" AS inference_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev182" AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
@@ -17,6 +17,50 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     numpy==1.26.4 \
     omegaconf==2.3.0 \
     transformers
+
+# Build TRT customized plugins
+ARG TRT_VERSION_MAJOR=10
+ARG TRT_VERSION_MINOR=9
+ARG TRT_VERSION_PATCH=0
+ARG TRT_VERSION_BUILD=34
+
+ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
+ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
+ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
+
+ARG CUDA_VERSION_MAJOR=12
+ARG CUDA_VERSION_MINOR=8
+ARG CUDA_VERSION_PATCH=93
+ARG CUDA_VERSION_BUILD=35583870_0
+ARG CUDA_VERSION_MAJOR_MINOR=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR
+ARG CUDA_VERSION_FULL=$CUDA_VERSION_MAJOR_MINOR.$CUDA_VERSION_PATCH.$CUDA_VERSION_BUILD
+ARG CUDNN_VERSION=9.3.0.75
+
+ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
+
+WORKDIR /tmp
+ENV TRT_TAG="release/$TRT_VERSION_MAJOR_MINOR"
+RUN mkdir trt_oss_src && \
+    cd trt_oss_src && \
+    echo "$PWD Building TRT OSS..." && \
+    git clone -b $TRT_TAG https://github.com/nvidia/TensorRT TensorRT && \
+    cd TensorRT && \
+    git submodule update --init --recursive && \
+    mkdir -p build && cd build && \
+    cmake .. \
+    -DGPU_ARCHS="80;86;90" \
+    -DTRT_LIB_DIR=/usr/lib/x86_64-linux-gnu \
+    -DTRT_OUT_DIR=/tmp/out \
+    -DCUDA_VERSION=$CUDA_VERSION_MAJOR_MINOR \
+    -DCUDNN_VERSION=$CUDNN_VERSION \
+    && for i in {1..50}; do make -j 12 && break; done
+RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+    cp /tmp/out/libnvinfer_plugin_static.a /usr/lib/x86_64-linux-gnu/libnvinfer_plugin_static.a && \
+    cp /tmp/out/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+    cp /tmp/out/trtexec /usr/local/bin/ && \
+    cd ../../../ && \
+    rm -rf trt_oss_src
+
 
 # Build DS TAO app post processors
 # need to be after DS SDK installation

@@ -1,5 +1,5 @@
 name: nvclip
-model_repo: /opt/nim/.cache/model-repo/
+model_repo: /workspace/model-repo/
 
 # top level inference input specification
 input:

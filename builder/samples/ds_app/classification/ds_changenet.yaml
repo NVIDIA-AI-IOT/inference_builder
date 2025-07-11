@@ -1,0 +1,25 @@
+name: "deepstream-app"
+model_repo: "/workspace/models"
+
+models:
+- name: changenet-classify
+  backend: deepstream/nvinfer
+  max_batch_size: 2
+  input:
+  - name: media_url
+    data_type: TYPE_CUSTOM_BINARY_URLS
+    dims: [ -1 ]
+  - name: mime
+    data_type: TYPE_CUSTOM_DS_MIME
+    dims: [ -1 ]
+    optional: false
+  output:
+  - name: output
+    data_type: TYPE_CUSTOM_DS_METADATA
+    dims: [ -1 ]
+  parameters:
+    infer_config_path:
+      - nvdsinfer_config.yaml
+    preprocess_config_path:
+      - nvdspreprocess_config_0.yaml
+      - nvdspreprocess_config_1.yaml

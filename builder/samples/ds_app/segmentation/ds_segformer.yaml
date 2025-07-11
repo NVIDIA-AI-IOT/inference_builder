@@ -1,0 +1,28 @@
+name: "deepstream-app"
+model_repo: "/workspace/models"
+
+models:
+- name: citysemsegformer
+  backend: deepstream/nvinfer
+  max_batch_size: 4
+  input:
+  - name: media_url
+    data_type: TYPE_CUSTOM_BINARY_URLS
+    dims: [ -1 ]
+  - name: mime
+    data_type: TYPE_CUSTOM_DS_MIME
+    dims: [ -1 ]
+  output:
+  - name: output
+    data_type: TYPE_CUSTOM_DS_METADATA
+    dims: [ -1 ]
+  parameters:
+    infer_config_path:
+      - nvdsinfer_config.yaml
+    render_config:
+      enable_display: true
+      enable_osd: true
+      # enable_stream: true
+      # rtsp_mount_point: /ds_app
+      # rtsp_port: 8554
+    inference_timeout: 5

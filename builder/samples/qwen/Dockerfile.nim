@@ -9,11 +9,9 @@
 # its affiliates is strictly prohibited.
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev118" AS ds_stage
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev182" AS ds_stage
 
-FROM nvcr.io/nvidia/tritonserver:25.04-trtllm-python-py3 AS inference_base
-# Replace the base image with local built trtllm(v0.20.0rc3) image for using tensorrtllm/pytorch backend
-# FROM tensorrt_llm/release:latest AS inference_base
+FROM nvcr.io/nvidia/tensorrt-llm/release:0.20.0 AS inference_base
 
 ENV NVIDIA_DRIVER_CAPABILITIES $NVIDIA_DRIVER_CAPABILITIES,video
 
@@ -87,7 +85,7 @@ RUN touch /opt/nim/start_server.sh && \
     set -eu
 	# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 	# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
-    python3 /opt/nim/__main__.py
+    python3 /opt/nim/inference.py
 #    while true; do sleep 5; done
 EOF
 

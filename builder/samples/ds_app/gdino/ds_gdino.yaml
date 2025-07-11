@@ -69,6 +69,6 @@ models:
       input: ["pred_logits", "pred_boxes", "pred_masks", "pos_map"]
       output: ["output"]
       config:
-        infer_config_path: /opt/nim/.cache/model-repo/tao/nvdsinfer_config.yaml
+        infer_config_path: /workspace/models/gdino/nvdsinfer_config.yaml
 
 
