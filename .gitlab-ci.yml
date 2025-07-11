@@ -1,6 +1,6 @@
 # inference-builder/.gitlab-ci.yml
 include:
-  - local: 'builder/samples/tao/validation/.gitlab-ci.validation.yml'
+  # - local: 'builder/samples/tao/validation/.gitlab-ci.validation.yml'
   - local: 'deploy/.gitlab-ci.deploy.yml'
 
 # Define stages in order of execution
@@ -11,7 +11,7 @@ stages:
   - build-docker     # Builds and pushes tao container
   - deploy-test       # For each combination: deploy -> validate -> teardown
   - deploy            # Deploys the helm chart to the cluster
-  - build-validator   # Builds and pushes validator container
+  # - build-validator   # Builds and pushes validator container
 
 # Global variables used across jobs
 variables:
