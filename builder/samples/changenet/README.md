@@ -10,15 +10,15 @@ The model used in the sample can be found on NGC: https://catalog.ngc.nvidia.com
 
 ```bash
 ngc registry model download-version "nvidia/tao/visual_changenet_segmentation_landsatscd:deployable_v1.2"
-# Move the folder to the model-repo directory, and the sample uses ~/.cache/nim/model-repo by default
-mv visual_changenet_segmentation_landsatscd_vdeployable_v1.2 ~/.cache/nim/model-repo/visual_changenet
+# Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
+mv visual_changenet_segmentation_landsatscd_vdeployable_v1.2 ~/.cache/model-repo/visual_changenet
 ```
 
 ## Create the optimized TensorRT Engine:
 
 ```bash
 docker run -it --rm --gpus all \
--v ~/.cache/nim/model-repo/visual_changenet/:/changenet \
+-v ~/.cache/model-repo/visual_changenet/:/changenet \
 nvcr.io/nvidia/tensorrt-pb25h1:25.03.02-py3 \
 trtexec --onnx=/changenet/changenet_768.onnx --saveEngine=/changenet/model.plan --fp16
 ```
