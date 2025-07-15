@@ -619,7 +619,7 @@ class DeepstreamBackend(ModelBackend):
             dims = (resize_to[0], resize_to[1])
             logger.info(f"DeepstreamBackend: setting video size to {dims}")
         else:
-            # override the network dimensions from  the primary inference config
+            # video resized to network dimensions from  the primary inference config by default
             try:
                 primary_infer_config_path = infer_config_paths[0]
                 with open(primary_infer_config_path, 'r') as f:
