@@ -614,20 +614,25 @@ class DeepstreamBackend(ModelBackend):
         if ((self._image_tensor_name or self._media_url_tensor_name) and
             self._mime_tensor_name is None):
             raise ValueError("Deepstream pipeline requires TYPE_CUSTOM_DS_MIME input")
-        # override the network dimensions from  the primary inference config
-        try:
-            primary_infer_config_path = infer_config_paths[0]
-            with open(primary_infer_config_path, 'r') as f:
-                primary_infer_config = yaml.safe_load(f)
-            if "property" in primary_infer_config:
-                property = primary_infer_config["property"]
-                if "infer-dims" in property:
-                    infer_dims = [int(dim) for dim in property["infer-dims"].split(";")]
-                    if len(infer_dims) == 3:
-                        dims = (infer_dims[0], infer_dims[1]) if "network-input-order" in property and property["network-input-order"] == 1 else (infer_dims[1], infer_dims[2])
-                        logger.info(f"DeepstreamBackend: setting network dimensions to {dims}")
-        except Exception as e:
-            raise RuntimeError(f"Failed to load primary inference config: {e}") from e
+        if "resize_video" in model_config["parameters"] and len(model_config["parameters"]["resize_video"]) == 2:
+            resize_to = model_config["parameters"]["resize_video"]
+            dims = (resize_to[0], resize_to[1])
+            logger.info(f"DeepstreamBackend: setting video size to {dims}")
+        else:
+            # override the network dimensions from  the primary inference config
+            try:
+                primary_infer_config_path = infer_config_paths[0]
+                with open(primary_infer_config_path, 'r') as f:
+                    primary_infer_config = yaml.safe_load(f)
+                if "property" in primary_infer_config:
+                    property = primary_infer_config["property"]
+                    if "infer-dims" in property:
+                        infer_dims = [int(dim) for dim in property["infer-dims"].split(";")]
+                        if len(infer_dims) == 3:
+                            dims = (infer_dims[0], infer_dims[1]) if "network-input-order" in property and property["network-input-order"] == 1 else (infer_dims[1], infer_dims[2])
+                            logger.info(f"DeepstreamBackend: setting video size to network dimensions: {dims}")
+            except Exception as e:
+                raise RuntimeError(f"Failed to load primary inference config: {e}") from e
         if dims[0] == 0 or dims[1] == 0:
             raise ValueError(
                 "DeepstreamBackend: unable to find network dimensions: "
