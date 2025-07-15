@@ -9,7 +9,7 @@
 # its affiliates is strictly prohibited.
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev182" AS ds_stage
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.1" AS ds_stage
 
 FROM nvcr.io/nvidia/tensorrt-llm/release:0.20.0 AS inference_base
 
@@ -39,7 +39,7 @@ RUN --mount=type=cache,target=/root/.cache/pip pip install qwen-vl-utils[decord]
     omegaconf==2.3.0
 
 # Comment out the following lines if using local built trtllm image
-#RUN --mount=type=cache,target=/root/.cache/pip pip install git+https://github.com/huggingface/transformers accelerate
+RUN --mount=type=cache,target=/root/.cache/pip pip install git+https://github.com/huggingface/transformers accelerate
 
 WORKDIR /workspace
 ADD qwen.tgz /workspace

@@ -387,8 +387,11 @@ class VideoFrameSamplingDataFlow(DataFlow):
         return all([n in collected for n in self._video_tensor_names])
 
     def stop(self):
+        self._media_extractor.__del__()
         self._media_extractor = None
         super().stop()
+
+
 class ImageInputDataFlow(DataFlow):
     """A data flow for image data"""
     def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str,timeout=None):

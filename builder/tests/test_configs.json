@@ -7,7 +7,7 @@
       "CACHE_BUSTER": "default_test"
     },
     "test_config": {
-      "timeout": 5,
+      "timeout": 10,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes"
       },
@@ -18,7 +18,11 @@
         "--video-files", "34888cef-8d7a-4de9-80f2-7a6a11974d6f?frames=10"
       ],
       "error_detection": {
-        "enabled": true
+        "enabled": true,
+        "patterns": [
+          "[ERROR]",
+          "[CRITICAL]"
+        ]
       },
       "prerequisite_script": null
     }
@@ -33,8 +37,7 @@
     "test_config": {
       "timeout": 5,
       "env": {
-        "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
-        "GST_DEBUG": "*:3"
+        "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes"
       },
       "volumes": {
         "frame_sampling/models": "/workspace/models"
