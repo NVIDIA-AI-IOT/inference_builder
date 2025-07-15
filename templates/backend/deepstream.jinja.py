@@ -233,7 +233,7 @@ class BulkVideoInputPool(TensorInputPool):
             if self._mime_tensor_name and self._mime_tensor_name in item:
                 item.pop(self._mime_tensor_name)
             if self._media_url_tensor_name and self._media_url_tensor_name in item:
-                url_list.append(item.pop(self._media_url_tensor_name))
+                url_list.append(str(item.pop(self._media_url_tensor_name)))
             elif self._source_tensor_name and self._source_tensor_name in data[0]:
                 source_config_file = item.pop(self._source_tensor_name).tolist()
                 if not source_config_file.lower().endswith(('.yml', '.yaml')):
