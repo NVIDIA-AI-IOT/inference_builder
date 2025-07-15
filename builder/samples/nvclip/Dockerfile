@@ -8,7 +8,7 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev156" AS ds_stage
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.1" AS ds_stage
 
 FROM "nvcr.io/nvidia/tritonserver:25.01-py3" AS builder_base
 
@@ -35,6 +35,7 @@ aiofiles==23.2.1 \
 aiohttp==3.11.0 \
 annotated-types==0.7.0 \
 python-magic==0.4.27 \
+tensorrt==10.8.0.43 \
 torch==2.4.0 \
 torchvision==0.19.0 \
 Pillow==11.1.0 \
@@ -44,8 +45,7 @@ omegaconf==2.3.0 \
 transformers==4.48.0 \
 fastapi==0.115.12 \
 uvicorn==0.29.0 \
-polygraphy==0.49.24 \
-tensorrt==10.8.0.43
+polygraphy==0.49.24 
 
 ENV TRANSFORMERS_CACHE=/tmp
 

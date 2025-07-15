@@ -94,7 +94,7 @@ class GenericTensorInput():
         self.queue = Queue(maxsize=1)
         self._device_id = device_id
 
-    def generate(self):
+    def generate(self, n):
         try:
             tensors = self.queue.get(timeout=1)
         except Empty:
@@ -111,7 +111,7 @@ class StaticTensorInput():
         self._tensors = {}
         self._device_id = device_id
 
-    def generate(self):
+    def generate(self, n):
         result = {k: as_tensor(v, "").to_gpu(self._device_id) for k, v in self._tensors.items()}
         return result
 
@@ -273,7 +273,7 @@ class BulkVideoInputPool(TensorInputPool):
                 batched_push_timeout=self._batch_timeout)
 
         for config in self._preprocess_config_paths:
-            flow = flow.preprocess(config, None if not self._generic_input else lambda: self._generic_input.generate())
+            flow = flow.preprocess(config, None if not self._generic_input else self._generic_input.generate)
         for config_path, engine_file in zip(self._infer_config_paths, self._engine_file_names):
             if engine_file:
                 flow = flow.infer(config_path, batch_size=self._batch_size, model_engine_file=engine_file)
@@ -663,7 +663,7 @@ class DeepstreamBackend(ModelBackend):
             flow = flow.inject(in_pool.image_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=batch_timeout, live_source=False, width=dims[1], height=dims[0])
             for config_file in preprocess_config_paths:
                 input = self._in_pools[media].generic_input if require_extra_input else None
-                flow = flow.preprocess(config_file, None if not input else lambda: input.generate())
+                flow = flow.preprocess(config_file, None if not input else input.generate)
             for config_file in infer_config_paths:
                 engine_file = self._generate_engine_name(config_file, device_id, self._max_batch_size)
                 if engine_file:

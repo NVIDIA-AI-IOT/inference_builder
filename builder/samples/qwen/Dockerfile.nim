@@ -9,7 +9,7 @@
 # its affiliates is strictly prohibited.
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-devel-dev182" AS ds_stage
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.1" AS ds_stage
 
 FROM nvcr.io/nvidia/tensorrt-llm/release:0.20.0 AS inference_base
 
