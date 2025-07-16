@@ -287,7 +287,7 @@ class BulkVideoInputPool(TensorInputPool):
                 tracker_width=self._dims[1],
                 tracker_height=self._dims[0]
             )
-        flow = flow.attach(Probe('tensor_retriver', self._output))
+        flow = flow.attach(Probe('tensor_retriever', self._output))
 
         if self._perf_config.enable_fps_logs:
             flow = flow.attach(what="measure_fps_probe", name="fps_probe")
@@ -380,7 +380,9 @@ class BaseTensorOutput(BatchMetadataOperator):
             f"DeepstreamBackend: Depositing data to index {index}: {data}"
         )
         try:
+            logger.info("1111111111111111")
             self._queue.put((index, data))
+            logger.info("2222222222222222")
         except Full:
             logger.warning(
                 f"DeepstreamBackend: Queue is full, dropping data from "
@@ -425,7 +427,7 @@ class DeepstreamMetadata:
     bboxes: list[list[int]] = field(default_factory=list)
     probs: list[float] = field(default_factory=list)
     labels: list[str] = field(default_factory=list)
-    seg_maps: list[list[int]] = field(default_factory=list)
+    seg_maps: list[np.ndarray] = field(default_factory=list)
     objects: list[int] = field(default_factory=list)
     timestamp: int = 0
 
@@ -458,7 +460,7 @@ class PreprocessMetadataOutput(BaseTensorOutput):
                     seg_meta = u_meta.as_segmentation()
                     if seg_meta:
                         metadata.shape = [seg_meta.height, seg_meta.width]
-                        metadata.seg_maps.append(_to_list(seg_meta.class_map))
+                        metadata.seg_maps.append(seg_meta.class_map.copy())
                 # object metadata
                 for object_meta in roi.frame_meta.object_items:
                     labels = [object_meta.label] if object_meta.label else []
@@ -508,7 +510,7 @@ class MetadataOutput(BaseTensorOutput):
                 seg_meta = user_meta.as_segmentation()
                 if seg_meta:
                     metadata.shape = [seg_meta.height, seg_meta.width]
-                    metadata.seg_maps.append(_to_list(seg_meta.class_map))
+                    metadata.seg_maps.append(seg_meta.class_map.copy())
             metadata.timestamp = frame_meta.buffer_pts
             self._deposit(frame_meta.pad_index, metadata)
 
@@ -774,7 +776,7 @@ class DeepstreamBackend(ModelBackend):
         indices = self._in_pools[media].submit(in_data_list)
         # collect the results
         while True:
-            # TODO: timeout should be runtime configurabl
+            # TODO: timeout should be runtime configurable
             results = self._outputs[media].collect(indices, timeout=self._inference_timeout)
             if not results:
                 logger.info("DeepstreamBackend: No more data from this batch")
