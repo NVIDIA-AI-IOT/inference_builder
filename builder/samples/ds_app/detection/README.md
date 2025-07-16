@@ -83,3 +83,68 @@ docker run --rm --net=host --gpus all \
     --media-url /sample_input/test_1.jpg \
     --mime image/jpeg
 ```
+
+## MV3DT (Multi-View 3D Tracking)
+
+This section demonstrates how to set up and run the MV3DT model for multi-view 3D tracking.
+
+### Model Setup
+
+1. **Download Model Files:**
+   Download the model content from [Google Drive](https://drive.google.com/drive/folders/1EiLjPYjGeIF2duElHlH11lu94_fO5WEZ?usp=drive_link) into your `$MODEL_REPO` directory.
+
+2. **Copy Required Files:**
+   ```bash
+   cp builder/samples/ds_app/detection/PeopleNetTransformer/* $MODEL_REPO/PeopleNetTransformer/
+   ```
+
+3. **Create Output Directories:**
+   ```bash
+   mkdir -p $MODEL_REPO/PeopleNetTransformer/gie_kitti_data
+   mkdir -p $MODEL_REPO/PeopleNetTransformer/tracker_kitti_data
+   mkdir -p $MODEL_REPO/PeopleNetTransformer/trajDumps
+   ```
+
+### Sample Data Setup
+
+1. **Download Sample Streams:**
+   Download the sample content from [Google Drive](https://drive.google.com/drive/folders/1elBteIllmbdDSE0EMEiYjG_ZTwKrKXwE?usp=drive_link) into your `$SAMPLE_INPUT` directory.
+
+2. **Set Environment Variable:**
+   ```bash
+   export SAMPLE_INPUT=/path/to/MTMC_Warehouse_Synthetic_4cam/
+   ```
+
+### Build and Run
+
+**Generate the deepstream application package and build it into a container image:**
+
+```bash
+python builder/main.py builder/samples/ds_app/detection/ds_mv3dt.yaml -o builder/samples/ds_app --server-type serverless -t \
+&& docker build --build-arg GITLAB_TOKEN=$GITLAB_TOKEN -t deepstream-app builder/samples/ds_app
+```
+
+**Run with multi-camera video input:**
+
+```bash
+docker run --rm --net=host --gpus all \
+    -v $MODEL_REPO:/workspace/models \
+    -v $SAMPLE_INPUT:/workspace/inputs \
+    -v /tmp/.X11-unix/:/tmp/.X11-unix \
+    -e DISPLAY=$DISPLAY \
+    deepstream-app \
+    --media-url /workspace/inputs/videos/Warehouse_Synthetic_Cam001.mp4 \
+                /workspace/inputs/videos/Warehouse_Synthetic_Cam002.mp4 \
+                /workspace/inputs/videos/Warehouse_Synthetic_Cam003.mp4 \
+                /workspace/inputs/videos/Warehouse_Synthetic_Cam004.mp4 \
+    --mime video/mp4 video/mp4 video/mp4 video/mp4
+```
+
+### Results
+
+Once the run is complete, the following output data will be populated in the respective directories:
+
+- **`gie_kitti_data`** - Inference kitti data
+- **`tracker_kitti_data`** - Tracker Kitti data  
+- **`trajDumps`** - Trajectory dump data
+

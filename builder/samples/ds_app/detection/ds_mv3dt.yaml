@@ -1,8 +1,7 @@
 name: "deepstream-app"
 model_repo: "/workspace/models"
-
 models:
-- name: rtdetr
+- name: PeopleNetTransformer
   backend: deepstream/nvinfer
   max_batch_size: 4
   input:
@@ -23,31 +22,19 @@ models:
     data_type: TYPE_CUSTOM_DS_METADATA
     dims: [ -1 ]
   parameters:
-    # timeout in nanoseconds for batching multiple inputs
-    batch_timeout: -1
     infer_config_path:
       - nvdsinfer_config.yaml
+    resize_video: [1080, 1920]
     tracker_config:
       ll_lib_file: /opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so
-      ll_config_file: /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_IOU.yml
+      ll_config_file: /workspace/models/PeopleNetTransformer/config_tracker.yml
       width: 1920
       height: 1088
       display_tracking_id: true
-    msgbroker_config:
-      msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so
-      msgbroker_msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt
-      msgbroker_conn_str: localhost;9092
-      msgbroker_topic: ds_app
-    render_config:
-      enable_display: true
-      enable_osd: true
-      # enable_stream: true
-      # rtsp_mount_point: /ds_app
-      # rtsp_port: 8554
     perf_config:
       enable_fps_logs: true
       enable_latency_logs: true
     kitti_config:
-      gie_kitti_output_dir: /workspace/gie_kitti_output
-      tracker_kitti_output_dir: /workspace/tracker_kitti_output
+      gie_kitti_output_dir: /workspace/models/PeopleNetTransformer/gie-kitti-dump/
+      tracker_kitti_output_dir: /workspace/models/PeopleNetTransformer/tracker-kitti-dump/
     inference_timeout: 5
