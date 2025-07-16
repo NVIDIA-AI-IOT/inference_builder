@@ -380,9 +380,7 @@ class BaseTensorOutput(BatchMetadataOperator):
             f"DeepstreamBackend: Depositing data to index {index}: {data}"
         )
         try:
-            logger.info("1111111111111111")
             self._queue.put((index, data))
-            logger.info("2222222222222222")
         except Full:
             logger.warning(
                 f"DeepstreamBackend: Queue is full, dropping data from "
