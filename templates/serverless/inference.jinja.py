@@ -5,6 +5,7 @@ import asyncio
 from lib.inference import py_datatype_mapping
 from .model import GenericInference
 import json
+from lib.utils import NumpyFlatEncoder
 
 
 def create_parser(inputs: List) -> argparse.ArgumentParser:
@@ -65,7 +66,7 @@ async def run_inference(args) -> Optional[int]:
     async for result in service.execute(inputs):
         if save_to:
             with open(save_to, "a", encoding='utf-8') as f:
-                json_str = json.dumps(result, indent=4)
+                json_str = json.dumps(result, indent=4, cls=NumpyFlatEncoder)
                 f.write(json_str)
                 f.write("\n")
         else:
