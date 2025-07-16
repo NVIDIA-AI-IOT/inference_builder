@@ -8,9 +8,16 @@ import importlib
 import numpy as np
 import torch
 import jinja2
+import json
 
 kDebug = int(os.getenv("DEBUG", "0"))
 PACKAGE_NAME = "NIM"
+
+class NumpyFlatEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.flatten().tolist()
+        return super().default(obj)
 
 
 def concat_tensors_in_dict(list_of_tensor_dicts: List) -> Dict:
@@ -93,10 +100,22 @@ def create_jinja2_env():
     def raise_helper(message):
         raise Exception(message)
 
+    def tolist(value):
+        if hasattr(value, 'tolist'):
+            # Convert NumPy array to list and flatten to 1D
+            return value.flatten().tolist()
+        elif isinstance(value, list):
+            # Already a list, return as is
+            return value
+        else:
+            # Fallback: try to convert to list
+            return list(value)
+
     jinja2_env = jinja2.Environment()
     jinja2_env.tests["startswith"] = start_with
     jinja2_env.filters["replace"] = replace
     jinja2_env.filters["extract"] = extract
+    jinja2_env.filters["tolist"] = tolist
     jinja2_env.filters["zip"] = zip
     jinja2_env.globals["raise"] = raise_helper
 
