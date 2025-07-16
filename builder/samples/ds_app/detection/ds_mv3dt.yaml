@@ -34,7 +34,7 @@ models:
     perf_config:
       enable_fps_logs: true
       enable_latency_logs: true
-    kitti_config:
-      gie_kitti_output_dir: /workspace/models/PeopleNetTransformer/gie-kitti-dump/
-      tracker_kitti_output_dir: /workspace/models/PeopleNetTransformer/tracker-kitti-dump/
+    kitti_output_path:
+      infer: /workspace/models/PeopleNetTransformer/infer-kitti-dump/
+      tracker: /workspace/models/PeopleNetTransformer/tracker-kitti-dump/
     inference_timeout: 5

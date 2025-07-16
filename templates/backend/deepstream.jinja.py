@@ -72,16 +72,16 @@ class MessageBrokerConfig:
 
 @dataclass
 class KittiConfig:
-    gie_kitti_output_dir: str | None = None
+    infer_kitti_output_dir: str | None = None
     tracker_kitti_output_dir: str | None = None
 
     def __bool__(self) -> bool:
         """Check if any required kitti configuration fields are set."""
-        if self.gie_kitti_output_dir is None and self.tracker_kitti_output_dir is None:
+        if self.infer_kitti_output_dir is None and self.tracker_kitti_output_dir is None:
             logger.warning("KittiConfig: No kitti output directory specified")
             return False
-        if self.gie_kitti_output_dir is not None and not os.path.exists(self.gie_kitti_output_dir):
-            logger.warning(f"KittiConfig: gie_kitti_output_dir does not exist: {self.gie_kitti_output_dir}")
+        if self.infer_kitti_output_dir is not None and not os.path.exists(self.infer_kitti_output_dir):
+            logger.warning(f"KittiConfig: infer_kitti_output_dir does not exist: {self.infer_kitti_output_dir}")
             return False
         if self.tracker_kitti_output_dir is not None and not os.path.exists(self.tracker_kitti_output_dir):
             logger.warning(f"KittiConfig: tracker_kitti_output_dir does not exist: {self.tracker_kitti_output_dir}")
@@ -305,8 +305,8 @@ class BulkVideoInputPool(TensorInputPool):
                 flow = flow.infer(config_path, batch_size=self._batch_size, model_engine_file=engine_file)
             else:
                 flow = flow.infer(config_path, batch_size=self._batch_size)
-        if self._kitti_config.gie_kitti_output_dir:
-            flow = flow.attach(what="kitti_dump_probe", name="inference_kitti_dump", properties={"kitti-dir": self._kitti_config.gie_kitti_output_dir})
+            if self._kitti_config.infer_kitti_output_dir:
+                flow = flow.attach(what="kitti_dump_probe", name="inference_kitti_dump", properties={"kitti-dir": self._kitti_config.infer_kitti_output_dir})
         if self._tracker_config:
             flow = flow.track(
                 ll_config_file=self._tracker_config.config_path,
@@ -316,8 +316,8 @@ class BulkVideoInputPool(TensorInputPool):
                 tracker_height=self._tracker_config.height,
                 display_tracking_id=self._tracker_config.display_tracking_id
             )
-        if self._kitti_config.tracker_kitti_output_dir:
-            flow = flow.attach(what="kitti_dump_probe", name="tracker_kitti_dump", properties={"tracker-kitti-output": True,"kitti-dir": self._kitti_config.tracker_kitti_output_dir})
+            if self._kitti_config.tracker_kitti_output_dir:
+                flow = flow.attach(what="kitti_dump_probe", name="tracker_kitti_dump", properties={"tracker-kitti-output": True,"kitti-dir": self._kitti_config.tracker_kitti_output_dir})
 
         flow = flow.attach(Probe('tensor_retriver', self._output))
 
@@ -460,18 +460,6 @@ class DeepstreamMetadata:
     seg_maps: list[np.ndarray] = field(default_factory=list)
     objects: list[int] = field(default_factory=list)
     timestamp: int = 0
-
-def _to_list(array):
-    """Adapt data to python list[int], mainly for NumPy array to list[int]"""
-    if hasattr(array, 'tolist'):
-        # Convert NumPy array to list and flatten to 1D
-        return array.flatten().tolist()
-    elif isinstance(array, list):
-        # Already a list, return as is
-        return array
-    else:
-        # Fallback: try to convert to list
-        return list(array)
 
 class PreprocessMetadataOutput(BaseTensorOutput):
     def __init__(self, n_outputs, output_name, dims):
@@ -618,10 +606,10 @@ class DeepstreamBackend(ModelBackend):
             )
         else:
             perf_config = PerfConfig()
-        if "kitti_config" in model_config["parameters"]:
+        if "kitti_output_path" in model_config["parameters"]:
             kitti_config = KittiConfig(
-                gie_kitti_output_dir=model_config["parameters"]["kitti_config"].get("gie_kitti_output_dir", None),
-                tracker_kitti_output_dir=model_config["parameters"]["kitti_config"].get("tracker_kitti_output_dir", None)
+                infer_kitti_output_dir=model_config["parameters"]["kitti_output_path"].get("infer", None),
+                tracker_kitti_output_dir=model_config["parameters"]["kitti_output_path"].get("tracker", None)
             )
             if not kitti_config:
                 logger.warning("DeepstreamBackend: kitti_config is not properly configured")
