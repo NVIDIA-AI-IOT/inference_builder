@@ -16,7 +16,6 @@ property:
   cluster-mode: 4
   parse-bbox-func-name: NvDsInferParseCustomDDETRTAO
   custom-lib-path: custom_parser/libnvds_infercustomparser_tao.so
-  nvbuf-memory-type: 0
 class-attrs-all:
   pre-cluster-threshold: 0.3
   topk: 20

@@ -100,9 +100,19 @@ This section demonstrates how to set up and run the MV3DT model for multi-view 3
 
 3. **Create Output Directories:**
    ```bash
-   mkdir -p $MODEL_REPO/PeopleNetTransformer/gie_kitti_data
-   mkdir -p $MODEL_REPO/PeopleNetTransformer/tracker_kitti_data
+   mkdir -p $MODEL_REPO/PeopleNetTransformer/infer-kitti-dump
+   mkdir -p $MODEL_REPO/PeopleNetTransformer/tracker-kitti-dump
    mkdir -p $MODEL_REPO/PeopleNetTransformer/trajDumps
+   ```
+
+4. **Clean up existing ModelEngine files (optional):**
+   ```bash
+   # Remove existing TensorRT engine files to force regeneration for your system
+   # This is recommended when switching between different GPU architectures or TensorRT versions
+   rm -f $MODEL_REPO/PeopleNetTransformer/*.engine
+   rm -f $MODEL_REPO/BodyPose3DNet/*.engine
+   rm -f $MODEL_REPO/ReID-MTMC/*.engine
+   rm -f $MODEL_REPO/PeopleNet2.6.3/*.engine
    ```
 
 ### Sample Data Setup
@@ -144,7 +154,7 @@ docker run --rm --net=host --gpus all \
 
 Once the run is complete, the following output data will be populated in the respective directories:
 
-- **`gie_kitti_data`** - Inference kitti data
-- **`tracker_kitti_data`** - Tracker Kitti data  
+- **`infer-kitti-dump`** - Inference kitti data
+- **`tracker-kitti-dump`** - Tracker Kitti data  
 - **`trajDumps`** - Trajectory dump data
 

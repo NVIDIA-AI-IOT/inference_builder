@@ -37,4 +37,4 @@ models:
     kitti_output_path:
       infer: /workspace/models/PeopleNetTransformer/infer-kitti-dump/
       tracker: /workspace/models/PeopleNetTransformer/tracker-kitti-dump/
-    inference_timeout: 5
+    inference_timeout: 1000
