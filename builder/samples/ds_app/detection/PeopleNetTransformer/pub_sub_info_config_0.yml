@@ -1,0 +1,18 @@
+pubBrokerTopicStr:
+- 127.0.0.1:1883;/trck/cam0
+- 127.0.0.1:1883;/trck/cam1
+- 127.0.0.1:1883;/trck/cam2
+- 127.0.0.1:1883;/trck/cam3
+subPeerBrokerTopicStrs:
+- - 127.0.0.1:1883;/trck/cam1
+  - 127.0.0.1:1883;/trck/cam2
+  - 127.0.0.1:1883;/trck/cam3
+- - 127.0.0.1:1883;/trck/cam3
+  - 127.0.0.1:1883;/trck/cam2
+  - 127.0.0.1:1883;/trck/cam0
+- - 127.0.0.1:1883;/trck/cam1
+  - 127.0.0.1:1883;/trck/cam0
+  - 127.0.0.1:1883;/trck/cam3
+- - 127.0.0.1:1883;/trck/cam1
+  - 127.0.0.1:1883;/trck/cam0
+  - 127.0.0.1:1883;/trck/cam2

@@ -1,0 +1,21 @@
+property:
+  gpu-id: 0
+  model-engine-file: peoplenet_transformer_model_op17.onnx_b4_gpu0_fp16.engine
+  offsets: 123.675;116.28;103.53
+  net-scale-factor: 0.0173520735728
+  labelfile-path: detector_labels.txt
+  onnx-file: peoplenet_transformer_model_op17.onnx
+  tlt-model-key: nvidia_tao
+  batch-size: 4
+  network-mode: 2
+  num-detected-classes: 4
+  interval: 0
+  gie-unique-id: 1
+  output-blob-names: pred_boxes;pred_logits
+  infer-dims: 3;544;960
+  cluster-mode: 4
+  parse-bbox-func-name: NvDsInferParseCustomDDETRTAO
+  custom-lib-path: custom_parser/libnvds_infercustomparser_tao.so
+class-attrs-all:
+  pre-cluster-threshold: 0.3
+  topk: 20
