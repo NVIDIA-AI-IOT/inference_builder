@@ -125,6 +125,16 @@ This section demonstrates how to set up and run the MV3DT model for multi-view 3
    export SAMPLE_INPUT=/path/to/MTMC_Warehouse_Synthetic_4cam/
    ```
 
+### MQTT Setup for Tracker
+
+Install the MQTT broker and clients required for the tracker:
+
+```bash
+sudo apt-add-repository ppa:mosquitto-dev/mosquitto-ppa
+sudo apt update
+sudo apt install mosquitto mosquitto-clients
+```
+
 ### Build and Run
 
 **Generate the deepstream application package and build it into a container image:**
