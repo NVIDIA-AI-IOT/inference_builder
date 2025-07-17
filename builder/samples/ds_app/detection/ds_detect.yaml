@@ -23,18 +23,18 @@ models:
     data_type: TYPE_CUSTOM_DS_METADATA
     dims: [ -1 ]
   parameters:
-    # timeout in nanoseconds for batching multiple inputs
-    batch_timeout: -1
+    # timeout in microseconds for batching multiple inputs
+    batch_timeout: 33333
     infer_config_path:
       - nvdsinfer_config.yaml
     tracker_config:
       ll_lib_file: /opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so
       ll_config_file: /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_IOU.yml
-    msgbroker_config:
-      msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so
-      msgbroker_msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt
-      msgbroker_conn_str: localhost;9092
-      msgbroker_topic: ds_app
+#    msgbroker_config:
+#      msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so
+#      msgbroker_msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt
+#      msgbroker_conn_str: localhost;9092
+#      msgbroker_topic: ds_app
     render_config:
       enable_display: true
       enable_osd: true

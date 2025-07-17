@@ -2,6 +2,11 @@
 
 This sample demonstrates how to build an inference pipeline for models that use triton backend. It also shows how to incorporate CVCUDA in customized processors to accelerate media processing.
 
+The sample has been tested on following platforms
+- RTX 4090
+- H100
+- A6000
+
 # Prerequisites
 
 The model used in the sample can be found on NGC: https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/visual_changenet_segmentation_landsatscd

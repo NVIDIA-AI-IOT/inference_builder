@@ -2,6 +2,11 @@
 
 This sample demonstrate how to create the inference package for an embedding NIM with tensorrt backend (polygrapy) and fastapi server.
 
+The sample has been tested on following platforms
+- RTX 4090
+- H100
+- A6000
+
 # Prerequisites
 
 The model used in this sample can be found from NGC: https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/nvclip_vit. Make sure you have the proper access right to the models, and download the checkpoints.
