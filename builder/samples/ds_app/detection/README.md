@@ -135,6 +135,12 @@ sudo apt update
 sudo apt install mosquitto mosquitto-clients
 ```
 
+Launch mosquitto broker
+
+```bash
+mosquitto -p 1883
+```
+
 ### Build and Run
 
 **Generate the deepstream application package and build it into a container image:**
