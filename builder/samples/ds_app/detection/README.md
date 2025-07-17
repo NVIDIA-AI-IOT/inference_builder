@@ -86,12 +86,14 @@ docker run --rm --net=host --gpus all \
 
 ## MV3DT (Multi-View 3D Tracking)
 
-This section demonstrates how to set up and run the MV3DT model for multi-view 3D tracking.
+This section demonstrates how to set up and run the MV3DT specific models for multi-view 3D tracking.
 
 ### Model Setup
 
 1. **Download Model Files:**
    Download the model content from [Google Drive](https://drive.google.com/drive/folders/1EiLjPYjGeIF2duElHlH11lu94_fO5WEZ?usp=drive_link) into your `$MODEL_REPO` directory.
+
+    **Note:** MV3DT-specific model files will be made publicly available in a future release (required for DS-8.0). The download instructions above will be updated once the models are hosted on the official NGC catalog or other public repositories.
 
 2. **Copy Required Files:**
    ```bash
