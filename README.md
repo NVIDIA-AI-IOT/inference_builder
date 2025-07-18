@@ -160,7 +160,7 @@ Input and output definitions are required at the model level, and in some cases 
   - TYPE_CUSTOM_VIDEO_ASSETS: When used as an input, the data consists of UUID strings that reference managed video assets, along with parameters that control frame sampling. These assets are automatically decoded to evenly sampled image tensors and passed downstream frame by frame. The frame sampling parameters are provided as a query string in the format: ?key1=value1&key2=value2. Supported keys include:
     - frames: Number of total frames to be extracted.
     - start: Start timestamp in microseconds
-    - end: End timestamp in microseconds
+    - duration: Duration in microseconds
   - TYPE_CUSTOM_VIDEO_CHUNK_ASSETS: similar to TYPE_CUSTOM_VIDEO_ASSETS, the data represents managed video assets and will be automatically decoded and sampled. The only difference is all the frames will be packaged into a single list before being passed downstream.
   - TYPE_BINARY_URLS: When used for input, the data will be converted to a list and treated as urls.
   - TYPE_CUSTOM_DS_IMAGE: Encoded image specifically for inputs of Deepstream pipeline
