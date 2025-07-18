@@ -277,12 +277,12 @@ class VideoInputDataFlow(DataFlow):
             if asset:
                 n_frames = int(params.get("frames", None))
                 start = int(params.get("start", 0))
-                end = int(params.get("end", asset.duration))
-                interval = (end - start) / n_frames if n_frames else 0
+                duration = int(params.get("duration", asset.duration))
+                interval = duration / n_frames if n_frames else 0
                 media_chunks.append(MediaChunk(
                     asset.path,
                     start_pts=start,
-                    duration=(end - start),
+                    duration=duration,
                     interval=interval
                 ))
             else:
@@ -346,12 +346,12 @@ class VideoFrameSamplingDataFlow(DataFlow):
             if asset:
                 n_frames = int(params.get("frames", None))
                 start = int(params.get("start", 0))
-                end = int(params.get("end", asset.duration))
-                interval = (end - start) / n_frames if n_frames else 0
+                duration = int(params.get("duration", asset.duration))
+                interval = duration / n_frames if n_frames else 0
                 chunk = MediaChunk(
                     asset.path,
                     start_pts=start,
-                    duration=(end - start),
+                    duration=duration,
                     interval=interval
                 )
                 qs.append(self._media_extractor.append(chunk))
