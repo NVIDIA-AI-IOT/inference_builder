@@ -38,3 +38,4 @@ models:
       infer: /workspace/models/PeopleNetTransformer/infer-kitti-dump/
       tracker: /workspace/models/PeopleNetTransformer/tracker-kitti-dump/
     inference_timeout: 1000
+    batch_timeout: -1
