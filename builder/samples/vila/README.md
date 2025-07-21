@@ -1,6 +1,9 @@
 # Introduction
 
-This sample demonstrates how to build the inference pipeline for VILA 1.5 and how to integrate it into a NIM.
+This sample demonstrates how to build the inference pipeline for VILA 1.5 and how to integrate it into a microservice.
+
+The sample has been tested on following platforms:
+- H100
 
 # Prerequisites
 
@@ -14,7 +17,7 @@ mkdir -p ~/.cache/model-repo
 
 ## The model
 
-VILA 1.5 checkpoints can be downloaded from huggingface using the following command:
+VILA 1.5 checkpoints can be downloaded from huggingface using the following command (Be sure to have git-lfs installed):
 
 ```bash
 git clone https://huggingface.co/Efficient-Large-Model/VILA1.5-13b ~/.cache/model-repo/vila1.5-13b
@@ -60,7 +63,7 @@ python builder/main.py --server-type triton builder/samples/vila/tensorrt_vila1.
 
 ```bash
 cd builder/samples
-docker compose up --build nim-vila
+docker compose up --build ms-vila
 ```
 
 # Test with the client:

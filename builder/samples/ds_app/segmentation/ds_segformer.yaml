@@ -4,7 +4,7 @@ model_repo: "/workspace/models"
 models:
 - name: citysemsegformer
   backend: deepstream/nvinfer
-  max_batch_size: 4
+  max_batch_size: 2
   input:
   - name: media_url
     data_type: TYPE_CUSTOM_BINARY_URLS

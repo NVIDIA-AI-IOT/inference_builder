@@ -43,7 +43,7 @@
         "frame_sampling/models": "/workspace/models"
       },
       "cmd": [
-        "--video-streams", "fcf490e3-a64b-4dc9-95db-dcdba90032b3?frames=10&start=500000000&end=1000000000"
+        "--video-streams", "fcf490e3-a64b-4dc9-95db-dcdba90032b3?frames=10&duration=1000000000"
       ],
       "error_detection": {
         "enabled": false
