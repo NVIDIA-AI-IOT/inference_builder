@@ -86,7 +86,7 @@ options:
                         File for OpenAPI specification
   -c [CUSTOM_MODULE ...], --custom-module [CUSTOM_MODULE ...]
                         Custom python modules
-  -x, --exclude-lib     Don't include common lib to the generated code.
+  -x, --exclude-lib     Do not include common lib to the generated code.
   -t, --tar-output      Zip the output to a single file
   -v VALIDATION_DIR, --validation-dir VALIDATION_DIR
                         valid validation directory path to build validator
@@ -206,10 +206,10 @@ Both custom preprocessors and postprocessors are defined using the following spe
 #### Custom Preprocessor/Postprocessor Implementation Requirements
 
 When implementing a custom preprocessor or postprocessor, the class must adhere to the following specification:
-- A class variable named "name" must be defined to uniquely identify the processor.
-- An __init__ method must be implemented to accept a single argument: a dictionary containing the processor’s configuration (config).
-- A __call__ method must be defined to accept multiple positional arguments. The number and order of these arguments must match the input definition in the configuration file.
-- The __call__ method must return a tuple of tensors, in the order specified in the configuration file's output section.
+- A class variable named `"name"` must be defined to uniquely identify the processor.
+- An `__init__` method must be implemented to accept a single argument: a dictionary containing the processor's configuration (`config`).
+- A `__call__` method must be defined to accept multiple positional arguments. The number and order of these arguments must match the input definition in the configuration file.
+- The `__call__` method must return a tuple of tensors, in the order specified in the configuration file's output section.
 - Input and output data are expected to be either NumPy arrays or PyTorch tensors, unless a custom data type is explicitly specified.
 
 ### Server Definition
