@@ -2,7 +2,7 @@ name: "deepstream-app"
 model_repo: "/workspace/models"
 
 models:
-- name: rtdetr
+- name: resnet
   backend: deepstream/nvinfer
   max_batch_size: 4
   input:
@@ -32,7 +32,7 @@ models:
       ll_config_file: /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_IOU.yml
       width: 1920
       height: 1088
-    #   display_tracking_id: true
+      display_tracking_id: true
     # msgbroker_config:
     #   msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so
     #   msgbroker_msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt
@@ -41,12 +41,12 @@ models:
     render_config:
       enable_display: true
       enable_osd: true
-    #   # enable_stream: true
-    #   # rtsp_mount_point: /ds_app
-    #   # rtsp_port: 8554
-    # perf_config:
-    #   enable_fps_logs: true
-    #   enable_latency_logs: true
+      # enable_stream: true
+      # rtsp_mount_point: /ds_app
+      # rtsp_port: 8554
+    perf_config:
+      enable_fps_logs: true
+      enable_latency_logs: true
     # kitti_output_path:
     #   infer: /workspace/models/resnet/infer-kitti-dump/
     #   tracker: /workspace/models/resnet/tracker-kitti-dump/
