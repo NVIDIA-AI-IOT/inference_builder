@@ -43,9 +43,21 @@ docker run --rm --net=host --gpus all \
     --text "car"
 ```
 
-### Run with rtsp input
+### Run with RTSP input
 
-**Note:** Replace `rtsp://127.0.0.1/video1` with your actual RTSP stream URL.
+**Note:** Replace `rtsp://<url_path>` with your actual RTSP stream URL. The application supports various RTSP stream formats including H.264, H.265, and MJPEG.
+
+```bash
+docker run --rm --net=host --gpus all \
+    -v $MODEL_REPO:/workspace/models \
+    -v /tmp/.X11-unix/:/tmp/.X11-unix \
+    -e DISPLAY=$DISPLAY \
+    deepstream-app \
+    --media-url rtsp://<url_path> \
+    --mime video/mp4
+```
+
+**Examples:**
 
 ```bash
 docker run --rm --net=host --gpus all \
@@ -54,8 +66,7 @@ docker run --rm --net=host --gpus all \
     -e DISPLAY=$DISPLAY \
     deepstream-app \
     --media-url rtsp://127.0.0.1/video1 \
-    --mime video/mp4 \
-    --text "car"
+    --mime video/mp4
 ```
 
 ### Run with image input

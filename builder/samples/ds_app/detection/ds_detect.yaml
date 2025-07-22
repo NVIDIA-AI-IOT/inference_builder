@@ -47,7 +47,7 @@ models:
     perf_config:
       enable_fps_logs: true
       enable_latency_logs: true
-    kitti_output_path:
-      infer: /workspace/models/resnet/infer-kitti-dump/
-      tracker: /workspace/models/resnet/tracker-kitti-dump/
+    # kitti_output_path:
+    #   infer: /workspace/models/resnet/infer-kitti-dump/
+    #   tracker: /workspace/models/resnet/tracker-kitti-dump/
     inference_timeout: 5
