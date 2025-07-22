@@ -15,7 +15,7 @@ export MODEL_REPO=/path/to/your/model/repo
 
 For example: if you define a model with name "resnet", you must put all the model files including nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/resnet' for the model to be correctly loaded.
 
-You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/resnet/ directory, then copy the other required model files to the same directory:
+You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/resnet/ directory, then copy the other required configurations to the same directory:
 
 ```bash
 cp builder/samples/ds_app/detection/resnet/* $MODEL_REPO/resnet/
@@ -30,7 +30,9 @@ python builder/main.py builder/samples/ds_app/detection/ds_detect.yaml -o builde
 
 ## Run the deepstream app with different inputs:
 
-**Note:** You need to set the `$SAMPLE_INPUT` environment variable to point to your samples directory.
+**Note:** You need to set the `$SAMPLE_INPUT` environment variable to point to your samples directory if you perform inference on media files in you host.
+
+**Note:** You need to have a display on your host and run `xhost +` to give the container access to it if you set enable_display to true in your render_config.
 
 ```bash
 export SAMPLE_INPUT=/path/to/your/samples/directory
@@ -199,6 +201,6 @@ docker run --rm --net=host --gpus all \
 Once the run is complete, the following output data will be populated in the respective directories:
 
 - **`infer-kitti-dump`** - Inference kitti data
-- **`tracker-kitti-dump`** - Tracker Kitti data  
+- **`tracker-kitti-dump`** - Tracker Kitti data
 - **`trajDumps`** - Trajectory dump data
 

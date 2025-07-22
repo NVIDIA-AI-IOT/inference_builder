@@ -29,6 +29,10 @@ python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml -o 
 
 ## Run the deepstream app with different inputs:
 
+**Note:** You need to set the `$SAMPLE_INPUT` environment variable to point to your samples directory if you perform inference on media files in you host.
+
+**Note:** You need to have a display on your host and run `xhost +` to give the container access to it if you set enable_display to true in your render_config.
+
 ### Run with video input
 
 ```bash
@@ -68,12 +72,6 @@ docker run --rm --net=host --gpus all \
 ```
 
 ### Run with image input
-
-**Note:** You need to set the `$SAMPLE_INPUT` environment variable to point to your samples directory.
-
-```bash
-export SAMPLE_INPUT=/path/to/your/samples/directory
-```
 
 ```bash
 docker run --rm --net=host --gpus all \

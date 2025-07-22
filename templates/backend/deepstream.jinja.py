@@ -326,13 +326,14 @@ class BulkVideoInputPool(TensorInputPool):
         if self._perf_config.enable_latency_logs:
             flow = flow.attach(what="measure_latency_probe", name="latency_probe")
 
+        if self._msgbroker_config or self._render_config.enable_stream:
+            flow = flow.fork()
+
         if self._msgbroker_config:
             flow = flow.attach(
                 what="add_message_meta_probe",
                 name="message_generator"
             )
-
-            flow = flow.fork()
             flow.publish(
                 msg_broker_proto_lib=self._msgbroker_config.proto_lib_path,
                 msg_broker_conn_str=self._msgbroker_config.conn_str,
@@ -345,10 +346,9 @@ class BulkVideoInputPool(TensorInputPool):
                        enable_osd=self._render_config.enable_osd,
                        rtsp_mount_point=self._render_config.rtsp_mount_point,
                        rtsp_port=self._render_config.rtsp_port,
-                       sync=False)
-        else:
-            flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
-                       enable_osd=self._render_config.enable_osd, sync=False)
+                       sync=True)
+        render_mode = RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY
+        flow.render(render_mode, enable_osd=self._render_config.enable_osd, sync=False)
 
         if self._pipeline is not None:
             self._pipeline.wait()
