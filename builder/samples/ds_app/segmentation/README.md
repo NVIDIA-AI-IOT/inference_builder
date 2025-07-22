@@ -41,6 +41,20 @@ docker run --rm --net=host --gpus all \
     --mime video/mp4
 ```
 
+### Run with rtsp input
+
+**Note:** Replace `rtsp://127.0.0.1/video1` with your actual RTSP stream URL.
+
+```bash
+docker run --rm --net=host --gpus all \
+    -v $MODEL_REPO:/workspace/models \
+    -v /tmp/.X11-unix/:/tmp/.X11-unix \
+    -e DISPLAY=$DISPLAY \
+    deepstream-app \
+    --media-url rtsp://127.0.0.1/video1 \
+    --mime video/mp4
+```
+
 ### Run with image input
 
 **Note:** You need to set the `$SAMPLE_INPUT` environment variable to point to your samples directory.

@@ -13,12 +13,12 @@ You need to export MODEL_REPO environment variable to the path where you want to
 export MODEL_REPO=/path/to/your/model/repo
 ```
 
-For example: if you define a model with name "rtdetr", you must put all the model files including nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/rtdetr' for the model to be correctly loaded.
+For example: if you define a model with name "resnet", you must put all the model files including nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/resnet' for the model to be correctly loaded.
 
-You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/rtdetr/ directory, then copy the other required model files to the same directory:
+You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/resnet/ directory, then copy the other required model files to the same directory:
 
 ```bash
-cp builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/rtdetr/
+cp builder/samples/ds_app/detection/resnet/* $MODEL_REPO/resnet/
 ```
 
 ## Generate the deepstream application package and build it into a container image
@@ -45,6 +45,20 @@ docker run --rm --net=host --gpus all \
     -e DISPLAY=$DISPLAY \
     deepstream-app \
     --media-url /opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4 \
+    --mime video/mp4
+```
+
+### Run with rtsp input
+
+**Note:** Replace `rtsp://127.0.0.1/video1` with your actual RTSP stream URL.
+
+```bash
+docker run --rm --net=host --gpus all \
+    -v $MODEL_REPO:/workspace/models \
+    -v /tmp/.X11-unix/:/tmp/.X11-unix \
+    -e DISPLAY=$DISPLAY \
+    deepstream-app \
+    --media-url rtsp://127.0.0.1/video1 \
     --mime video/mp4
 ```
 
