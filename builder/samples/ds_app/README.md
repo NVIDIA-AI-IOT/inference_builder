@@ -62,9 +62,9 @@ Used to send inference data over the cloud using nvmsgbroker and nvmsgconverter.
 ```yaml
 msgbroker_config:
   msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so  # Path to the message broker protocol library
-  msgbroker_msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt  # Path to message converter configuration
   msgbroker_conn_str: localhost:9092  # Message broker connection string (host:port)
   msgbroker_topic: ds_app  # Topic name for publishing inference results
+  msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt  # Path to message converter configuration
 ```
 
 ### Render Configuration
@@ -172,9 +172,9 @@ parameters:
   # Note: To use message broker functionality, you need to set up a broker service first and then update the parameters below accordingly.
   msgbroker_config:
     msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so  # Protocol library
-    msgbroker_msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt  # Message converter config
     msgbroker_conn_str: localhost:9092  # Broker connection string
     msgbroker_topic: ds_app  # Topic for publishing results
+    msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt  # Message converter config
 
   # Rendering and display configuration
   # Choose your output method: enable_display (local display), enable_stream (RTSP streaming), or both

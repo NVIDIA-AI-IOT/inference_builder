@@ -54,12 +54,25 @@ class TrackerConfig:
 @dataclass
 class MessageBrokerConfig:
     proto_lib_path: str | None = None
-    msgconv_config_path: str | None = None
     conn_str: str | None = None
     topic: str | None = None
+    msgconv_config_path: str | None = None
+    msgconv_payload_type: int = 0
+    msgconv_msg2p_new_api: bool = False
+    msgconv_frame_interval: int = 30
+    msgconv_msg2p_lib: str | None = None
 
     def __bool__(self) -> bool:
         """Check if all required message broker configuration fields are set."""
+        if self.msgconv_msg2p_lib is not None and not os.path.exists(self.msgconv_msg2p_lib):
+            logger.warning(f"MessageBrokerConfig: msgconv_msg2p_lib does not exist: {self.msgconv_msg2p_lib}")
+            return False
+        if self.msgconv_config_path is not None and not os.path.exists(self.msgconv_config_path):
+            logger.warning(f"MessageBrokerConfig: msgconv_config_path does not exist: {self.msgconv_config_path}")
+            return False
+        if self.proto_lib_path is not None and not os.path.exists(self.proto_lib_path):
+            logger.warning(f"MessageBrokerConfig: proto_lib_path does not exist: {self.proto_lib_path}")
+            return False
         return (
             self.proto_lib_path is not None and
             self.msgconv_config_path is not None and
@@ -334,6 +347,10 @@ class BulkVideoInputPool(TensorInputPool):
                 msg_broker_conn_str=self._msgbroker_config.conn_str,
                 topic=self._msgbroker_config.topic,
                 msg_conv_config=self._msgbroker_config.msgconv_config_path,
+                msg_conv_payload_type=self._msgbroker_config.msgconv_payload_type,
+                msg_conv_msg2p_new_api=self._msgbroker_config.msgconv_msg2p_new_api,
+                msg_conv_frame_interval=self._msgbroker_config.msgconv_frame_interval,
+                msg_conv_msg2p_lib=self._msgbroker_config.msgconv_msg2p_lib,
                 sync=False
             )
         if self._render_config.enable_stream:
@@ -577,11 +594,17 @@ class DeepstreamBackend(ModelBackend):
                 proto_lib_path=self._correct_config_paths(
                     [model_config["parameters"]["msgbroker_config"]["msgbroker_proto_lib_path"]]
                 )[0],
-                msgconv_config_path=self._correct_config_paths(
-                    [model_config["parameters"]["msgbroker_config"]["msgbroker_msgconv_config_path"]]
-                )[0],
                 conn_str=model_config["parameters"]["msgbroker_config"]["msgbroker_conn_str"],
-                topic=model_config["parameters"]["msgbroker_config"]["msgbroker_topic"]
+                topic=model_config["parameters"]["msgbroker_config"]["msgbroker_topic"],
+                msgconv_config_path=self._correct_config_paths(
+                    [model_config["parameters"]["msgbroker_config"]["msgconv_config_path"]]
+                )[0],
+                msgconv_payload_type=model_config["parameters"]["msgbroker_config"]["msgconv_payload_type"],
+                msgconv_msg2p_new_api=model_config["parameters"]["msgbroker_config"]["msgconv_msg2p_new_api"],
+                msgconv_frame_interval=model_config["parameters"]["msgbroker_config"]["msgconv_frame_interval"],
+                msgconv_msg2p_lib=self._correct_config_paths(
+                    [model_config["parameters"]["msgbroker_config"]["msgconv_msg2p_lib"]]
+                )[0]
             )
             if not msgbroker_config:
                 logger.warning("DeepstreamBackend: msgbroker_config is not properly configured")

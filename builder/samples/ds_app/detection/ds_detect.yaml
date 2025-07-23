@@ -35,9 +35,9 @@ models:
       display_tracking_id: true
     # msgbroker_config:
     #   msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so
-    #   msgbroker_msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt
     #   msgbroker_conn_str: localhost;9092
     #   msgbroker_topic: ds_app
+    #   msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt
     render_config:
       enable_display: true
       enable_osd: true
