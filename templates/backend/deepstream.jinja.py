@@ -323,14 +323,12 @@ class BulkVideoInputPool(TensorInputPool):
         if self._perf_config.enable_latency_logs:
             flow = flow.attach(what="measure_latency_probe", name="latency_probe")
 
-        if self._msgbroker_config or self._render_config.enable_stream:
-            flow = flow.fork()
-
         if self._msgbroker_config:
             flow = flow.attach(
                 what="add_message_meta_probe",
                 name="message_generator"
             )
+            flow = flow.fork()
             flow.publish(
                 msg_broker_proto_lib=self._msgbroker_config.proto_lib_path,
                 msg_broker_conn_str=self._msgbroker_config.conn_str,
