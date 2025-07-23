@@ -31,15 +31,15 @@ models:
       width: 1920
       height: 1088
       display_tracking_id: true
-    msgbroker_config:
-      msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so
-      msgbroker_conn_str: localhost;9092
-      msgbroker_topic: mv3dt_ib_app
-      msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt
-      msgconv_payload_type: 2
-      msgconv_msg2p_new_api: false
-      msgconv_frame_interval: 1
-      msgconv_msg2p_lib: /opt/nvidia/deepstream/deepstream/lib/libnvds_msgconv_mega.so
+    # msgbroker_config:
+    #   msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so
+    #   msgbroker_conn_str: localhost;9092
+    #   msgbroker_topic: mv3dt_ib_app
+    #   msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt
+    #   msgconv_payload_type: 2
+    #   msgconv_msg2p_new_api: false
+    #   msgconv_frame_interval: 1
+    #   msgconv_msg2p_lib: /opt/nvidia/deepstream/deepstream/lib/libnvds_msgconv.so
     perf_config:
       enable_fps_logs: true
       enable_latency_logs: true

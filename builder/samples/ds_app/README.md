@@ -65,6 +65,10 @@ msgbroker_config:
   msgbroker_conn_str: localhost:9092  # Message broker connection string (host:port)
   msgbroker_topic: ds_app  # Topic name for publishing inference results
   msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt  # Path to message converter configuration
+  msgconv_payload_type: 2  # Payload type for message conversion (0=DeepStream JSON, 1=DeepStream Minimal JSON, 2=DeepStream Protobuf)
+  msgconv_msg2p_new_api: false  # Use new API which supports publishing multiple payloads using NvDsFrameMeta
+  msgconv_frame_interval: 1  # Frame interval at which payload is generated (every Nth frame)
+  msgconv_msg2p_lib: /opt/nvidia/deepstream/deepstream/lib/libnvds_msgconv.so  # Path to the message converter library
 ```
 
 ### Render Configuration
@@ -175,6 +179,10 @@ parameters:
     msgbroker_conn_str: localhost:9092  # Broker connection string
     msgbroker_topic: ds_app  # Topic for publishing results
     msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt  # Message converter config
+    msgconv_payload_type: 2  # Payload type for message conversion (0=DeepStream JSON, 1=DeepStream Minimal JSON, 2=DeepStream Protobuf)
+    msgconv_msg2p_new_api: false  # Use new API which supports publishing multiple payloads using NvDsFrameMeta
+    msgconv_frame_interval: 1  # Frame interval at which payload is generated (every Nth frame)
+    msgconv_msg2p_lib: /opt/nvidia/deepstream/deepstream/lib/libnvds_msgconv.so  # Path to the message converter library
 
   # Rendering and display configuration
   # Choose your output method: enable_display (local display), enable_stream (RTSP streaming), or both

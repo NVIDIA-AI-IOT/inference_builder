@@ -342,17 +342,20 @@ class BulkVideoInputPool(TensorInputPool):
                 name="message_generator"
             )
             flow = flow.fork()
-            flow.publish(
-                msg_broker_proto_lib=self._msgbroker_config.proto_lib_path,
-                msg_broker_conn_str=self._msgbroker_config.conn_str,
-                topic=self._msgbroker_config.topic,
-                msg_conv_config=self._msgbroker_config.msgconv_config_path,
-                msg_conv_payload_type=self._msgbroker_config.msgconv_payload_type,
-                msg_conv_msg2p_new_api=self._msgbroker_config.msgconv_msg2p_new_api,
-                msg_conv_frame_interval=self._msgbroker_config.msgconv_frame_interval,
-                msg_conv_msg2p_lib=self._msgbroker_config.msgconv_msg2p_lib,
-                sync=False
-            )
+            publish_params = {
+                'msg_broker_proto_lib': self._msgbroker_config.proto_lib_path,
+                'msg_broker_conn_str': self._msgbroker_config.conn_str,
+                'topic': self._msgbroker_config.topic,
+                'msg_conv_config': self._msgbroker_config.msgconv_config_path,
+                'msg_conv_payload_type': self._msgbroker_config.msgconv_payload_type,
+                'msg_conv_msg2p_new_api': self._msgbroker_config.msgconv_msg2p_new_api,
+                'msg_conv_frame_interval': self._msgbroker_config.msgconv_frame_interval,
+                'sync': False
+            }
+            if self._msgbroker_config.msgconv_msg2p_lib:
+                publish_params['msg_conv_msg2p_lib'] = self._msgbroker_config.msgconv_msg2p_lib
+
+            flow.publish(**publish_params)
         if self._render_config.enable_stream:
             if not self._msgbroker_config:
                 flow = flow.fork()
@@ -598,14 +601,18 @@ class DeepstreamBackend(ModelBackend):
                 topic=model_config["parameters"]["msgbroker_config"]["msgbroker_topic"],
                 msgconv_config_path=self._correct_config_paths(
                     [model_config["parameters"]["msgbroker_config"]["msgconv_config_path"]]
-                )[0],
-                msgconv_payload_type=model_config["parameters"]["msgbroker_config"]["msgconv_payload_type"],
-                msgconv_msg2p_new_api=model_config["parameters"]["msgbroker_config"]["msgconv_msg2p_new_api"],
-                msgconv_frame_interval=model_config["parameters"]["msgbroker_config"]["msgconv_frame_interval"],
-                msgconv_msg2p_lib=self._correct_config_paths(
-                    [model_config["parameters"]["msgbroker_config"]["msgconv_msg2p_lib"]]
                 )[0]
             )
+            if "msgconv_payload_type" in model_config["parameters"]["msgbroker_config"]:
+                msgbroker_config.msgconv_payload_type = model_config["parameters"]["msgbroker_config"]["msgconv_payload_type"]
+            if "msgconv_msg2p_new_api" in model_config["parameters"]["msgbroker_config"]:
+                msgbroker_config.msgconv_msg2p_new_api = model_config["parameters"]["msgbroker_config"]["msgconv_msg2p_new_api"]
+            if "msgconv_frame_interval" in model_config["parameters"]["msgbroker_config"]:
+                msgbroker_config.msgconv_frame_interval = model_config["parameters"]["msgbroker_config"]["msgconv_frame_interval"]
+            if "msgconv_msg2p_lib" in model_config["parameters"]["msgbroker_config"]:
+                msgbroker_config.msgconv_msg2p_lib = self._correct_config_paths(
+                    [model_config["parameters"]["msgbroker_config"]["msgconv_msg2p_lib"]]
+                )[0]
             if not msgbroker_config:
                 logger.warning("DeepstreamBackend: msgbroker_config is not properly configured")
         else:
