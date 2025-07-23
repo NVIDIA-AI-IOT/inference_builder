@@ -338,7 +338,7 @@ class BulkVideoInputPool(TensorInputPool):
                 sync=False
             )
         if self._render_config.enable_stream:
-            if(not self._msgbroker_config):
+            if not self._msgbroker_config:
                 flow = flow.fork()
             flow.render(RenderMode.STREAM,
                        enable_osd=self._render_config.enable_osd,
