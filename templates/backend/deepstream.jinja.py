@@ -28,9 +28,6 @@ class RenderConfig:
 
     def __bool__(self) -> bool:
         """Check if render configuration is valid."""
-        if self.enable_display and self.enable_stream:
-            logger.warning("RenderConfig: Both enable_display and enable_stream are True. both will be disabled.")
-            return False
         if self.enable_osd and not self.enable_display and not self.enable_stream:
             logger.warning("RenderConfig: enable_osd is True but both enable_display and enable_stream are False. OSD requires an output method.")
             return False
@@ -342,13 +339,16 @@ class BulkVideoInputPool(TensorInputPool):
                 sync=False
             )
         if self._render_config.enable_stream:
+            if not self._msgbroker_config:
+                flow = flow.fork()
             flow.render(RenderMode.STREAM,
                        enable_osd=self._render_config.enable_osd,
                        rtsp_mount_point=self._render_config.rtsp_mount_point,
                        rtsp_port=self._render_config.rtsp_port,
-                       sync=True)
-        render_mode = RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY
-        flow.render(render_mode, enable_osd=self._render_config.enable_osd, sync=False)
+                       sync=False)
+
+        flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
+                    enable_osd=self._render_config.enable_osd, sync=False)
 
         if self._pipeline is not None:
             self._pipeline.wait()

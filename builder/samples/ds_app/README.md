@@ -177,13 +177,13 @@ parameters:
     msgbroker_topic: ds_app  # Topic for publishing results
 
   # Rendering and display configuration
-  # You can either use enable_display or enable_stream
+  # Choose your output method: enable_display (local display), enable_stream (RTSP streaming), or both
   render_config:
     enable_display: true     # Enable display output
     enable_osd: true         # Enable on-screen display with metadata
-    # enable_stream: true      # Enable RTSP streaming
-    # rtsp_mount_point: /ds_app  # RTSP mount point
-    # rtsp_port: 8554          # RTSP server port
+    enable_stream: true      # Enable RTSP streaming
+    rtsp_mount_point: /ds_app  # RTSP mount point
+    rtsp_port: 8554          # RTSP server port
 
   # Performance monitoring configuration
   perf_config:
