@@ -6,6 +6,8 @@ Inference Builder is a tool that automatically generates inference pipelines and
 
 The output of the tool is a Python package that can be used to build a microservice container image with a customized Dockerfile.
 
+![Overview](overview.png)
+
 The Inference Builder consists of three major components:
 
 - Code templates: These are reusable modules for various inference backends and frameworks, as well as for API servers. They are optimized and tested, making them suitable for any model with specified inputs, outputs, and configuration parameters.
