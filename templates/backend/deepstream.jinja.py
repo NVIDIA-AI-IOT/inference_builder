@@ -328,7 +328,6 @@ class BulkVideoInputPool(TensorInputPool):
                 what="add_message_meta_probe",
                 name="message_generator"
             )
-
             flow = flow.fork()
             flow.publish(
                 msg_broker_proto_lib=self._msgbroker_config.proto_lib_path,
@@ -345,7 +344,7 @@ class BulkVideoInputPool(TensorInputPool):
                        rtsp_mount_point=self._render_config.rtsp_mount_point,
                        rtsp_port=self._render_config.rtsp_port,
                        sync=False)
-        
+
         flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
                     enable_osd=self._render_config.enable_osd, sync=False)
 
