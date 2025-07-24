@@ -9,15 +9,32 @@ All the models can be downloaded from NGC:
 ### Image Classification
 - **PCB Classification**: [PCB Classification Model](https://catalog.ngc.nvidia.com/orgs/nvaie/models/pcbclassification)
 
+```bash
+ngc registry model download-version "nvaie/pcbclassification:deployable_v1.1"
+```
+
 ### Visual Change Detection
 - **Visual Changenet Classification**: [Visual Changenet Classification Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/visual_changenet_classification)
+
+```bash
+ngc registry model download-version "nvidia/tao/visual_changenet_classification:visual_changenet_nvpcb_deployable_v1.0"
+```
 
 ### Semantic Segmentation
 - **CitySemSegFormer**: [CitySemSegFormer Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/citysemsegformer)
 
+```bash
+ngc registry model download-version "nvidia/tao/citysemsegformer:deployable_onnx_v1.0"
+```
+
 ### Grounding Dino
 - **Grounding DINO**: [Grounding DINO Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/grounding_dino)
 - **Mask Grounding DINO**: [Mask Grounding DINO Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask_grounding_dino)
+
+```bash
+ngc registry model download-version "nvidia/tao/grounding_dino:grounding_dino_swin_tiny_commercial_deployable_v1.0"
+ngc registry model download-version "nvidia/tao/mask_grounding_dino:mask_grounding_dino_swin_tiny_commercial_deployable_v1.0"
+```
 
 ### Resnet50 RT-DETR Detector
 - **Resnet50 RT-DETR**: [To be added]
@@ -28,7 +45,7 @@ Each sample includes its own README with specific instructions for building and 
 
 ## Parameters for the Deepstream Backend
 
-You can enable these features under the `parameters` section of the configuration file. 
+You can enable these features under the `parameters` section of the configuration file.
 
 ### Inference Configuration
 
@@ -122,7 +139,7 @@ kitti_output_path:
   tracker: /workspace/models/tracker-kitti-dump/  # Directory for tracking KITTI data
 ```
 
-> **Note:** Make sure to create the directories mentioned above before running the application to ensure proper KITTI data dumping. 
+> **Note:** Make sure to create the directories mentioned above before running the application to ensure proper KITTI data dumping.
 
 ### Resolution Configuration
 
