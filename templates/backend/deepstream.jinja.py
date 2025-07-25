@@ -241,7 +241,8 @@ class BulkVideoInputPool(TensorInputPool):
         device_id,
         require_extra_input,
         engine_file_names,
-        dims
+        dims,
+        label_file_path
     ):
         self._batch_size = max_batch_size
         self._batch_timeout = batch_timeout
@@ -261,6 +262,7 @@ class BulkVideoInputPool(TensorInputPool):
         self._render_config = render_config
         self._perf_config = perf_config
         self._kitti_config = kitti_config
+        self._label_file_path = label_file_path
 
     def submit(self, data: List):
         url_list = []
@@ -339,7 +341,11 @@ class BulkVideoInputPool(TensorInputPool):
         if self._msgbroker_config:
             flow = flow.attach(
                 what="add_message_meta_probe",
-                name="message_generator"
+                name="message_generator",
+                properties={
+                    "label-file": self._label_file_path if self._label_file_path else "",
+                    "source-config": source_config_file if source_config_file else ""
+                }
             )
             flow = flow.fork()
             publish_params = {
@@ -563,6 +569,7 @@ class DeepstreamBackend(ModelBackend):
         self._mime_tensor_name = None
         self._source_tensor_name = None
         self._inference_timeout = model_config["parameters"].get("inference_timeout", 3)
+        self._label_file_path = None
 
         if len(self._output_names) > 1 and self._output_types[0] == "TYPE_CUSTOM_DS_METADATA":
             raise Exception(f"No more than one output is allowed for DS metadata!")
@@ -698,6 +705,22 @@ class DeepstreamBackend(ModelBackend):
                 "DeepstreamBackend: unable to find network dimensions: "
                 "infer-dims missing in the config?"
             )
+        # get the label file path from the primary inference config
+        try:
+            primary_infer_config_path = infer_config_paths[0]
+            with open(primary_infer_config_path, 'r') as f:
+                primary_infer_config = yaml.safe_load(f)
+            if "property" in primary_infer_config:
+                property = primary_infer_config["property"]
+                if "labelfile-path" in property:
+                    label_path = property["labelfile-path"]
+                    # Convert to absolute path if it's relative
+                    if not os.path.isabs(label_path):
+                        self._label_file_path = os.path.join(self._model_home, label_path)
+                    else:
+                        self._label_file_path = label_path
+        except Exception as e:
+            raise RuntimeError(f"Failed to load primary inference config: {e}") from e        
         # construct the input pools, outputs and pipelines
         self._in_pools = {}
         self._outputs = {}
@@ -787,6 +810,7 @@ class DeepstreamBackend(ModelBackend):
                 require_extra_input=require_extra_input,
                 engine_file_names=engine_files,
                 dims=dims,
+                label_file_path=self._label_file_path
             )
             if not all(os.path.exists(e) for e in engine_files):
                 # generate the engine files
