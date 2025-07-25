@@ -724,8 +724,8 @@ class DeepstreamBackend(ModelBackend):
 
         # get the label file path from the primary inference config
         label_file_path = None
-        if "labelfile-path" in property:
-            label_path = property["labelfile-path"]
+        if "labelfile-path" in primary_infer_config_property:
+            label_path = primary_infer_config_property["labelfile-path"]
             # Convert to absolute path if it's relative
             if not os.path.isabs(label_path):
                 label_file_path = os.path.join(self._model_home, label_path)
