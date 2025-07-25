@@ -569,20 +569,24 @@ class DeepstreamBackend(ModelBackend):
         self._mime_tensor_name = None
         self._source_tensor_name = None
         self._inference_timeout = model_config["parameters"].get("inference_timeout", 3)
-        self._label_file_path = None
 
         if len(self._output_names) > 1 and self._output_types[0] == "TYPE_CUSTOM_DS_METADATA":
             raise Exception(f"No more than one output is allowed for DS metadata!")
+
         tensor_output = False if self._output_types[0] == "TYPE_CUSTOM_DS_METADATA" else True
         dims = (0, 0)
+
         if "parameters" not in model_config or "infer_config_path" not in model_config["parameters"]:
             raise Exception("Deepstream pipeline requires infer_config_path")
+
         infer_config_paths = self._correct_config_paths(model_config["parameters"]['infer_config_path'])
         if not infer_config_paths:
             raise Exception("Deepstream pipeline requires infer_config_path")
+
         preprocess_config_paths = []
         if "preprocess_config_path" in model_config["parameters"]:
             preprocess_config_paths = self._correct_config_paths(model_config["parameters"]['preprocess_config_path'])
+
         if "tracker_config" in model_config["parameters"]:
             tracker_config = TrackerConfig(
                 config_path=self._correct_config_paths(
@@ -599,6 +603,7 @@ class DeepstreamBackend(ModelBackend):
                 logger.warning("DeepstreamBackend: tracker_config is not properlyconfigured")
         else:
             tracker_config = TrackerConfig()
+
         if "msgbroker_config" in model_config["parameters"]:
             msgbroker_config = MessageBrokerConfig(
                 proto_lib_path=self._correct_config_paths(
@@ -624,6 +629,7 @@ class DeepstreamBackend(ModelBackend):
                 logger.warning("DeepstreamBackend: msgbroker_config is not properly configured")
         else:
             msgbroker_config = MessageBrokerConfig()
+
         if "render_config" in model_config["parameters"]:
             render_config = RenderConfig(
                 enable_display=model_config["parameters"]["render_config"].get("enable_display", False),
@@ -634,6 +640,7 @@ class DeepstreamBackend(ModelBackend):
             )
         else:
             render_config = RenderConfig()
+
         if "perf_config" in model_config["parameters"]:
             perf_config = PerfConfig(
                 enable_fps_logs=model_config["parameters"]["perf_config"].get("enable_fps_logs", False),
@@ -641,6 +648,7 @@ class DeepstreamBackend(ModelBackend):
             )
         else:
             perf_config = PerfConfig()
+
         if "kitti_output_path" in model_config["parameters"]:
             kitti_config = KittiConfig(
                 infer_kitti_output_dir=model_config["parameters"]["kitti_output_path"].get("infer", None),
@@ -650,6 +658,7 @@ class DeepstreamBackend(ModelBackend):
                 logger.warning("DeepstreamBackend: kitti_config is not properly configured")
         else:
             kitti_config = KittiConfig()
+
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
         require_extra_input = False
@@ -681,46 +690,48 @@ class DeepstreamBackend(ModelBackend):
         if ((self._image_tensor_name or self._media_url_tensor_name) and
             self._mime_tensor_name is None):
             raise ValueError("Deepstream pipeline requires TYPE_CUSTOM_DS_MIME input")
+
+        primary_infer_config_property = {}
+        try:
+            primary_infer_config_path = infer_config_paths[0]
+            with open(primary_infer_config_path, 'r') as f:
+                primary_infer_config = yaml.safe_load(f)
+            if "property" in primary_infer_config:
+                primary_infer_config_property = primary_infer_config["property"]
+        except Exception as e:
+            raise RuntimeError(f"Failed to load primary inference config: {e}") from e
+
         if "resize_video" in model_config["parameters"] and len(model_config["parameters"]["resize_video"]) == 2:
             resize_to = model_config["parameters"]["resize_video"]
             dims = (resize_to[0], resize_to[1])
             logger.info(f"DeepstreamBackend: setting video size to {dims}")
         else:
             # video resized to network dimensions from  the primary inference config by default
-            try:
-                primary_infer_config_path = infer_config_paths[0]
-                with open(primary_infer_config_path, 'r') as f:
-                    primary_infer_config = yaml.safe_load(f)
-                if "property" in primary_infer_config:
-                    property = primary_infer_config["property"]
-                    if "infer-dims" in property:
-                        infer_dims = [int(dim) for dim in property["infer-dims"].split(";")]
-                        if len(infer_dims) == 3:
-                            dims = (infer_dims[0], infer_dims[1]) if "network-input-order" in property and property["network-input-order"] == 1 else (infer_dims[1], infer_dims[2])
-                            logger.info(f"DeepstreamBackend: setting video size to network dimensions: {dims}")
-            except Exception as e:
-                raise RuntimeError(f"Failed to load primary inference config: {e}") from e
+            if "infer-dims" in primary_infer_config_property:
+                infer_dims = [int(dim) for dim in primary_infer_config_property["infer-dims"].split(";")]
+                if len(infer_dims) == 3:
+                    if "network-input-order" in primary_infer_config_property and primary_infer_config_property["network-input-order"] == 1:
+                        dims = (infer_dims[0], infer_dims[1])
+                    else:
+                        dims = (infer_dims[1], infer_dims[2])
+                    logger.info(f"DeepstreamBackend: setting video size to network dimensions: {dims}")
+
         if dims[0] == 0 or dims[1] == 0:
             raise ValueError(
                 "DeepstreamBackend: unable to find network dimensions: "
                 "infer-dims missing in the config?"
             )
+
         # get the label file path from the primary inference config
-        try:
-            primary_infer_config_path = infer_config_paths[0]
-            with open(primary_infer_config_path, 'r') as f:
-                primary_infer_config = yaml.safe_load(f)
-            if "property" in primary_infer_config:
-                property = primary_infer_config["property"]
-                if "labelfile-path" in property:
-                    label_path = property["labelfile-path"]
-                    # Convert to absolute path if it's relative
-                    if not os.path.isabs(label_path):
-                        self._label_file_path = os.path.join(self._model_home, label_path)
-                    else:
-                        self._label_file_path = label_path
-        except Exception as e:
-            raise RuntimeError(f"Failed to load primary inference config: {e}") from e        
+        label_file_path = None
+        if "labelfile-path" in property:
+            label_path = property["labelfile-path"]
+            # Convert to absolute path if it's relative
+            if not os.path.isabs(label_path):
+                label_file_path = os.path.join(self._model_home, label_path)
+            else:
+                label_file_path = label_path
+
         # construct the input pools, outputs and pipelines
         self._in_pools = {}
         self._outputs = {}
@@ -810,7 +821,7 @@ class DeepstreamBackend(ModelBackend):
                 require_extra_input=require_extra_input,
                 engine_file_names=engine_files,
                 dims=dims,
-                label_file_path=self._label_file_path
+                label_file_path=label_file_path
             )
             if not all(os.path.exists(e) for e in engine_files):
                 # generate the engine files
