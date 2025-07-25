@@ -48,7 +48,7 @@ The provided samples can serve as references for creating inference pipelines ac
 - classification
 - detection
 - segmentation
-- gdino (Open vocabulary detection and segmentation)
+- GDINO (Open vocabulary detection and segmentation)
 
 Required model files including the onnx, nvinfer configuration, preprocess configuration can be found from NGC model repository or exported through TAO Finetune Microservice.
 
