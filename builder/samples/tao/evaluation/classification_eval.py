@@ -28,6 +28,38 @@ sys.path.append(str(project_root))
 
 from nim_client import main as nim_client_main
 
+def validate_safe_path(path_component: str) -> bool:
+    """Validate that a path component is safe and doesn't contain traversal sequences.
+    
+    Args:
+        path_component: The path component to validate
+        
+    Returns:
+        bool: True if safe, False if potentially malicious
+    """
+    # Check for path traversal sequences
+    if '..' in path_component:
+        return False
+    
+    # Check for absolute paths
+    if os.path.isabs(path_component):
+        return False
+        
+    # Check for hidden files starting with dot (optional security measure)
+    if path_component.startswith('.'):
+        return False
+        
+    # Check for empty or whitespace-only names
+    if not path_component.strip():
+        return False
+        
+    # Check for invalid characters that might be used in attacks
+    invalid_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|']
+    if any(char in path_component for char in invalid_chars):
+        return False
+        
+    return True
+
 class DataCollector:
     """Class responsible for collecting ground truth and predictions."""
     
@@ -74,11 +106,31 @@ class DataCollector:
         
         # Use tqdm for class directories
         for class_dir in tqdm(class_dirs, desc="Loading class directories"):
+            # Validate class directory name for security
+            if not validate_safe_path(class_dir):
+                logger.warning(f"Skipping potentially unsafe class directory: {class_dir}")
+                continue
+                
             class_path = os.path.join(self.test_dir, class_dir)
             
+            # Additional security check: ensure the resolved path is within test_dir
+            try:
+                resolved_class_path = os.path.realpath(class_path)
+                resolved_test_dir = os.path.realpath(self.test_dir)
+                if not resolved_class_path.startswith(resolved_test_dir):
+                    logger.warning(f"Skipping class directory outside test dir: {class_dir}")
+                    continue
+            except Exception as e:
+                logger.warning(f"Error resolving path for {class_dir}: {e}")
+                continue
+            
             # Get all images in this class directory
-            img_names = [f for f in os.listdir(class_path) 
-                        if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+            try:
+                img_names = [f for f in os.listdir(class_path) 
+                            if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+            except Exception as e:
+                logger.warning(f"Error accessing class directory {class_dir}: {e}")
+                continue
             
             # Apply per-class limit if specified
             if self.max_images_per_class:
@@ -86,7 +138,23 @@ class DataCollector:
             
             # Add image-label pairs
             for img_name in img_names:
+                # Validate image filename for security
+                if not validate_safe_path(img_name):
+                    logger.warning(f"Skipping potentially unsafe image file: {img_name}")
+                    continue
+                    
                 img_path = os.path.join(class_path, img_name)
+                
+                # Additional security check: ensure the resolved image path is within class_path
+                try:
+                    resolved_img_path = os.path.realpath(img_path)
+                    if not resolved_img_path.startswith(resolved_class_path):
+                        logger.warning(f"Skipping image file outside class dir: {img_name}")
+                        continue
+                except Exception as e:
+                    logger.warning(f"Error resolving path for {img_name}: {e}")
+                    continue
+                    
                 image_label_pairs.append((img_path, class_dir))
         
         # Apply total images limit if specified
