@@ -301,7 +301,8 @@ class BulkVideoInputPool(TensorInputPool):
             flow = Flow(pipeline).batch_capture(
                 input=source_config_file,
                 width=self._dims[1], height=self._dims[0],
-                batch_size=self._batch_size
+                batch_size=self._batch_size,
+                batched_push_timeout=self._batch_timeout
             )
         else:
             flow = Flow(pipeline).batch_capture(
