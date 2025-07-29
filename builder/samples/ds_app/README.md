@@ -43,6 +43,15 @@ ngc registry model download-version "nvidia/tao/mask_grounding_dino:mask_groundi
 
 Each sample includes its own README with specific instructions for building and running the DeepStream application. Please refer to the individual sample directories for detailed setup and usage instructions.
 
+The provided samples can serve as references for creating inference pipelines across a wide range of TAO computer vision models. Each model falls into one of the following categories, with corresponding instructions available:
+
+- classification
+- detection
+- segmentation
+- GDINO (Open vocabulary detection and segmentation)
+
+Required model files including the onnx, nvinfer configuration, preprocess configuration can be found from NGC model repository or exported through TAO Finetune Microservice.
+
 ## Parameters for the Deepstream Backend
 
 You can enable these features under the `parameters` section of the configuration file.
