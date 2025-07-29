@@ -8,8 +8,6 @@ import cookiecutter
 import logging
 from typing import Dict, List
 from pathlib import Path
-import datamodel_code_generator as data_generator
-import semver
 from utils import get_resource_path, copy_files, create_tar_gz
 from triton.utils import generate_pbtxt
 from omegaconf.errors import ConfigKeyError
@@ -18,12 +16,73 @@ import ast
 import os
 import subprocess
 import validate
+import re
+
+"""
+Inference Builder Main Module
+
+Security Features:
+- Input validation for file paths and directory paths to prevent directory traversal attacks
+- Server type validation against allowed values to prevent injection
+- Safe subprocess calls using argument lists instead of shell string interpolation
+- Comprehensive argument validation in main function to prevent command injection
+- Logging of all executed commands for audit trails
+"""
 
 ALLOWED_SERVER = ["triton", "fastapi", "nim", "serverless"]
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Main")
 OmegaConf.register_new_resolver("multiline", lambda x: x, replace=False)
+
+
+def validate_file_path(file_path: str) -> bool:
+    """Validate file path to prevent directory traversal and command injection."""
+    if not file_path:
+        return False
+    
+    # Check for dangerous patterns
+    dangerous_patterns = [
+        r'[;&|`$()]',  # Shell metacharacters
+        r'\.\.',       # Directory traversal
+        r'/etc/',      # System directories
+        r'/proc/',     # System directories
+        r'[<>]',       # Redirections
+    ]
+    
+    for pattern in dangerous_patterns:
+        if re.search(pattern, file_path):
+            return False
+    
+    # Ensure it's a regular file
+    path = Path(file_path)
+    return path.exists() and path.is_file()
+
+
+def validate_directory_path(dir_path: str) -> bool:
+    """Validate directory path to prevent directory traversal attacks."""
+    if not dir_path:
+        return False
+    
+    # Check for dangerous patterns
+    dangerous_patterns = [
+        r'[;&|`$()]',  # Shell metacharacters
+        r'\.\.',       # Directory traversal (relative)
+        r'/etc/',      # System directories
+        r'/proc/',     # System directories
+    ]
+    
+    for pattern in dangerous_patterns:
+        if re.search(pattern, dir_path):
+            return False
+    
+    return True
+
+
+def validate_server_type(server_type: str) -> bool:
+    """Validate server type against allowed values."""
+    return server_type in ALLOWED_SERVER
+
 
 def build_args(parser):
     parser.add_argument(
@@ -211,11 +270,20 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
     tpl_dir = get_resource_path("templates")
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
     api_tpl_dir = get_resource_path(f"templates/api_server/{server_type}/route")
-    command = (
-        f"fastapi-codegen --input {api_spec.name} --output {output_dir} --output-model-type pydantic_v2.BaseModel "
-        f"--template-dir {api_tpl_dir} -m data_model.py --disable-timestamp"
-    )
-    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    
+    # Use safer subprocess call with argument list instead of shell string interpolation
+    command = [
+        "fastapi-codegen",
+        "--input", api_spec.name,
+        "--output", str(output_dir),
+        "--output-model-type", "pydantic_v2.BaseModel",
+        "--template-dir", str(api_tpl_dir),
+        "-m", "data_model.py",
+        "--disable-timestamp"
+    ]
+    
+    logger.info(f"Executing command: {' '.join(command)}")
+    result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
         raise Exception(f"Failed to generate fastapi data models: {result.stderr}")
 
@@ -299,6 +367,25 @@ def generate_configuration(config, tree):
 
 
 def main(args):
+    # Validate all arguments to prevent security issues
+    if not validate_file_path(args.config):
+        raise ValueError(f"Invalid config file path: {args.config}")
+    
+    if not validate_server_type(args.server_type):
+        raise ValueError(f"Invalid server type: {args.server_type}")
+    
+    if not validate_directory_path(args.output_dir):
+        raise ValueError(f"Invalid output directory: {args.output_dir}")
+
+    if args.validation_dir and not validate_directory_path(args.validation_dir):
+        raise ValueError(f"Invalid validation directory: {args.validation_dir}")
+    
+    # Validate custom modules if provided
+    if args.custom_module:
+        for module in args.custom_module:
+            if not validate_file_path(module.name):
+                raise ValueError(f"Invalid custom module file path: {module.name}")
+    
     config = OmegaConf.load(args.config)
     with tempfile.TemporaryDirectory() as temp_dir:
         tree = build_tree(args.server_type, config, temp_dir)

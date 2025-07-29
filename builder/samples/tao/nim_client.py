@@ -375,14 +375,67 @@ def dump_response_json(response_data, output_dir="/tmp"):
     except Exception as e:
         print(f"Error dumping response JSON: {e}")
 
+def validate_directory_path(dir_path):
+    """
+    Validate directory path to prevent OS access violations
+    Args:
+        dir_path: Directory path to validate
+    Returns:
+        str: Validated and sanitized directory path
+    Raises:
+        ValueError: If path is invalid or potentially dangerous
+    """
+    if not dir_path:
+        raise ValueError("Directory path cannot be empty")
+    
+    # Convert to absolute path and resolve any symbolic links
+    try:
+        abs_path = os.path.abspath(dir_path)
+        resolved_path = os.path.realpath(abs_path)
+    except (OSError, ValueError) as e:
+        raise ValueError(f"Invalid directory path: {e}")
+    
+    # Check for path traversal attempts
+    if ".." in os.path.normpath(dir_path):
+        raise ValueError("Path traversal detected in directory path")
+    
+    # Check for invalid characters (basic validation)
+    invalid_chars = ['<', '>', ':', '"', '|', '?', '*']
+    if any(char in dir_path for char in invalid_chars):
+        raise ValueError("Invalid characters in directory path")
+    
+    # Ensure the path is within reasonable bounds (not system directories)
+    system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin']
+    for sys_dir in system_dirs:
+        if resolved_path.startswith(sys_dir):
+            raise ValueError(f"Access to system directory {sys_dir} is not allowed")
+    
+    return resolved_path
+
 def prompt_save_reference():
     """
     Prompt user whether to save the response as a reference
     Returns:
         bool: True if user wants to save, False otherwise
     """
-    user_input = input("Use this response to overwrite validation reference? (y/N): ").lower()
-    return user_input == 'y'
+    try:
+        user_input = input("Use this response to overwrite validation reference? (y/N): ")
+        if user_input is None:
+            return False
+        
+        # Strip whitespace and convert to lowercase for comparison
+        user_input = user_input.strip().lower()
+        
+        # Accept various forms of "yes"
+        return user_input in ('y', 'yes')
+    except (EOFError, KeyboardInterrupt):
+        # Handle Ctrl+C or EOF gracefully
+        print("\nOperation cancelled by user.")
+        return False
+    except Exception as e:
+        # Handle any other unexpected errors
+        print(f"Error reading user input: {e}")
+        return False
 
 def save_as_validation_reference(response_data, image_path, text=None):
     """
@@ -555,8 +608,20 @@ def main(host, port, model, files, text, dump_response: bool, upload: bool, retu
             try:
                 save_path = None
                 if vis_dir:
-                    os.makedirs(vis_dir, exist_ok=True)
-                    save_path = os.path.join(vis_dir, os.path.basename(files[data['index']]))
+                    try:
+                        # Validate the directory path before using it
+                        validated_vis_dir = validate_directory_path(vis_dir)
+                        os.makedirs(validated_vis_dir, exist_ok=True)
+                        save_path = os.path.join(validated_vis_dir, os.path.basename(files[data['index']]))
+                    except ValueError as e:
+                        print(f"Error: Invalid visualization directory: {e}")
+                        continue
+                    except PermissionError as e:
+                        print(f"Error: Permission denied creating directory '{vis_dir}': {e}")
+                        continue
+                    except OSError as e:
+                        print(f"Error: Failed to create directory '{vis_dir}': {e}")
+                        continue
 
                 visualization_success = visualize_detections(
                     files[data['index']],

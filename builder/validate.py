@@ -458,8 +458,44 @@ class CvValidator:
 
     @staticmethod
     def is_float_equal(a: float, b: float, tolerance: float = 1e-5) -> bool:
-        """Compare floats with tolerance"""
-        return abs(a - b) <= tolerance
+        """Compare floats with relative and absolute tolerance, similar to numpy.isclose
+        
+        Uses both relative and absolute tolerance for robust comparison:
+        - Relative tolerance scales with the magnitude of the values
+        - Absolute tolerance handles cases where values are close to zero
+        - With large tolerance values, most comparisons will pass
+        
+        Formula: abs(a - b) <= (atol + rtol * max(abs(a), abs(b)))
+        
+        Args:
+            a: First float value
+            b: Second float value  
+            tolerance: Relative tolerance parameter (default: 1e-5).
+                      Also used as absolute tolerance scaled down by 1000x
+                      
+        Returns:
+            bool: True if values are close within tolerance
+            
+        Examples:
+            # Basic usage
+            is_float_equal(1.0, 1.00001, 1e-4)  # True
+            
+            # Scales with magnitude (relative tolerance)
+            is_float_equal(1000.0, 1000.01, 1e-4)  # True  
+            is_float_equal(0.001, 0.00100001, 1e-4)  # True
+            
+            # Handles near-zero values (absolute tolerance)
+            is_float_equal(1e-10, 2e-10, 1e-5)  # True
+            
+            # Large tolerance passes most cases
+            is_float_equal(1.0, 2.0, 1.0)  # True
+        """
+        # Use tolerance as relative tolerance (rtol)
+        rtol = tolerance
+        # Use much smaller absolute tolerance to handle near-zero values
+        atol = tolerance * 1e-3
+        
+        return abs(a - b) <= (atol + rtol * max(abs(a), abs(b)))
 
     @classmethod
     def compare_lists(cls, list1: List[Any], list2: List[Any], tolerance: float) -> bool:

@@ -26,6 +26,38 @@ sys.path.append(str(project_root))
 
 from nim_client import main as nim_client_main, convert_masks_to_image_size
 
+def validate_safe_path(path_component: str) -> bool:
+    """Validate that a path component is safe and doesn't contain traversal sequences.
+    
+    Args:
+        path_component: The path component to validate
+        
+    Returns:
+        bool: True if safe, False if potentially malicious
+    """
+    # Check for path traversal sequences
+    if '..' in path_component:
+        return False
+    
+    # Check for absolute paths
+    if os.path.isabs(path_component):
+        return False
+        
+    # Check for hidden files starting with dot (optional security measure)
+    if path_component.startswith('.'):
+        return False
+        
+    # Check for empty or whitespace-only names
+    if not path_component.strip():
+        return False
+        
+    # Check for invalid characters that might be used in attacks
+    invalid_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|']
+    if any(char in path_component for char in invalid_chars):
+        return False
+        
+    return True
+
 class SegmentationEvaluator:
     """Class responsible for collecting predictions and computing segmentation metrics."""
     
@@ -155,25 +187,60 @@ class SegmentationEvaluator:
         if not os.path.exists(val_img_dir) or not os.path.exists(val_mask_dir):
             raise ValueError(f"Validation directories not found: {val_img_dir} or {val_mask_dir}")
         
+        # Resolve validation directories for security checks
+        resolved_val_img_dir = os.path.realpath(val_img_dir)
+        resolved_val_mask_dir = os.path.realpath(val_mask_dir)
+        
         all_ground_truths = []
         all_predictions = []
         
         # Process each image
-        for img_name in tqdm(os.listdir(val_img_dir), desc="Processing validation images"):
+        try:
+            img_files = os.listdir(val_img_dir)
+        except Exception as e:
+            logger.error(f"Error accessing validation image directory {val_img_dir}: {e}")
+            raise ValueError(f"Cannot access validation image directory: {val_img_dir}")
+            
+        for img_name in tqdm(img_files, desc="Processing validation images"):
             if not img_name.endswith(('.png', '.jpg', '.jpeg')):
                 logger.warning(f"Skipping non-image file: {img_name}")
+                continue
+            
+            # Validate image filename for security
+            if not validate_safe_path(img_name):
+                logger.warning(f"Skipping potentially unsafe image file: {img_name}")
                 continue
                 
             img_path = os.path.join(val_img_dir, img_name)
             mask_path = os.path.join(val_mask_dir, img_name)
+            
+            # Additional security check: ensure the resolved paths are within expected directories
+            try:
+                resolved_img_path = os.path.realpath(img_path)
+                resolved_mask_path = os.path.realpath(mask_path)
+                
+                if not resolved_img_path.startswith(resolved_val_img_dir):
+                    logger.warning(f"Skipping image file outside validation dir: {img_name}")
+                    continue
+                    
+                if not resolved_mask_path.startswith(resolved_val_mask_dir):
+                    logger.warning(f"Skipping mask file outside validation dir: {img_name}")
+                    continue
+            except Exception as e:
+                logger.warning(f"Error resolving path for {img_name}: {e}")
+                continue
             
             if not os.path.exists(mask_path):
                 logger.warning(f"Ground truth mask not found for {img_name}")
                 continue
             
             # Load ground truth first to get target shape
-            gt_mask = self._load_ground_truth(mask_path)
-            target_shape = gt_mask.shape
+            try:
+                gt_mask = self._load_ground_truth(mask_path)
+                target_shape = gt_mask.shape
+            except Exception as e:
+                logger.warning(f"Error loading ground truth mask for {img_name}: {e}")
+                continue
             
             # Get prediction from inference server
             response = nim_client_main(

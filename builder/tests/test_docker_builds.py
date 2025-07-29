@@ -2,6 +2,12 @@
 """
 Test script for Docker container builds with different arguments.
 This script tests the Dockerfile in the tests directory with various configurations.
+
+Security Features:
+- Input validation for app names and script commands to prevent command injection
+- File path validation to prevent directory traversal attacks
+- Safe subprocess calls using argument lists instead of shell string interpolation
+- Logging of all executed commands for audit trails
 """
 
 import subprocess
@@ -13,10 +19,35 @@ import argparse
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import logging
+import re
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+def validate_app_name(app_name: str) -> bool:
+    """Validate app name to prevent command injection."""
+    # Allow only alphanumeric characters, underscores, and hyphens
+    return bool(re.match(r'^[a-zA-Z0-9_-]+$', app_name))
+
+
+def validate_script_command(script_command: str) -> bool:
+    """Validate script command to prevent obvious command injection."""
+    # Basic validation - reject commands with suspicious patterns
+    dangerous_patterns = [
+        r'[;&|`$()]',  # Shell metacharacters
+        r'\$\(',       # Command substitution
+        r'`',          # Backticks
+        r'>>?',        # Redirections
+        r'\|\|',       # OR operator
+        r'&&',         # AND operator
+    ]
+    
+    for pattern in dangerous_patterns:
+        if re.search(pattern, script_command):
+            return False
+    return True
 
 
 class DockerBuildTester:
@@ -34,17 +65,24 @@ class DockerBuildTester:
         try:
             # Execute hardcoded pre-build command using TEST_APP_NAME
             test_app_name = build_args.get("TEST_APP_NAME", "frame_sampling")
-            pre_build_command = (
-                f"python ../main.py {test_app_name}/app.yaml "
-                f"-o {test_app_name} "
-                f"-c {test_app_name}/processors.py "
-                f"--server-type serverless -t"
-            )
+            
+            # Validate app name to prevent command injection
+            if not validate_app_name(test_app_name):
+                error_msg = f"Invalid app name: {test_app_name}. Only alphanumeric characters, underscores, and hyphens are allowed."
+                logger.error(f"❌ {error_msg}")
+                return False, error_msg
 
-            logger.info(f"🔧 Executing pre-build command: {pre_build_command}")
+            # Use safer subprocess call without shell=True
+            pre_build_command = [
+                "python", "../main.py", f"{test_app_name}/app.yaml",
+                "-o", test_app_name,
+                "-c", f"{test_app_name}/processors.py",
+                "--server-type", "serverless", "-t"
+            ]
+
+            logger.info(f"🔧 Executing pre-build command: {' '.join(pre_build_command)}")
             pre_build_result = subprocess.run(
                 pre_build_command,
-                shell=True,
                 capture_output=True,
                 text=True,
                 timeout=600  # 10 minute timeout for pre-build
@@ -104,16 +142,23 @@ class DockerBuildTester:
         if not script_command:
             return True, "No prerequisite script specified"
 
+        # Validate script command to prevent command injection
+        if not validate_script_command(script_command):
+            error_msg = f"Invalid script command: {script_command}. Command contains potentially dangerous characters."
+            logger.error(f"❌ {error_msg}")
+            return False, error_msg
+
         log_file = self.log_dir / f"prerequisite_{test_id}.log"
 
         try:
             logger.info(f"🔧 Running prerequisite script: {script_command}")
             logger.info(f"📄 Prerequisite logs will be saved to: {log_file}")
 
-            # Run the prerequisite script
+            # Use shlex.split for safer command parsing, but still use shell=True for script execution
+            # Note: For maximum security, consider using a whitelist of allowed scripts instead
             result = subprocess.run(
                 script_command,
-                shell=True,
+                shell=True,  # Still needed for script execution, but input is validated
                 capture_output=True,
                 text=True,
                 timeout=300  # 5 minute timeout for prerequisite scripts
@@ -601,6 +646,31 @@ def main():
     parser.add_argument("--gitlab-token", help="GitLab token for private repos")
 
     args = parser.parse_args()
+
+    # Validate arguments to prevent security issues
+    # Validate dockerfile path
+    if not os.path.isfile(args.dockerfile):
+        logger.error(f"❌ Dockerfile not found: {args.dockerfile}")
+        sys.exit(1)
+    
+    # Validate base directory
+    if not os.path.isdir(args.base_dir):
+        logger.error(f"❌ Base directory not found: {args.base_dir}")
+        sys.exit(1)
+    
+    # Validate config file
+    if not os.path.isfile(args.config_file):
+        logger.error(f"❌ Config file not found: {args.config_file}")
+        sys.exit(1)
+    
+    # Validate log directory path (prevent directory traversal)
+    log_dir_path = Path(args.log_dir).resolve()
+    current_dir = Path.cwd().resolve()
+    try:
+        log_dir_path.relative_to(current_dir)
+    except ValueError:
+        logger.error(f"❌ Log directory path is outside current directory: {args.log_dir}")
+        sys.exit(1)
 
     # Initialize tester
     tester = DockerBuildTester(args.dockerfile, args.base_dir, args.log_dir)

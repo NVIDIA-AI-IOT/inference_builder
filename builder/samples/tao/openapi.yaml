@@ -347,10 +347,10 @@ components:
                   type: integer
                   format: uint8
                 minItems: 0
-                maxItems: 522240 # 544 * 960
+                maxItems: 2092800 # 1920 * 1080
               maxItems: 512
             - type: string
-              maxLength: 10240
+              maxLength: 2092800
               description: |
                 The mask vector as base64 string. The length of the vector depends on the model.
               format: ^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)$
