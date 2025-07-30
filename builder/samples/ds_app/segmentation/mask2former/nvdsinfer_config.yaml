@@ -1,0 +1,19 @@
+property:
+  gie-unique-id: 6
+  infer-dims: 3;800;800
+  network-input-order: 0
+  model-color-format: 1
+  maintain-aspect-ratio: 1
+  # std 0.226
+  net-scale-factor: 0.017507
+  network-mode: 2
+  model-color-format: 1
+  offsets: 123.675;116.28;103.53
+  network-type: 2 # seg
+  num-detected-classes: 2
+  onnx-file: mask2former_swint.onnx
+  workspace-size: 1048576
+  parse-segmentation-func-name: NvDsInferParseCustomMask2Former
+  custom-lib-path: /opt/nvidia/deepstream/deepstream/lib/libnvds_infercustomparser_tao.so
+
+
