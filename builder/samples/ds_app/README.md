@@ -22,9 +22,11 @@ ngc registry model download-version "nvidia/tao/visual_changenet_classification:
 
 ### Semantic Segmentation
 - **CitySemSegFormer**: [CitySemSegFormer Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/citysemsegformer)
+- **Mask2Fomer**: [Masked-attention Mask Transformer](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask2former)
 
 ```bash
 ngc registry model download-version "nvidia/tao/citysemsegformer:deployable_onnx_v1.0"
+ngc registry model download-version "nvidia/tao/mask2former:mask2former_swint_deployable_v1.0"
 ```
 
 ### Grounding Dino
