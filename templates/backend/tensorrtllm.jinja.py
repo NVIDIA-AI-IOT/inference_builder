@@ -79,7 +79,7 @@ class TensorRTLLMBackend(ModelBackend):
             from tensorrt_llm._torch.pyexecutor.config import PyTorchConfig
             from tensorrt_llm.llmapi import (EagleDecodingConfig, KvCacheConfig,
                                             MTPDecodingConfig)
-            from tensorrt_llm.inputs import INPUT_FORMATTER_MAP
+
             in_names = [i['name'] for i in model_config['input']]
             if "max_tokens" not in in_names or "temperature" not in in_names or "top_p" not in in_names or "top_k" not in in_names:
                 raise ValueError("max_tokens, temperature, top_p, and top_k must be provided for tensorrtllmpytorch backend")
@@ -134,7 +134,6 @@ class TensorRTLLMBackend(ModelBackend):
                 speculative_config=spec_config
             )
             self._sample_params_cls = SamplingParams
-            self._input_formatter = INPUT_FORMATTER_MAP["qwen2_5_vl"]
             self._trtllm_input_name = next((i["name"] for i in self._inputs if i["data_type"] == "TYPE_CUSTOM_TRTLLM_INPUT"), None)
             if self._trtllm_input_name is None:
                 raise ValueError("TYPE_CUSTOM_TRTLLM_INPUT must be provided for tensorrtllm/pytorch backend")
@@ -177,7 +176,7 @@ class TensorRTLLMBackend(ModelBackend):
                 logger.warning("TensorRTLLMBackend: No inputs provided")
             if not inputs:
                 return
-            inputs = self._input_formatter(self._model_home, inputs)
+
             results = self._llm.generate(inputs, sample_params)
             yield [{"outputs": r} for r in results]
         elif self._trt_session is not None:

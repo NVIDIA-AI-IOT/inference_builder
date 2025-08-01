@@ -28,10 +28,32 @@ class QwenVLProcessor:
         else:
             return inputs["input_ids"], inputs["attention_mask"], None, None, inputs["pixel_values_videos"], inputs["video_grid_thw"], max_new_tokens, inputs["input_ids"]
 
-class QwenVLVideoProcessor:
+    def apply_chat_template(self, prompt, multimodal_data):
+        # Build content list with media placeholders
+        content = []
+
+        # Add one placeholder for each media item
+        for media_type, items in multimodal_data.items():
+            for _ in items:
+                content.append({"type": media_type})
+
+        # Add the text content
+        content.append({
+            "type": "text",
+            "text": prompt
+        })
+
+        conversation = [{"role": "user", "content": content}]
+        return self._processor.apply_chat_template(
+            conversation,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
+class QwenVLVideoProcessor(QwenVLProcessor):
     name = "qwen-vl-video-processor"
     def __init__(self, config):
-        pass
+        super().__init__(config)
 
     def __call__(self, *args):
         # Convert from DLPack to torch tensor, then transform from HWC to CHW and normalize
@@ -49,19 +71,18 @@ class QwenVLVideoProcessor:
                 torch.utils.dlpack.from_dlpack(i).permute(2, 0, 1).float() / 255.0
                 for i in frames
             ]
+            multimodal_data = {"video": [tensors]}
             inputs.append({
-                "prompt": prompt,
-                "multi_modal_data": {
-                    "video": [tensors]
-                }
+                "prompt": self.apply_chat_template(prompt, multimodal_data),
+                "multi_modal_data": multimodal_data
             })
         return inputs
 
 
-class QwenVLImageProcessor:
+class QwenVLImageProcessor(QwenVLProcessor):
     name = "qwen-vl-image-processor"
     def __init__(self, config):
-        pass
+        super().__init__(config)
 
     def __call__(self, *args):
         # Convert from DLPack to torch tensor, then transform from HWC to CHW and normalize
@@ -76,18 +97,18 @@ class QwenVLImageProcessor:
         inputs = []
         for prompt, image in zip(prompts, images):
             tensors = [image.permute(2, 0, 1).float() / 255.0]
+            multimodal_data = {"image": tensors}
             inputs.append({
-                "prompt": prompt,
-                "multi_modal_data": {
-                    "image": tensors
-            }
+                "prompt": self.apply_chat_template(prompt, multimodal_data),
+                "multi_modal_data": multimodal_data
             })
         return inputs
 
 
-class QwenVLImageLoader:
+class QwenVLImageLoader(QwenVLProcessor):
     name = "qwen-vl-image-loader"
     def __init__(self, config):
+        super().__init__(config)
         from tensorrt_llm.inputs import default_image_loader
         self._default_image_loader = default_image_loader
         self._model_home = config["model_home"]
@@ -97,11 +118,14 @@ class QwenVLImageLoader:
         images = args[1].tolist() if isinstance(args[1], np.ndarray) else args[1]
         assert len(images) == len(prompts)
         inputs = self._default_image_loader(prompts, images)
+        for i in inputs:
+            i["prompt"] = self.apply_chat_template(i["prompt"], i["multi_modal_data"])
         return inputs
 
-class QwenVLVideoLoader:
+class QwenVLVideoLoader(QwenVLProcessor):
     name = "qwen-vl-video-loader"
     def __init__(self, config):
+        super().__init__(config)
         from tensorrt_llm.inputs import default_video_loader
         self._default_video_loader = default_video_loader
         self._model_home = config["model_home"]
@@ -120,6 +144,8 @@ class QwenVLVideoLoader:
             videos = [videos]
         assert len(videos) == len(prompts)
         inputs = self._default_video_loader(prompts, videos, num_frames=self._num_frames)
+        for i in inputs:
+            i["prompt"] = self.apply_chat_template(i["prompt"], i["multi_modal_data"])
         return inputs
 
 
