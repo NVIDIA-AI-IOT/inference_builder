@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import random
 import sys
@@ -6,7 +21,7 @@ import argparse
 def create_coco_subset(input_file, output_file, num_images=2, supercategory=None, category=None, image_names=None):
     """
     Create a debug subset of a COCO format JSON file.
-    
+
     Args:
         input_file (str): Path to the input COCO format JSON file
         output_file (str): Path where the subset JSON will be saved
@@ -55,83 +70,83 @@ def create_coco_subset(input_file, output_file, num_images=2, supercategory=None
     # Read the input JSON file
     with open(input_file, 'r') as f:
         data = json.load(f)
-    
+
     if image_names:
         # If image names are provided, select those specific images
         selected_image_ids = []
         for img in data['images']:
             if img['file_name'] in image_names:
                 selected_image_ids.append(img['id'])
-        
+
         if not selected_image_ids:
             print(f"Warning: No images found with the provided filenames")
             return
-        
+
         print(f"Found {len(selected_image_ids)} images matching the provided filenames")
     else:
         # If category or supercategory is specified, find matching images
         category_ids = []
-        
+
         # First find category IDs based on category name
         if category:
-            category_ids = [cat['id'] for cat in data['categories'] 
+            category_ids = [cat['id'] for cat in data['categories']
                           if cat.get('name', '').lower() == category.lower()]
-            
+
             if not category_ids:
                 print(f"Warning: No categories found with name '{category}'")
                 return
-            
+
             # If supercategory is also specified, filter by both
             if supercategory:
-                category_ids = [cat['id'] for cat in data['categories'] 
-                              if cat.get('name', '').lower() == category.lower() and 
+                category_ids = [cat['id'] for cat in data['categories']
+                              if cat.get('name', '').lower() == category.lower() and
                                  cat.get('supercategory', '').lower() == supercategory.lower()]
-                
+
                 if not category_ids:
                     print(f"Warning: No categories found with name '{category}' and supercategory '{supercategory}'")
                     return
-        
+
         # If only supercategory is specified
         elif supercategory:
-            category_ids = [cat['id'] for cat in data['categories'] 
+            category_ids = [cat['id'] for cat in data['categories']
                           if cat.get('supercategory', '').lower() == supercategory.lower()]
-            
+
             if not category_ids:
                 print(f"Warning: No categories found with supercategory '{supercategory}'")
                 return
-        
+
         if category_ids:
             # Find annotations with these category IDs
-            relevant_annotations = [ann for ann in data['annotations'] 
+            relevant_annotations = [ann for ann in data['annotations']
                                   if ann['category_id'] in category_ids]
-            
+
             # Get unique image IDs from these annotations
             available_image_ids = list(set(ann['image_id'] for ann in relevant_annotations))
-            
+
             if not available_image_ids:
                 print(f"Warning: No images found with the specified category criteria")
                 return
-            
+
             # Select random images from available ones
             num_images = min(num_images, len(available_image_ids))
             selected_image_ids = random.sample(available_image_ids, num_images)
         else:
             # If no category specified, just select random images
             selected_image_ids = random.sample([img['id'] for img in data['images']], num_images)
-    
+
     # Filter images
     data['images'] = [img for img in data['images'] if img['id'] in selected_image_ids]
-    
+
     # Filter annotations
     data['annotations'] = [ann for ann in data['annotations'] if ann['image_id'] in selected_image_ids]
-    
+
     # Keep all categories (they might be needed for the annotations)
     # data['categories'] remains unchanged
-    
+
     # Write the subset to a new file
     with open(output_file, 'w') as f:
         json.dump(data, f, indent=4)
-    
+
     print(f"Created debug subset with {len(data['images'])} images and {len(data['annotations'])} annotations")
     print(f"Selected image IDs: {selected_image_ids}")
     if category:
@@ -201,15 +216,15 @@ Examples:
     )
     parser.add_argument('input_file', help='Input JSON file path')
     parser.add_argument('output_file', help='Output JSON file path')
-    parser.add_argument('--num_images', type=int, default=2, 
+    parser.add_argument('--num_images', type=int, default=2,
                        help='Number of images to select (default: 2)')
-    parser.add_argument('--supercategory', type=str, 
+    parser.add_argument('--supercategory', type=str,
                        help='Supercategory to filter images (e.g., "vehicle")')
-    parser.add_argument('--category', type=str, 
+    parser.add_argument('--category', type=str,
                        help='Category name to filter images (e.g., "car")')
-    parser.add_argument('--image_names', type=str, nargs='+', 
+    parser.add_argument('--image_names', type=str, nargs='+',
                        help='List of image filenames to select (e.g., "image1.jpg image2.jpg")')
-    
+
     args = parser.parse_args()
-    create_coco_subset(args.input_file, args.output_file, args.num_images, 
-                       args.supercategory, args.category, args.image_names) 
+    create_coco_subset(args.input_file, args.output_file, args.num_images,
+                       args.supercategory, args.category, args.image_names)

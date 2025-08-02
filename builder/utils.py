@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from pathlib import Path
 import os
 import shutil
@@ -9,7 +24,7 @@ import base64
 class PayloadBuilder:
     """
     Builder class for constructing the payload with required and optional fields
-    
+
     Example:
         >>> builder = PayloadBuilder(files=["image1.jpg"], model="nvdino-v2")
         >>> payload = builder.add_text(["cat,dog"]).build()
@@ -27,7 +42,7 @@ class PayloadBuilder:
             files: List of file paths, e.g. ["path/to/image1.jpg", "path/to/image2.png"]
         Returns:
             list: List of encoded image strings in format "data:mime_type;base64,..."
-            
+
         Example:
             >>> prepare_image_inputs(["image1.jpg", "image2.png"])
             [
@@ -51,16 +66,16 @@ class PayloadBuilder:
             text: List of comma-separated text strings, e.g. ["cat,dog", "person,car"]
         Returns:
             list: List of text arrays split by comma, or None if text is None
-            
+
         Example:
             >>> prepare_text_input(["cat,dog", "person,car"])
             [["cat", "dog"], ["person", "car"]]
-            
+
             >>> prepare_text_input(None)
             None
         """
         return [t.split(",") for t in text] if text else None
-    
+
     @staticmethod
     def prepare_text_input_from_file(txt_file_path):
         """
@@ -69,12 +84,12 @@ class PayloadBuilder:
             txt_file_path: Path to .txt file containing comma-separated text
         Returns:
             list: List of text arrays split by comma, or None if file not found/empty
-            
+
         Example:
             >>> prepare_text_input_from_file("labels.txt")
             # For a file containing "cat,car,truck"
             [["cat", "car", "truck"]]
-            
+
             >>> prepare_text_input_from_file("nonexistent.txt")
             None
         """
@@ -97,7 +112,7 @@ class PayloadBuilder:
             model: Base model name, e.g. "nvdino-v2"
         Returns:
             str: Full model name with nvidia prefix
-            
+
         Example:
             >>> prepare_model_name("nvdino-v2")
             "nvidia/nvdino-v2"

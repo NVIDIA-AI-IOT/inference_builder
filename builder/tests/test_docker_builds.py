@@ -1,4 +1,21 @@
 #!/usr/bin/env python3
+
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 """
 Test script for Docker container builds with different arguments.
 This script tests the Dockerfile in the tests directory with various configurations.
@@ -43,7 +60,7 @@ def validate_script_command(script_command: str) -> bool:
         r'\|\|',       # OR operator
         r'&&',         # AND operator
     ]
-    
+
     for pattern in dangerous_patterns:
         if re.search(pattern, script_command):
             return False
@@ -65,7 +82,7 @@ class DockerBuildTester:
         try:
             # Execute hardcoded pre-build command using TEST_APP_NAME
             test_app_name = build_args.get("TEST_APP_NAME", "frame_sampling")
-            
+
             # Validate app name to prevent command injection
             if not validate_app_name(test_app_name):
                 error_msg = f"Invalid app name: {test_app_name}. Only alphanumeric characters, underscores, and hyphens are allowed."
@@ -652,17 +669,17 @@ def main():
     if not os.path.isfile(args.dockerfile):
         logger.error(f"❌ Dockerfile not found: {args.dockerfile}")
         sys.exit(1)
-    
+
     # Validate base directory
     if not os.path.isdir(args.base_dir):
         logger.error(f"❌ Base directory not found: {args.base_dir}")
         sys.exit(1)
-    
+
     # Validate config file
     if not os.path.isfile(args.config_file):
         logger.error(f"❌ Config file not found: {args.config_file}")
         sys.exit(1)
-    
+
     # Validate log directory path (prevent directory traversal)
     log_dir_path = Path(args.log_dir).resolve()
     current_dir = Path.cwd().resolve()

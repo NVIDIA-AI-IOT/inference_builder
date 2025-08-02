@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import requests, base64
 import time
@@ -387,29 +402,29 @@ def validate_directory_path(dir_path):
     """
     if not dir_path:
         raise ValueError("Directory path cannot be empty")
-    
+
     # Convert to absolute path and resolve any symbolic links
     try:
         abs_path = os.path.abspath(dir_path)
         resolved_path = os.path.realpath(abs_path)
     except (OSError, ValueError) as e:
         raise ValueError(f"Invalid directory path: {e}")
-    
+
     # Check for path traversal attempts
     if ".." in os.path.normpath(dir_path):
         raise ValueError("Path traversal detected in directory path")
-    
+
     # Check for invalid characters (basic validation)
     invalid_chars = ['<', '>', ':', '"', '|', '?', '*']
     if any(char in dir_path for char in invalid_chars):
         raise ValueError("Invalid characters in directory path")
-    
+
     # Ensure the path is within reasonable bounds (not system directories)
     system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin']
     for sys_dir in system_dirs:
         if resolved_path.startswith(sys_dir):
             raise ValueError(f"Access to system directory {sys_dir} is not allowed")
-    
+
     return resolved_path
 
 def prompt_save_reference():
@@ -422,10 +437,10 @@ def prompt_save_reference():
         user_input = input("Use this response to overwrite validation reference? (y/N): ")
         if user_input is None:
             return False
-        
+
         # Strip whitespace and convert to lowercase for comparison
         user_input = user_input.strip().lower()
-        
+
         # Accept various forms of "yes"
         return user_input in ('y', 'yes')
     except (EOFError, KeyboardInterrupt):
