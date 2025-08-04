@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import json
 import os
@@ -30,48 +45,48 @@ from nim_client import main as nim_client_main
 
 def validate_safe_path(path_component: str) -> bool:
     """Validate that a path component is safe and doesn't contain traversal sequences.
-    
+
     Args:
         path_component: The path component to validate
-        
+
     Returns:
         bool: True if safe, False if potentially malicious
     """
     # Check for path traversal sequences
     if '..' in path_component:
         return False
-    
+
     # Check for absolute paths
     if os.path.isabs(path_component):
         return False
-        
+
     # Check for hidden files starting with dot (optional security measure)
     if path_component.startswith('.'):
         return False
-        
+
     # Check for empty or whitespace-only names
     if not path_component.strip():
         return False
-        
+
     # Check for invalid characters that might be used in attacks
     invalid_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|']
     if any(char in path_component for char in invalid_chars):
         return False
-        
+
     return True
 
 class DataCollector:
     """Class responsible for collecting ground truth and predictions."""
-    
+
     def __init__(self, root_dir: str, test_prefix: str, max_images_per_class: int = None, total_images: int = None):
         """Initialize data collector.
-        
+
         Args:
             root_dir: Root directory of the dataset
             test_prefix: Prefix path to test directory
             max_images_per_class: Maximum number of images to take per class (optional)
             total_images: Total number of images to evaluate (optional)
-            
+
         Example directory structure:
         root_dir/
         ├── imagenet/
@@ -87,10 +102,10 @@ class DataCollector:
         self.test_dir = os.path.join(root_dir, test_prefix)
         self.max_images_per_class = max_images_per_class
         self.total_images = total_images
-        
+
     def get_image_label_pairs(self) -> List[Tuple[str, str]]:
         """Get list of (image_path, ground_truth_label) pairs.
-        
+
         Example return:
         [
             ("/path/to/val/n01440764/ILSVRC2012_val_00000001.JPEG", "n01440764"),
@@ -99,20 +114,20 @@ class DataCollector:
         ]
         """
         image_label_pairs = []
-        
+
         # Get list of class directories
-        class_dirs = [d for d in os.listdir(self.test_dir) 
+        class_dirs = [d for d in os.listdir(self.test_dir)
                      if os.path.isdir(os.path.join(self.test_dir, d))]
-        
+
         # Use tqdm for class directories
         for class_dir in tqdm(class_dirs, desc="Loading class directories"):
             # Validate class directory name for security
             if not validate_safe_path(class_dir):
                 logger.warning(f"Skipping potentially unsafe class directory: {class_dir}")
                 continue
-                
+
             class_path = os.path.join(self.test_dir, class_dir)
-            
+
             # Additional security check: ensure the resolved path is within test_dir
             try:
                 resolved_class_path = os.path.realpath(class_path)
@@ -123,28 +138,28 @@ class DataCollector:
             except Exception as e:
                 logger.warning(f"Error resolving path for {class_dir}: {e}")
                 continue
-            
+
             # Get all images in this class directory
             try:
-                img_names = [f for f in os.listdir(class_path) 
+                img_names = [f for f in os.listdir(class_path)
                             if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
             except Exception as e:
                 logger.warning(f"Error accessing class directory {class_dir}: {e}")
                 continue
-            
+
             # Apply per-class limit if specified
             if self.max_images_per_class:
                 img_names = img_names[:self.max_images_per_class]
-            
+
             # Add image-label pairs
             for img_name in img_names:
                 # Validate image filename for security
                 if not validate_safe_path(img_name):
                     logger.warning(f"Skipping potentially unsafe image file: {img_name}")
                     continue
-                    
+
                 img_path = os.path.join(class_path, img_name)
-                
+
                 # Additional security check: ensure the resolved image path is within class_path
                 try:
                     resolved_img_path = os.path.realpath(img_path)
@@ -154,26 +169,26 @@ class DataCollector:
                 except Exception as e:
                     logger.warning(f"Error resolving path for {img_name}: {e}")
                     continue
-                    
+
                 image_label_pairs.append((img_path, class_dir))
-        
+
         # Apply total images limit if specified
         if self.total_images and self.total_images < len(image_label_pairs):
             # Randomly sample if total_images is specified
             import random
             random.shuffle(image_label_pairs)
             image_label_pairs = image_label_pairs[:self.total_images]
-            
+
         logger.info(f"Loaded {len(image_label_pairs)} images from {len(class_dirs)} classes")
         return image_label_pairs
 
 class PredictionCollector:
     """Class responsible for collecting model predictions."""
-    
-    def __init__(self, host: str, port: str, model_name: str = "nvdino-v2", 
+
+    def __init__(self, host: str, port: str, model_name: str = "nvdino-v2",
                  csv_path: Optional[str] = None, dump_csv: Optional[str] = None):
         """Initialize prediction collector.
-        
+
         Args:
             host: Inference server host
             port: Inference server port
@@ -187,19 +202,19 @@ class PredictionCollector:
         self.csv_path = csv_path
         self.dump_csv = dump_csv
         self.predictions_df = None
-        
+
         # Load predictions from CSV if provided
         if csv_path:
             # Read CSV without headers, columns are: image_path, pred_label, confidence
             self.predictions_df = pd.read_csv(csv_path, header=None)
             logger.info(f"Loaded {len(self.predictions_df)} predictions from {csv_path}")
-        
+
     def get_prediction(self, image_path: str) -> str:
         """Get prediction for a single image.
-        
+
         If csv_path was provided during initialization, predictions are loaded from CSV.
         Otherwise, predictions are obtained from the inference server.
-        
+
         Example inference_response:
         {
             "data": [{
@@ -213,7 +228,7 @@ class PredictionCollector:
             }],
             "model": "nvidia/nvdinov2"
         }
-        
+
         Returns:
             str: Predicted class label (e.g., "n01440764")
         """
@@ -225,7 +240,7 @@ class PredictionCollector:
                 logger.warning(f"No prediction found in CSV for {image_path}")
                 return None
             return pred_row.iloc[0][1]  # Get pred_label from column 1
-        
+
         # Otherwise, get prediction from inference server
         response = nim_client_main(
             host=self.host,
@@ -237,55 +252,55 @@ class PredictionCollector:
             upload=False,
             return_response=True
         )
-        
+
         if not response or "data" not in response:
             logger.warning(f"Failed to get prediction for {image_path}")
             return None
-            
+
         # Get the first (and only) prediction
         data = response["data"][0]
         if not data["labels"]:
             logger.warning(f"No labels in prediction for {image_path}")
             return None
-            
+
         # Return the first label (we expect only one)
         return data["labels"][0][0]
-    
+
     def dump_predictions(self, image_paths: List[str], predictions: List[str]):
         """Dump predictions to CSV file.
-        
+
         Args:
             image_paths: List of image paths
             predictions: List of predicted labels
         """
         if not self.dump_csv:
             return
-            
+
         # Create DataFrame without column names, matching reference code format
         df = pd.DataFrame(zip(image_paths, predictions, [0.0] * len(predictions)))
-        
+
         # Append to CSV file without headers
         df.to_csv(self.dump_csv, header=False, index=False, mode='a')
         logger.info(f"Dumped {len(predictions)} predictions to {self.dump_csv}")
 
 class MetricsCalculator:
     """Class responsible for calculating classification metrics."""
-    
+
     def __init__(self, all_labels: List[str]):
         """Initialize metrics calculator.
-        
+
         Args:
             all_labels: List of all possible class labels
         """
         self.all_labels = all_labels
-        
+
     def compute_metrics(self, y_true: List[str], y_pred: List[str]) -> Dict:
         """Compute classification metrics.
-        
+
         Example inputs:
         y_true = ["n01440764", "n01440764", "n01443537", "n01443537"]
         y_pred = ["n01440764", "n01443537", "n01443537", "n01443537"]
-        
+
         Returns:
             Dict containing:
             - accuracy: Overall accuracy
@@ -295,7 +310,7 @@ class MetricsCalculator:
             - confusion_matrix: Confusion matrix
             - class_metrics: Dict mapping class names to their metrics
             - overall_metrics: Dict containing macro/micro averages
-            
+
         Note on Macro vs Micro averages:
         - Macro: Treats all classes equally, regardless of their frequency
           Example: If we have 3 classes with metrics:
@@ -304,7 +319,7 @@ class MetricsCalculator:
           Class C (1 sample):   precision=0.3, recall=0.2
           Macro average = (0.9 + 0.5 + 0.3) / 3 = 0.57
           This is useful when all classes are equally important.
-        
+
         - Micro: Weights metrics by class frequency
           Example: Using the same classes above:
           Class A: 100 samples contribute 90% to final score
@@ -317,20 +332,20 @@ class MetricsCalculator:
         label_to_idx = {label: idx for idx, label in enumerate(self.all_labels)}
         y_true_idx = [label_to_idx[label] for label in y_true]
         y_pred_idx = [label_to_idx[label] for label in y_pred]
-        
+
         # Calculate metrics
         metrics = {}
-        
+
         # Overall accuracy
         metrics["accuracy"] = accuracy_score(y_true_idx, y_pred_idx)
-        
+
         # Per-class metrics with zero_division=0 to handle warnings
         # zero_division=0 means: if a class has no predictions, its precision=0
         # if a class has no ground truth, its recall=0
         metrics["precision"] = precision_score(y_true_idx, y_pred_idx, average=None, zero_division=0)
         metrics["recall"] = recall_score(y_true_idx, y_pred_idx, average=None, zero_division=0)
         metrics["f1"] = f1_score(y_true_idx, y_pred_idx, average=None, zero_division=0)
-        
+
         # Overall metrics (macro and micro averages)
         metrics["overall_metrics"] = {
             "macro_precision": precision_score(y_true_idx, y_pred_idx, average='macro', zero_division=0),
@@ -340,14 +355,14 @@ class MetricsCalculator:
             "micro_recall": recall_score(y_true_idx, y_pred_idx, average='micro', zero_division=0),
             "micro_f1": f1_score(y_true_idx, y_pred_idx, average='micro', zero_division=0)
         }
-        
+
         # Create confusion matrix with all classes
         # Initialize with zeros to include classes with no predictions
         conf_matrix = np.zeros((len(self.all_labels), len(self.all_labels)), dtype=int)
         for true_idx, pred_idx in zip(y_true_idx, y_pred_idx):
             conf_matrix[true_idx, pred_idx] += 1
         metrics["confusion_matrix"] = conf_matrix
-        
+
         # Create class metrics dictionary
         metrics["class_metrics"] = {}
         for idx, label in enumerate(self.all_labels):
@@ -358,17 +373,17 @@ class MetricsCalculator:
                 "true_count": np.sum(conf_matrix[idx, :]),  # Number of true samples
                 "pred_count": np.sum(conf_matrix[:, idx])   # Number of predicted samples
             }
-        
+
         return metrics
 
 class ClassificationEvaluator:
     """Main class for classification evaluation."""
-    
+
     def __init__(self, host: str, port: str, model_name: str = "nvdino-v2", config_path: str = None,
                  max_images_per_class: int = None, total_images: int = None,
                  csv_path: Optional[str] = None, dump_csv: Optional[str] = None):
         """Initialize evaluator.
-        
+
         Args:
             host: Inference server host
             port: Inference server port
@@ -378,7 +393,7 @@ class ClassificationEvaluator:
             total_images: Total number of images to evaluate (optional)
             csv_path: Path to CSV file containing predictions (optional)
             dump_csv: Path to dump predictions in CSV format (optional)
-            
+
         Example config YAML structure:
         dataset:
           root_dir: /path/to/dataset
@@ -389,15 +404,15 @@ class ClassificationEvaluator:
         if config_path:
             with open(config_path, 'r') as f:
                 self.config = yaml.safe_load(f)
-            
+
             # Extract dataset info
             dataset_config = self.config['dataset']
             self.root_dir = dataset_config['root_dir']
             self.test_prefix = dataset_config['test']['data_prefix']
-        
+
         # Initialize components
         self.data_collector = DataCollector(
-            self.root_dir, 
+            self.root_dir,
             self.test_prefix,
             max_images_per_class=max_images_per_class,
             total_images=total_images
@@ -409,13 +424,13 @@ class ClassificationEvaluator:
             csv_path=csv_path,
             dump_csv=dump_csv
         )
-        
+
     def evaluate(self) -> Dict:
         """Run evaluation.
-        
+
         Returns:
             Dict containing evaluation metrics
-            
+
         Note on handling missing predictions:
         When a prediction fails (no label returned), we:
         1. Skip that image in metrics calculation
@@ -426,7 +441,7 @@ class ClassificationEvaluator:
         # Get all image-label pairs
         image_label_pairs = self.data_collector.get_image_label_pairs()
         logger.info(f"Found {len(image_label_pairs)} images to evaluate")
-        
+
         # Collect predictions
         y_true = []
         y_pred = []
@@ -434,7 +449,7 @@ class ClassificationEvaluator:
         failed_predictions = set()  # Track classes that had failed predictions
         image_paths = []
         predictions = []
-        
+
         for img_path, gt_label in tqdm(image_label_pairs, desc="Processing images"):
             # Get prediction
             pred_label = self.pred_collector.get_prediction(img_path)
@@ -442,29 +457,29 @@ class ClassificationEvaluator:
                 # If prediction fails, track the ground truth class
                 failed_predictions.add(gt_label)
                 continue
-                
+
             # Store results
             y_true.append(gt_label)
             y_pred.append(pred_label)
             all_labels.add(gt_label)
             all_labels.add(pred_label)
-            
+
             # Store for CSV dumping
             image_paths.append(img_path)
             predictions.append(pred_label)
-        
+
         # Dump predictions if requested
         if image_paths:
             self.pred_collector.dump_predictions(image_paths, predictions)
-        
+
         # Calculate metrics
         metrics_calculator = MetricsCalculator(sorted(list(all_labels)))
         metrics = metrics_calculator.compute_metrics(y_true, y_pred)
-        
+
         # Print results
         logger.info("\nEvaluation Results:")
         logger.info(f"Accuracy: {metrics['accuracy']:.4f}")
-        
+
         # Print overall metrics
         overall = metrics["overall_metrics"]
         logger.info("\nOverall Metrics:")
@@ -474,17 +489,17 @@ class ClassificationEvaluator:
         logger.info(f"Micro Precision: {overall['micro_precision']:.4f}")
         logger.info(f"Micro Recall: {overall['micro_recall']:.4f}")
         logger.info(f"Micro F1: {overall['micro_f1']:.4f}")
-        
+
         # Print classes with no predictions
         if failed_predictions:
             logger.info(f"\nClasses with no predictions: {len(failed_predictions)}")
             for label in sorted(failed_predictions):
                 logger.info(f"  {label}")
-        
+
         # Print top and bottom performing classes
         class_metrics = metrics["class_metrics"]
         sorted_classes = sorted(class_metrics.items(), key=lambda x: x[1]["f1"], reverse=True)
-        
+
         logger.info("\nTop 5 performing classes:")
         for class_name, class_metrics in sorted_classes[:5]:
             logger.info(f"\n{class_name}:")
@@ -493,7 +508,7 @@ class ClassificationEvaluator:
             logger.info(f"  F1 Score: {class_metrics['f1']:.4f}")
             logger.info(f"  True samples: {class_metrics['true_count']}")
             logger.info(f"  Predicted samples: {class_metrics['pred_count']}")
-            
+
         logger.info("\nBottom 5 performing classes:")
         for class_name, class_metrics in sorted_classes[-5:]:
             logger.info(f"\n{class_name}:")
@@ -502,11 +517,11 @@ class ClassificationEvaluator:
             logger.info(f"  F1 Score: {class_metrics['f1']:.4f}")
             logger.info(f"  True samples: {class_metrics['true_count']}")
             logger.info(f"  Predicted samples: {class_metrics['pred_count']}")
-        
+
         # Print confusion matrix dimensions
         conf_matrix = metrics['confusion_matrix']
         logger.info(f"\nConfusion Matrix Shape: {conf_matrix.shape}")
-        
+
         return metrics
 
 def parse_args():
@@ -529,7 +544,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    
+
     # Initialize evaluator
     evaluator = ClassificationEvaluator(
         host=args.host,
@@ -540,9 +555,9 @@ def main():
         csv_path=args.csv_path,
         dump_csv=args.dump_csv
     )
-    
+
     # Run evaluation
     metrics = evaluator.evaluate()
 
 if __name__ == '__main__':
-    main() 
+    main()

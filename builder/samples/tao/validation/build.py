@@ -1,4 +1,21 @@
 #!/usr/bin/env python3
+
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 import argparse
 import os
 import subprocess
@@ -22,7 +39,7 @@ TARGETS = {
 def clean_tmp(target: Optional[str] = None, model: Optional[str] = None) -> None:
     """Clean temporary directories."""
     validation_path = Path("builder/samples/tao/validation")
-    
+
     if not target:
         print("Cleaning all temporary directories...")
         for path in validation_path.glob("*/.tmp"):
@@ -48,7 +65,7 @@ def build_target(target: str, model: Optional[str] = None) -> None:
     print("\n" + "="*80)  # Add a clear separator line
     target_info = TARGETS[target]
     ds_prefix = f"ds_{target}"
-    
+
     cmd = [
         "python", "builder/main.py",
         f"builder/samples/tao/{ds_prefix}.yaml",
@@ -57,10 +74,10 @@ def build_target(target: str, model: Optional[str] = None) -> None:
         "-o", "builder/samples/tao",
         "-t"
     ]
-    
+
     if model:
         cmd.extend(["-v", f"builder/samples/tao/validation/{model}"])
-    
+
     if target_info.needs_processor:
         cmd.extend(["-c", "builder/samples/tao/processors.py"])
 

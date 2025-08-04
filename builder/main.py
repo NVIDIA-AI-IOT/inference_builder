@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import base64
 import tempfile
@@ -29,6 +44,23 @@ Security Features:
 - Logging of all executed commands for audit trails
 """
 
+LICENSE_HEADER = """
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+
 ALLOWED_SERVER = ["triton", "fastapi", "nim", "serverless"]
 
 logging.basicConfig(level=logging.INFO)
@@ -40,7 +72,7 @@ def validate_file_path(file_path: str) -> bool:
     """Validate file path to prevent directory traversal and command injection."""
     if not file_path:
         return False
-    
+
     # Check for dangerous patterns
     dangerous_patterns = [
         r'[;&|`$()]',  # Shell metacharacters
@@ -49,11 +81,11 @@ def validate_file_path(file_path: str) -> bool:
         r'/proc/',     # System directories
         r'[<>]',       # Redirections
     ]
-    
+
     for pattern in dangerous_patterns:
         if re.search(pattern, file_path):
             return False
-    
+
     # Ensure it's a regular file
     path = Path(file_path)
     return path.exists() and path.is_file()
@@ -63,7 +95,7 @@ def validate_directory_path(dir_path: str) -> bool:
     """Validate directory path to prevent directory traversal attacks."""
     if not dir_path:
         return False
-    
+
     # Check for dangerous patterns
     dangerous_patterns = [
         r'[;&|`$()]',  # Shell metacharacters
@@ -71,11 +103,11 @@ def validate_directory_path(dir_path: str) -> bool:
         r'/etc/',      # System directories
         r'/proc/',     # System directories
     ]
-    
+
     for pattern in dangerous_patterns:
         if re.search(pattern, dir_path):
             return False
-    
+
     return True
 
 
@@ -219,7 +251,7 @@ def build_inference(server_type, config, output_dir: Path):
                     # Triton python backend needs a model.py
                 backend_tpl = jinja_env.get_template(f"backend/{backend_spec[2]}.jinja.py")
                 backend = backend_tpl.render(server_type=server_type)
-                output = triton_tpl.render(backends=[backend], top_level=False)
+                output = triton_tpl.render(backends=[backend], top_level=False, license=LICENSE_HEADER)
                 with open (target_dir/"model.py", 'w') as o:
                     o.write(output)
             # triton python backend to communicate with triton fastapi server
@@ -251,7 +283,7 @@ def build_inference(server_type, config, output_dir: Path):
             output = triton_tpl.render(backends=backends, top_level=True)
         else:
             # render generic model.y
-            output = generic_tpl.render(backends=backends)
+            output = generic_tpl.render(backends=backends, license=LICENSE_HEADER)
         with open (target_dir/"model.py", 'w') as o:
             o.write(output)
 
@@ -260,7 +292,7 @@ def build_serverless(name: str, output_dir: Path):
     tpl_dir = get_resource_path("templates")
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
     app_tpl = jinja_env.get_template("serverless/inference.jinja.py")
-    output = app_tpl.render(service_name=name)
+    output = app_tpl.render(service_name=name, license=LICENSE_HEADER)
     with open(output_dir/"inference.py", 'w') as f:
         f.write(output)
 
@@ -270,7 +302,7 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
     tpl_dir = get_resource_path("templates")
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
     api_tpl_dir = get_resource_path(f"templates/api_server/{server_type}/route")
-    
+
     # Use safer subprocess call with argument list instead of shell string interpolation
     command = [
         "fastapi-codegen",
@@ -281,7 +313,7 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
         "-m", "data_model.py",
         "--disable-timestamp"
     ]
-    
+
     logger.info(f"Executing command: {' '.join(command)}")
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
@@ -308,12 +340,14 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
         }
         output = svr_tpl.render(
             service_name=model_name,
+            license=LICENSE_HEADER,
             responders=responders,
             triton=triton_config
         )
     elif server_type == "fastapi" or server_type == "nim":
         output = svr_tpl.render(
             service_name=model_name,
+            license=LICENSE_HEADER,
             responders=responders
         )
     else:
@@ -361,7 +395,7 @@ def generate_configuration(config, tree):
     jinja_env = Environment(loader=FileSystemLoader(tpl_dir))
     config_tpl = jinja_env.get_template('common/config.jinja.py')
     config = OmegaConf.create(config_map)
-    output = config_tpl.render(config=OmegaConf.to_yaml(config))
+    output = config_tpl.render(config=OmegaConf.to_yaml(config), license=LICENSE_HEADER)
     with open(tree/"config/__init__.py", 'w') as f:
         f.write(output)
 
@@ -370,22 +404,22 @@ def main(args):
     # Validate all arguments to prevent security issues
     if not validate_file_path(args.config):
         raise ValueError(f"Invalid config file path: {args.config}")
-    
+
     if not validate_server_type(args.server_type):
         raise ValueError(f"Invalid server type: {args.server_type}")
-    
+
     if not validate_directory_path(args.output_dir):
         raise ValueError(f"Invalid output directory: {args.output_dir}")
 
     if args.validation_dir and not validate_directory_path(args.validation_dir):
         raise ValueError(f"Invalid validation directory: {args.validation_dir}")
-    
+
     # Validate custom modules if provided
     if args.custom_module:
         for module in args.custom_module:
             if not validate_file_path(module.name):
                 raise ValueError(f"Invalid custom module file path: {module.name}")
-    
+
     config = OmegaConf.load(args.config)
     with tempfile.TemporaryDirectory() as temp_dir:
         tree = build_tree(args.server_type, config, temp_dir)

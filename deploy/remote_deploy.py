@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from typing import List, Dict, Optional
 import logging
 import subprocess
@@ -86,7 +101,7 @@ class DeploymentPreparation:
             logging.warning("Traceroute not available")
         except Exception as e:
             logging.error(f"Traceroute error: {str(e)}")
-        
+
         # Add this to your network testing
         try:
             logging.info("Testing DNS resolution...")
@@ -99,7 +114,7 @@ class DeploymentPreparation:
         # Test direct IP connection
         try:
             logging.info(f"Testing direct IP connection to {ip_addr}")
-            result = subprocess.run(['ping', '-c', '1', ip_addr], 
+            result = subprocess.run(['ping', '-c', '1', ip_addr],
                                 capture_output=True, text=True)
             logging.info(f"Ping result: {result.stdout}")
         except Exception as e:
@@ -110,10 +125,10 @@ class DeploymentPreparation:
         import subprocess
         ssh_dir = os.path.expanduser('~/.ssh')
         key_path = os.path.join(ssh_dir, 'id_rsa')
-        
+
         # Test 1: Verify key format
         try:
-            result = subprocess.run(['ssh-keygen', '-l', '-f', key_path], 
+            result = subprocess.run(['ssh-keygen', '-l', '-f', key_path],
                                 capture_output=True, text=True)
             if result.returncode == 0:
                 logging.info(f"SSH key verification successful: {result.stdout.strip()}")
@@ -148,15 +163,15 @@ class DeploymentPreparation:
             logging.info(f"SSH agent keys: {result.stdout if result.returncode == 0 else 'No keys loaded'}")
         except Exception as e:
             logging.error(f"Error checking SSH agent: {str(e)}")
-    
+
     def verify_kubeconfig(self):
         """Verify kubeconfig file and cluster access"""
         import subprocess
         logger.info("Verifying kubeconfig and cluster access...")
-        
+
         # Check file permissions
         os.chmod(self.kubeconfig, 0o600)  # Ensure correct permissions
-        
+
         # Test connection to cluster
         try:
             cmd = ['kubectl', '--kubeconfig', self.kubeconfig, 'version']
@@ -167,7 +182,7 @@ class DeploymentPreparation:
                 logger.error(f"Failed to connect to cluster: {result.stderr}")
         except Exception as e:
             logger.error(f"Error verifying kubeconfig: {str(e)}")
-                
+
         # Test port access
         try:
             import socket
@@ -187,18 +202,18 @@ class DeploymentPreparation:
         logger.info("Downloading helm chart...")
         try:
             Path(self.charts_dir).mkdir(parents=True, exist_ok=True)
-            
+
             chart_filename = self.chart_url.split('/')[-1]
-            
+
             cmd = f"helm fetch {self.chart_url} " \
                 f"--username='$oauthtoken' " \
                 f"--password='{os.environ.get('NGC_API_KEY')}' " \
                 f"--destination '{self.charts_dir}'"
-            
+
             result = os.system(cmd)
             if result != 0:
                 raise Exception("Helm fetch command failed")
-            
+
             chart_path = f"{self.charts_dir}/{chart_filename}"
             logger.info(f"Successfully downloaded helm chart to {chart_path}")
             return chart_path
@@ -218,12 +233,12 @@ class DeploymentPreparation:
 
         # Test network connectivity first
         self.test_network_connectivity()
-        
+
         # Create .ssh directory
         ssh_dir = os.path.expanduser('~/.ssh')
         logging.info(f"Creating SSH directory: {ssh_dir}")
         os.makedirs(ssh_dir, mode=0o700, exist_ok=True)
-        
+
         # Write and verify private key
         key_path = os.path.join(ssh_dir, 'id_rsa')
         logging.info(f"Writing SSH private key to: {key_path}")
@@ -239,7 +254,7 @@ class DeploymentPreparation:
             for line in key_lines:
                 f.write(line.strip() + '\n')
         os.chmod(key_path, 0o600)
-        
+
         # Test SSH key and connection
         self.test_ssh_connection()
 
@@ -254,7 +269,7 @@ class DeploymentPreparation:
             kubeconfig_dir = os.path.dirname(self.kubeconfig)
             logger.info(f"Creating kubeconfig directory: {kubeconfig_dir}")
             os.makedirs(kubeconfig_dir, exist_ok=True)
-            
+
             """
             Note:
             - Specify the private key explicitly
@@ -267,7 +282,7 @@ class DeploymentPreparation:
                 f"{self.deployment_host}:~/.kube/config {self.kubeconfig}"
             )
             logger.info(f"Executing command: {scp_cmd}")
-            
+
             # Use subprocess for better error handling
             import subprocess
             result = subprocess.run(
@@ -276,15 +291,15 @@ class DeploymentPreparation:
                 capture_output=True,
                 text=True
             )
-            
+
             if result.returncode != 0:
                 logger.error(f"SCP stderr: {result.stderr}")
                 raise Exception(f"SCP command failed with exit code: {result.returncode}")
-            
+
             # Verify kubeconfig file exists and is readable
             if not os.path.isfile(self.kubeconfig):
                 raise Exception(f"Kubeconfig file not found at: {self.kubeconfig}")
-            
+
             logger.info(f"Successfully retrieved kubeconfig to: {self.kubeconfig}")
             logger.debug(f"Kubeconfig permissions: {oct(os.stat(self.kubeconfig).st_mode)[-3:]}")
         except Exception as e:
@@ -354,23 +369,23 @@ class HelmDeployer:
 
             # Update main container (tao-cv)
             tao_cv_container = values['tao-cv']['applicationSpecs']['tao-cv-deployment']['containers']['tao-cv-container']
-            
+
             # Update main container environment variables
             tao_cv_container['env'] = [
                 {'name': 'NIM_MODEL_NAME', 'value': self.model_type},
                 # Preserve other env vars that might exist in the values file
-                *[env for env in tao_cv_container.get('env', []) 
+                *[env for env in tao_cv_container.get('env', [])
                   if env.get('name') != 'NIM_MODEL_NAME']
             ]
 
             # Update validator container
             validator_container = values['tao-cv-validator']['applicationSpecs']['validator-deployment']['containers']['validator-container']
-            
+
             # Update validator environment variables
             validator_container['env'] = [
                 {'name': 'NIM_MODEL_NAME', 'value': self.model_type},  # Match main container
                 # Preserve other env vars that might exist in the values file
-                *[env for env in validator_container.get('env', []) 
+                *[env for env in validator_container.get('env', [])
                   if env.get('name') != 'NIM_MODEL_NAME']
             ]
 
@@ -393,7 +408,7 @@ class HelmDeployer:
                 # Construct image repository path matching docker push format
                 image_repository = f"{self.registry_image}/nim-tao-{self.flavor}"
                 logger.info(f"Setting image repository to: {image_repository}")
-                
+
                 tao_cv_container['image'] = {
                     'repository': image_repository,
                     'tag': self.commit_sha
@@ -402,7 +417,7 @@ class HelmDeployer:
                 logger.warning("Missing required environment variables for image update")
                 logger.debug(f"CI_REGISTRY_IMAGE: {self.registry_image}")
                 logger.debug(f"CI_COMMIT_SHA: {self.commit_sha}")
-            
+
             # Update validator image
             if self.validator_image:
                 repo, image_name, tag  = self.split_docker_image(self.validator_image)
@@ -410,19 +425,19 @@ class HelmDeployer:
                     'repository': repo,
                     'tag': tag
                 }
-            
+
             # Write to new values file
             os.makedirs(os.path.dirname(self.custom_values_file), exist_ok=True)
             with open(self.custom_values_file, 'w') as f:
                 yaml.dump(values, f)
-            
+
             # Log the content of the new values file
             logger.info(f"Generated custom values file content:")
             logger.info("-" * 50)
             with open(self.custom_values_file, 'r') as f:
                 logger.info(f"\n{f.read()}")
             logger.info("-" * 50)
-                
+
             logger.info("Successfully created custom values file")
             return self.custom_values_file
 
@@ -433,7 +448,7 @@ class HelmDeployer:
     def uninstall_previous(self) -> bool:
         """Uninstall previous deployment if it exists"""
         logger.info(f"Checking for previous deployment: {self.get_release_name()}")
-        
+
         try:
             """
             Check if release exists
@@ -453,7 +468,7 @@ class HelmDeployer:
             if not releases:
                 logger.info("No previous deployment found")
                 return True
-                
+
             """
             Uninstall if exists
             Equivalent bash command:
@@ -529,10 +544,10 @@ class HelmDeployer:
             logger.info(f"Executing: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True)
             logger.info(f"Final resource state:\n{result.stdout}")
-            
+
             logger.info(f"\n{'='*80}\nAll resources successfully deleted\n{'='*80}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error during uninstall: {str(e)}")
             return False
@@ -547,7 +562,7 @@ class HelmDeployer:
 
             # Update values and get custom values file path
             values_file = self.update_helm_values()
-            
+
             cmd = [
                 'helm', 'upgrade', '--install',
                 self.get_release_name(), self.chart_path,
@@ -555,7 +570,7 @@ class HelmDeployer:
                 '--kubeconfig', self.kubeconfig,
                 '--wait'
             ]
-            
+
             logger.info(f"Executing Helm command: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
@@ -598,12 +613,12 @@ class DeploymentValidator:
                 '-o', 'jsonpath={.items[0].status.phase}'
             ]
             result = subprocess.run(cmd, capture_output=True, text=True)
-            
+
             if result.returncode != 0:
                 logger.error(f"Failed to get validator pod status: {result.stderr}")
                 time.sleep(10)
                 continue
-            
+
             status = result.stdout
             logger.info(f"Validator pod status: {status}")
             if status in ["Succeeded", "Completed"]:  # Accept both values
@@ -657,10 +672,10 @@ class DeploymentValidator:
                     logs = subprocess.run(cmd, capture_output=True, text=True)
                     return False, f"Validation failed: {logs.stdout}"
                 return False, f"Validation failed with status: {status}"
-            
+
             logger.info(f"Validator status: {status}, waiting...")
             time.sleep(10)
-        
+
         return False, "Timeout waiting for validator to complete"
 
     def check_deployment_status(self, timeout: int = 300) -> bool:
@@ -701,7 +716,7 @@ class DeploymentValidator:
         if not success:
             logger.error(f"Validation failed:\n{logs}")
             return False
-        
+
         logger.info(f"Validation succeeded:\n{logs}")
         return True
 
@@ -744,7 +759,7 @@ class DeploymentRunner:
         if model_id not in self.deployments:
             self.deployments[model_id] = ModelDeployment(model_id=model_id, stages=[])
         self.deployments[model_id].add_stage(stage, success, message)
-    
+
     def print_deployment_summary(self) -> bool:
         """Print summary of all deployments"""
         logger.info("\n" + "="*80)
@@ -754,7 +769,7 @@ class DeploymentRunner:
         for deployment in self.deployments.values():
             status_icon = "✅" if deployment.success else "❌"
             logger.info(f"{status_icon} {deployment.model_id}:")
-            
+
             for stage in deployment.stages:
                 if stage.success:
                     logger.info(f"  {stage.name}: Passed")
@@ -813,7 +828,7 @@ class DeploymentRunner:
         else:
             success = False
             logger.error(f"Deployment failed for {model_id}")
-        
+
         # Cleanup
         if teardown:
             uninstall_success = deployer.uninstall_previous()
@@ -846,19 +861,19 @@ class DeploymentRunner:
         success = self._run_single_deploy(chart_path=chart_path, model_type=model_type, teardown=False)
 
         return success
-    
+
     def parse_args(self):
         """Parse command line arguments"""
         parser = argparse.ArgumentParser(description='Deploy and validate TAO CV models')
         parser.add_argument('--mode', choices=['test', 'deploy'], default='deploy',
                           help='Run mode: test (test all models and cleanup) or deploy (single model, keep running)')
-        
+
         # Only require flavor and model-type for deploy mode
-        parser.add_argument('--flavor', type=str, 
+        parser.add_argument('--flavor', type=str,
                           help='Model flavor (tao, changenet, gdino)')
-        parser.add_argument('--model-type', type=str, 
+        parser.add_argument('--model-type', type=str,
                           help='Specific model type to deploy (e.g., rtdetr, cls, seg)')
-        
+
         args = parser.parse_args()
 
         # Validate arguments based on mode
@@ -883,7 +898,7 @@ class DeploymentRunner:
         # One-time setup
         prep = DeploymentPreparation()
         chart_path = prep.prepare()
-        
+
         success = False
         if args.mode == 'test':
             success = self.run_all(chart_path=chart_path)

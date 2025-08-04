@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import json
 import os
@@ -21,7 +36,7 @@ TEST_CASES_FILE = "test_cases.yaml"
 # Setup paths and generate OpenAPI client
 def check_client_exists() -> bool:
     """Check if OpenAPI client exists and is importable.
-    
+
     Returns:
         bool: True if client exists and can be imported, False otherwise
     """
@@ -35,7 +50,7 @@ def check_client_exists() -> bool:
         return False
 
 def setup_environment(generated_client_path: Path) -> bool:
-    """Setup environment for client import."""    
+    """Setup environment for client import."""
     try:
         # First check if client directory exists
         if not generated_client_path.exists():
@@ -63,10 +78,10 @@ def setup_environment(generated_client_path: Path) -> bool:
 
 def check_client_valid(client_dir: Path) -> bool:
     """Check if existing OpenAPI client is valid.
-    
+
     Args:
         client_dir: Path to generated client directory
-        
+
     Returns:
         bool: True if client exists and is valid, False otherwise
     """
@@ -74,7 +89,7 @@ def check_client_valid(client_dir: Path) -> bool:
         # Check if directory exists and has key files
         if not client_dir.exists():
             return False
-            
+
         required_files = [
             "setup.py",
             "openapi_client/__init__.py",
@@ -82,18 +97,18 @@ def check_client_valid(client_dir: Path) -> bool:
             "openapi_client/models/inference_request.py",
             "openapi_client/models/inference_response.py"
         ]
-        
+
         for file in required_files:
             if not (client_dir / file).exists():
                 print(f"Missing required file: {file}")
                 return False
-                
+
         # Try importing to validate
         sys_path_modified = False
         if str(client_dir) not in sys.path:
             sys.path.insert(0, str(client_dir))
             sys_path_modified = True
-            
+
         try:
             import openapi_client
             from openapi_client.models.inference_request import InferenceRequest
@@ -106,14 +121,14 @@ def check_client_valid(client_dir: Path) -> bool:
         finally:
             if sys_path_modified:
                 sys.path.remove(str(client_dir))
-                
+
     except Exception as e:
         print(f"Error checking client: {e}")
         return False
 
 def generate_openapi_client(openapi_spec_path: Path, output_dir: Path, use_docker: bool = True) -> bool:
     """Generate OpenAPI client using Docker or local OpenAPI Generator.
-    
+
     Args:
         openapi_spec_path: Path to OpenAPI specification file
         output_dir: Target output directory for generated client
@@ -132,7 +147,7 @@ def generate_openapi_client(openapi_spec_path: Path, output_dir: Path, use_docke
 
         tmp_client = "tmp_generated_client"
         tmp_client_path = abs_spec_path.parent / tmp_client
-        
+
         if use_docker:
             # Construct docker command
             # docker run --rm -v "${PWD}:/local" openapitools/openapi-generator-cli generate \
@@ -181,7 +196,7 @@ def generate_openapi_client(openapi_spec_path: Path, output_dir: Path, use_docke
         except Exception as e:
             print(f"Failed to move generated client: {e}")
             return False
-        
+
         return True
 
     except subprocess.CalledProcessError as e:
@@ -204,28 +219,28 @@ def generate_openapi_client(openapi_spec_path: Path, output_dir: Path, use_docke
 
 def prepare_image_input(image_path: Path) -> str:
     """Prepare image for inference by converting to base64 format.
-    
+
     Examples:
         image_input = tester.prepare_image_input("path/to/image.jpg")
         # image_input = "data:image/jpg;base64,/9j/4AAQSkZJRg..."
-    
+
     Args:
         image_path: Path to image file (jpg, jpeg, or png)
-        
+
     Returns:
         str: Base64 encoded image with data URI scheme
-        
+
     Raises:
         ValueError: If file doesn't exist or has unsupported format
         IOError: If file can't be read
     """
     if not os.path.exists(image_path):
         raise ValueError(f"Image file not found: {image_path}")
-    
+
     ext = os.path.splitext(image_path)[1][1:].lower()
     if ext not in ['jpg', 'jpeg', 'png']:
         raise ValueError(f"Unsupported image format: {ext}. Use jpg, jpeg or png")
-    
+
     with open(image_path, "rb") as f:
         image_data = f.read()
     b64_image = base64.b64encode(image_data).decode()
@@ -339,7 +354,7 @@ def build_requests(validation_dir: Path, out_dir: Path, client_dir: Path, test_c
             request["input"] = PayloadBuilder.prepare_image_inputs([image_path])
             if test["text"]:
                 request["text"] = PayloadBuilder.prepare_text_input_from_file(validation_dir / test["text"])
-            
+
             # write request file
             request_path = out_dir / f"request.{test['name']}.json"
             with open(request_path, "w") as f:
@@ -459,34 +474,34 @@ class CvValidator:
     @staticmethod
     def is_float_equal(a: float, b: float, tolerance: float = 1e-5) -> bool:
         """Compare floats with relative and absolute tolerance, similar to numpy.isclose
-        
+
         Uses both relative and absolute tolerance for robust comparison:
         - Relative tolerance scales with the magnitude of the values
         - Absolute tolerance handles cases where values are close to zero
         - With large tolerance values, most comparisons will pass
-        
+
         Formula: abs(a - b) <= (atol + rtol * max(abs(a), abs(b)))
-        
+
         Args:
             a: First float value
-            b: Second float value  
+            b: Second float value
             tolerance: Relative tolerance parameter (default: 1e-5).
                       Also used as absolute tolerance scaled down by 1000x
-                      
+
         Returns:
             bool: True if values are close within tolerance
-            
+
         Examples:
             # Basic usage
             is_float_equal(1.0, 1.00001, 1e-4)  # True
-            
+
             # Scales with magnitude (relative tolerance)
-            is_float_equal(1000.0, 1000.01, 1e-4)  # True  
+            is_float_equal(1000.0, 1000.01, 1e-4)  # True
             is_float_equal(0.001, 0.00100001, 1e-4)  # True
-            
+
             # Handles near-zero values (absolute tolerance)
             is_float_equal(1e-10, 2e-10, 1e-5)  # True
-            
+
             # Large tolerance passes most cases
             is_float_equal(1.0, 2.0, 1.0)  # True
         """
@@ -494,7 +509,7 @@ class CvValidator:
         rtol = tolerance
         # Use much smaller absolute tolerance to handle near-zero values
         atol = tolerance * 1e-3
-        
+
         return abs(a - b) <= (atol + rtol * max(abs(a), abs(b)))
 
     @classmethod
@@ -537,7 +552,7 @@ class CvValidator:
         """
         if len(list1) != len(list2):
             return False
-        
+
         # If lists contain more lists/tuples, keep inner items as tuples but don't sort them
         if all(isinstance(x, (list, tuple)) for x in list1 + list2):
             tuples1 = [tuple(x) for x in list1]
@@ -546,17 +561,17 @@ class CvValidator:
             sorted1 = sorted(tuples1)
             sorted2 = sorted(tuples2)
             return all(
-                all(cls.is_float_equal(a, b, tolerance) if isinstance(a, float) else a == b 
+                all(cls.is_float_equal(a, b, tolerance) if isinstance(a, float) else a == b
                     for a, b in zip(item1, item2))
                 for item1, item2 in zip(sorted1, sorted2)
             )
-        
+
         # For lists of floats, compare with tolerance
         if all(isinstance(x, float) for x in list1 + list2):
             sorted1 = sorted(list1)
             sorted2 = sorted(list2)
             return all(cls.is_float_equal(a, b, tolerance) for a, b in zip(sorted1, sorted2))
-        
+
         # For other types, use regular comparison
         return sorted(list1) == sorted(list2)
 
@@ -685,7 +700,7 @@ class CvValidator:
 
 def main():
     parser = argparse.ArgumentParser(description='Build validator components')
-    parser.add_argument('--api-spec', 
+    parser.add_argument('--api-spec',
                        type=str,
                        required=True,
                        help='Path to OpenAPI specification file')
@@ -693,12 +708,12 @@ def main():
                        type=str,
                        default='.',
                        help='Base directory for validation')
-    
+
     args = parser.parse_args()
-    
+
     with open(args.api_spec) as f:
         api_schema = f.read()
-    
+
     if build_validation(api_schema, Path(args.base_dir)):
         print("✓ Successfully built validation")
     else:
