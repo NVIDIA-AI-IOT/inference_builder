@@ -1,20 +1,3 @@
-{#
- SPDX-FileCopyrightText: Copyright (c) <year> NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- SPDX-License-Identifier: Apache-2.0
-
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
- http://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
-#}
-
 from typing import List, Dict
 from lib.inference import ModelBackend
 import tensorrt_llm
@@ -87,68 +70,75 @@ class TensorRTLLMBackend(ModelBackend):
         self._output_names = [o['name'] for o in model_config['output']]
         self._device = f"cuda:{device_id}"
         self._stream = torch.cuda.Stream(self._device)
-        self._params = model_config["parameters"]
-        self._inputs = model_config["input"]
+        self._params = model_config["parameters"] if "parameters" in model_config else {}
+        self._inputs = model_config["input"] if "input" in model_config else []
         llm_backend = model_config["backend"].split("/")[-1]
+
+        if not self._inputs:
+            raise ValueError("No input tensors found in model config")
+
         if llm_backend == "pytorch":
             from tensorrt_llm import SamplingParams
-            from tensorrt_llm._torch import LLM
-            from tensorrt_llm._torch.pyexecutor.config import PyTorchConfig
-            from tensorrt_llm.llmapi import (EagleDecodingConfig, KvCacheConfig,
-                                            MTPDecodingConfig)
+            from tensorrt_llm import LLM
+            from tensorrt_llm.llmapi import (DraftTargetDecodingConfig, EagleDecodingConfig,
+                                            KvCacheConfig, MTPDecodingConfig,
+                                            NGramDecodingConfig, TorchCompileConfig)
 
             in_names = [i['name'] for i in model_config['input']]
             if "max_tokens" not in in_names or "temperature" not in in_names or "top_p" not in in_names or "top_k" not in in_names:
                 raise ValueError("max_tokens, temperature, top_p, and top_k must be provided for tensorrtllmpytorch backend")
             self._trt_session = None
-            pytorch_config = PyTorchConfig(
-                disable_overlap_scheduler=self._params.get("disable_overlap_scheduler", False),
-                kv_cache_dtype=self._params.get("kv_cache_dtype", "auto"),
-                attn_backend=self._params.get("attn_backend", "TRTLLM"),
-                use_cuda_graph=self._params.get("use_cuda_graph", False),
-                load_format=self._params.get("load_format", "auto"),
-                print_iter_log=self._params.get("print_iter_log", False),
-                torch_compile_enabled=self._params.get("use_torch_compile", False),
-                torch_compile_piecewise_cuda_graph=self._params.get("use_piecewise_cuda_graph", False),
-                moe_backend=self._params.get("moe_backend", "CUTLASS"),
-                enable_trtllm_sampler=self._params.get("enable_trtllm_sampler", False)
-            )
-            kv_cache_config = KvCacheConfig(
-                enable_block_reuse=not self._params.get("disable_kv_cache_reuse", False),
-                free_gpu_memory_fraction=self._params.get("kv_cache_fraction", None),
-            )
+            default_kv_cache_config = {
+                "enable_block_reuse": True
+            }
+            if "kv_cache_config" in self._params:
+                default_kv_cache_config.update(self._params.pop("kv_cache_config"))
+            kv_cache_config = KvCacheConfig(**default_kv_cache_config)
 
-            spec_decode_algo = self._params.get("spec_decode_algo", None)
+            spec_decode_algo = self._params.pop("spec_decode_algo", None)
             if spec_decode_algo is not None:
                 spec_decode_algo = spec_decode_algo.upper()
 
             if spec_decode_algo == 'MTP':
                 spec_config = MTPDecodingConfig(
-                    num_nextn_predict_layers=self._params.get("spec_decode_nextn", 1),
-                    use_relaxed_acceptance_for_thinking=self._params.get("use_relaxed_acceptance_for_thinking", False),
-                    relaxed_topk=self._params.get("relaxed_topk", 1),
-                    relaxed_delta=self._params.get("relaxed_delta", 0.0))
+                    num_nextn_predict_layers=self._params.pop("spec_decode_nextn", 1),
+                    use_relaxed_acceptance_for_thinking=self._params.pop("use_relaxed_acceptance_for_thinking", False),
+                    relaxed_topk=self._params.pop("relaxed_topk", 1),
+                    relaxed_delta=self._params.pop("relaxed_delta", 0.0))
             elif spec_decode_algo == "EAGLE3":
                 spec_config = EagleDecodingConfig(
-                    max_draft_len=self._params.get("spec_decode_nextn", 1),
-                    pytorch_eagle_weights_path=self._params.get("eagle_model_dir", None))
+                    max_draft_len=self._params.pop("spec_decode_nextn", 1),
+                    pytorch_weights_path=self._params.pop("draft_model_dir", None),
+                    eagle3_one_model=self._params.pop("use_one_model", None))
+            elif spec_decode_algo == "DRAFT_TARGET":
+                spec_config = DraftTargetDecodingConfig(
+                    max_draft_len=self._params.pop("spec_decode_nextn", 1),
+                    pytorch_weights_path=self._params.pop("draft_model_dir", None))
+            elif spec_decode_algo == "NGRAM":
+                spec_config = NGramDecodingConfig(
+                    prompt_lookup_num_tokens=self._params.pop("spec_decode_nextn", 1),
+                    max_matching_ngram_size=self._params.pop("max_matching_ngram_size", 1),
+                    is_keep_all=True,
+                    is_use_oldest=True,
+                    is_public_pool=True,
+                )
             else:
                 spec_config = None
+
+            use_torch_compile = self._params.pop("use_torch_compile", False)
+            torch_compile_config = TorchCompileConfig(
+                enable_fullgraph=True,
+                enable_inductor=True,
+                enable_piecewise_cuda_graph=self._params.pop("use_piecewise_cuda_graph", False)
+            ) if use_torch_compile else None
+
             self._llm = LLM(
                 model=self._model_home,
-                max_model_len=self._params.get("max_model_len", 1024),
-                max_batch_size=model_config.get("max_batch_size", 1),
-                max_num_tokens=self._params.get("max_num_tokens", 1024),
-                pytorch_backend_config=pytorch_config,
+                backend="pytorch",
                 kv_cache_config=kv_cache_config,
-                tensor_parallel_size=self._params.get("tp_size", 1),
-                pipeline_parallel_size=self._params.get("pp_size", 1),
-                enable_attention_dp=self._params.get("enable_attention_dp", False),
-                moe_expert_parallel_size=self._params.get("moe_ep_size", -1),
-                moe_tensor_parallel_size=self._params.get("moe_tp_size", -1),
-                moe_cluster_parallel_size=self._params.get("moe_cluster_size", -1),
-                enable_chunked_prefill=self._params.get("enable_chunked_prefill", False),
-                speculative_config=spec_config
+                speculative_config=spec_config,
+                torch_compile_config=torch_compile_config,
+                **self._params
             )
             self._sample_params_cls = SamplingParams
             self._trtllm_input_name = next((i["name"] for i in self._inputs if i["data_type"] == "TYPE_CUSTOM_TRTLLM_INPUT"), None)
