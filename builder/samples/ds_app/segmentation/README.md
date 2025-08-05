@@ -23,6 +23,7 @@ cp builder/samples/ds_app/segmentation/citysemsegformer/* $MODEL_REPO/citysemseg
 ## Generate the deepstream application package and build it into a container image:
 
 ```bash
+export GITLAB_TOKEN={Your Gitlab Token}
 python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml -o builder/samples/ds_app --server-type serverless -t \
 && docker build --build-arg GITLAB_TOKEN=$GITLAB_TOKEN -t deepstream-app builder/samples/ds_app
 ```

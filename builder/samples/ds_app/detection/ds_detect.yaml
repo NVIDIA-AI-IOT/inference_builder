@@ -45,9 +45,9 @@ models:
       - nvdsinfer_config.yaml
     tracker_config:
       ll_lib_file: /opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so
-      ll_config_file: /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_IOU.yml
-      width: 1920
-      height: 1088
+      ll_config_file: /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_NvDCF_perf.yml
+      width: 960
+      height: 544
       display_tracking_id: true
     # msgbroker_config:
     #   msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so

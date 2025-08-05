@@ -24,6 +24,7 @@ cp builder/samples/ds_app/gdino/gdino/* $MODEL_REPO/gdino/
 ## Generate the deepstream application package and build it into a container image:
 
 ```bash
+export GITLAB_TOKEN={Your Gitlab Token}
 python builder/main.py builder/samples/ds_app/gdino/ds_gdino.yaml -o builder/samples/ds_app --server-type serverless -c builder/samples/tao/processors.py -t \
 && docker build --build-arg GITLAB_TOKEN=$GITLAB_TOKEN -t deepstream-app builder/samples/ds_app
 ```
