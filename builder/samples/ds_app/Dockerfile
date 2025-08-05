@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.1" AS inference_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.2" AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \

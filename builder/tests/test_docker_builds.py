@@ -264,7 +264,7 @@ class DockerBuildTester:
                     return False, f"Prerequisite script failed: {prerequisite_output}", ""
 
             # Run the container with test configuration
-            cmd = ["docker", "run", "--rm", "--network=host"]
+            cmd = ["docker", "run", "--rm", "--network=host", "--gpus", "all"]
 
             # Add environment variables if specified
             if "env" in test_config:
