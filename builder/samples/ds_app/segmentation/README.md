@@ -2,6 +2,7 @@
 
 This sample demonstrates how to build a deepstream application with Inference Builder using segmentation models:
 1. citysemsegformer: deployable_onnx_v1.0 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/citysemsegformer
+2. mask2former: mask2former_swint_deployable_v1.0 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask2former
 
 ## Prerequisites
 
@@ -12,7 +13,7 @@ You need to export MODEL_REPO environment variable to the path where you want to
 export MODEL_REPO=/path/to/your/model/repo
 ```
 
-For example: if you define a model with name "citysemsegformer", you must put all the model files include nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/citysemsegformer' for the model to be correctly loaded.
+For example: if you define a model with name "citysemsegformer", you must put all the model files include nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/citysemsegformer' for the model to be correctly loaded. Same steps apply for mask2former.
 
 You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/citysemsegformer/ directory, then copy the other required model files to the same directory:
 
