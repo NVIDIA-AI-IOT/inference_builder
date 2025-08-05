@@ -120,29 +120,32 @@ class QwenVLImageProcessor(QwenVLProcessor):
         return inputs
 
 
-class QwenVLImageLoader(QwenVLProcessor):
+class QwenVLImageLoader:
     name = "qwen-vl-image-loader"
     def __init__(self, config):
-        super().__init__(config)
-        from tensorrt_llm.inputs import default_image_loader
-        self._default_image_loader = default_image_loader
+        from tensorrt_llm.inputs import default_multimodal_input_loader
+        self._default_image_loader = default_multimodal_input_loader
         self._model_home = config["model_home"]
 
     def __call__(self, *args):
         prompts = args[0].tolist() if isinstance(args[0], np.ndarray) else args[0]
         images = args[1].tolist() if isinstance(args[1], np.ndarray) else args[1]
         assert len(images) == len(prompts)
-        inputs = self._default_image_loader(prompts, images)
-        for i in inputs:
-            i["prompt"] = self.apply_chat_template(i["prompt"], i["multi_modal_data"])
+        inputs = self._default_image_loader(
+            tokenizer=None,
+            model_type="qwen2_5_vl",
+            model_dir=self._model_home,
+            prompts=prompts,
+            media=images,
+            modality="image"
+        )
         return inputs
 
-class QwenVLVideoLoader(QwenVLProcessor):
+class QwenVLVideoLoader:
     name = "qwen-vl-video-loader"
     def __init__(self, config):
-        super().__init__(config)
-        from tensorrt_llm.inputs import default_video_loader
-        self._default_video_loader = default_video_loader
+        from tensorrt_llm.inputs import default_multimodal_input_loader
+        self._default_video_loader = default_multimodal_input_loader
         self._model_home = config["model_home"]
         self._num_frames = config.get("num_frames", 8)
 
@@ -158,9 +161,15 @@ class QwenVLVideoLoader(QwenVLProcessor):
         elif not isinstance(videos, list):
             videos = [videos]
         assert len(videos) == len(prompts)
-        inputs = self._default_video_loader(prompts, videos, num_frames=self._num_frames)
-        for i in inputs:
-            i["prompt"] = self.apply_chat_template(i["prompt"], i["multi_modal_data"])
+        inputs = self._default_video_loader(
+            tokenizer=None,
+            model_type="qwen2_5_vl",
+            model_dir=self._model_home,
+            prompts=prompts,
+            media=videos,
+            modality="video",
+            num_frames=self._num_frames
+        )
         return inputs
 
 
