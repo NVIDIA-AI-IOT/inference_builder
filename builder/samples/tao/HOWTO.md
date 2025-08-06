@@ -47,7 +47,11 @@ ngc registry model download-version "nvidia/tao/mask_grounding_dino:mask_groundi
 ```
 
 ### Resnet50 RT-DETR Detector
-- **Resnet50 RT-DETR**: smb://dc2-cdot49-sw-svm02/scratch.metropolis3/vpraveen/experiments/rtdetr/25.03_experiments/rtdetr_inference_ms_output/export [To be updated]
+- **Resnet50 RT-DETR**: [TrafficCamNet Lite](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite)
+
+```bash
+ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:deployable_v1.0"
+```
 
 ## Generate the inference pipeline
 
