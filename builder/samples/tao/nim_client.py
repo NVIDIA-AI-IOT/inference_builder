@@ -23,7 +23,7 @@ import numpy as np
 import mimetypes
 import json
 import colorsys
-
+import re
 import sys
 from pathlib import Path
 
@@ -666,6 +666,84 @@ def main(host, port, model, files, text, dump_response: bool, upload: bool, retu
         print("Unable to process request: 422. Check the payload")
 
 
+def validate_host(host: str) -> bool:
+    """Validate host parameter for security."""
+    if not host or not isinstance(host, str):
+        return False
+    
+    # Check for suspicious patterns
+    suspicious_patterns = ['<script', 'javascript:', 'data:', 'vbscript:', 'file://']
+    if any(pattern in host.lower() for pattern in suspicious_patterns):
+        return False
+    
+    # Basic IP/hostname validation
+    if not re.match(r'^[a-zA-Z0-9.-]+$', host):
+        return False
+    
+    return True
+
+def validate_port(port: str) -> bool:
+    """Validate port parameter for security."""
+    if not port or not isinstance(port, str):
+        return False
+    
+    try:
+        port_num = int(port)
+        if port_num < 1 or port_num > 65535:
+            return False
+    except ValueError:
+        return False
+    
+    return True
+
+def validate_model_name(model: str) -> bool:
+    """Validate model name for security."""
+    if not model or not isinstance(model, str):
+        return False
+    
+    # Check for suspicious patterns
+    suspicious_patterns = ['<script', 'javascript:', 'data:', 'vbscript:', 'file://', '..']
+    if any(pattern in model.lower() for pattern in suspicious_patterns):
+        return False
+    
+    # Basic model name validation
+    if not re.match(r'^[a-zA-Z0-9._/-]+$', model):
+        return False
+    
+    return True
+
+def validate_file_paths(files: List[str]) -> bool:
+    """Validate file paths for security."""
+    if not files:
+        return False
+    
+    for file_path in files:
+        if not validate_directory_path(file_path):
+            return False
+    
+    return True
+
+def validate_text_input(text: List[str]) -> bool:
+    """Validate text input for security."""
+    if not text:
+        return True  # Empty text is allowed
+    
+    for text_item in text:
+        if not isinstance(text_item, str):
+            return False
+        
+        # Check for suspicious patterns
+        suspicious_patterns = ['<script', 'javascript:', 'data:', 'vbscript:', 'file://']
+        if any(pattern in text_item.lower() for pattern in suspicious_patterns):
+            return False
+        
+        # Check for command injection patterns
+        command_patterns = [';', '|', '&', '`', '$', '(', ')', '>', '<']
+        if any(pattern in text_item for pattern in command_patterns):
+            return False
+    
+    return True
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -680,5 +758,71 @@ if __name__ == '__main__':
     parser.add_argument("--dump-response", action="store_true", default=False, help="Enable dumping response JSON to file")
     parser.add_argument("--vis-dir", type=str, help="Directory to save visualized images", default=None)
 
-    args = parser.parse_args()
-    main(args.host, args.port, args.model, args.file, args.text, args.dump_response, args.upload, vis_dir=args.vis_dir)
+    # Parse arguments with security validation
+    try:
+        args = parser.parse_args()
+    except Exception as e:
+        print(f"Error: Argument parsing failed: {str(e)}")
+        sys.exit(1)
+
+    # Comprehensive security validation
+    validation_errors = []
+    
+    # Validate host
+    if not validate_host(args.host):
+        validation_errors.append(f"Invalid host parameter: {args.host}")
+    
+    # Validate port
+    if not validate_port(args.port):
+        validation_errors.append(f"Invalid port parameter: {args.port}")
+    
+    # Validate model name
+    if not validate_model_name(args.model):
+        validation_errors.append(f"Invalid model name: {args.model}")
+    
+    # Validate file paths
+    if args.file and not validate_file_paths(args.file):
+        validation_errors.append("Invalid file paths provided")
+    
+    # Validate text input
+    if args.text and not validate_text_input(args.text):
+        validation_errors.append("Invalid text input provided")
+    
+    # Validate visualization directory
+    if args.vis_dir and not validate_directory_path(args.vis_dir):
+        validation_errors.append(f"Invalid visualization directory: {args.vis_dir}")
+    
+    # Exit if any validation errors
+    if validation_errors:
+        print("Security validation failed:")
+        for error in validation_errors:
+            print(f"  - {error}")
+        sys.exit(1)
+
+    # Additional security checks
+    try:
+        # Validate file existence if provided
+        if args.file:
+            for file_path in args.file:
+                if not os.path.isfile(file_path):
+                    print(f"Error: File not found: {file_path}")
+                    sys.exit(1)
+        
+        # Validate visualization directory creation
+        if args.vis_dir:
+            try:
+                os.makedirs(args.vis_dir, exist_ok=True)
+            except Exception as e:
+                print(f"Error: Cannot create visualization directory: {str(e)}")
+                sys.exit(1)
+                
+    except Exception as e:
+        print(f"Error: Security validation failed: {str(e)}")
+        sys.exit(1)
+
+    # Call main function with validated arguments
+    try:
+        main(args.host, args.port, args.model, args.file, args.text, args.dump_response, args.upload, vis_dir=args.vis_dir)
+    except Exception as e:
+        print(f"Error: Application execution failed: {str(e)}")
+        sys.exit(1)
