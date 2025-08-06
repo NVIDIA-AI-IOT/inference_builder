@@ -39,7 +39,11 @@ ngc registry model download-version "nvidia/tao/mask_grounding_dino:mask_groundi
 ```
 
 ### Resnet50 RT-DETR Detector
-- **Resnet50 RT-DETR**: [To be added]
+- **Resnet50 RT-DETR**: [TrafficCamNet Lite](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite)
+
+```bash
+ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:deployable_v1.0"
+```
 
 ## Getting Started
 
