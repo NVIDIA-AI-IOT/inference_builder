@@ -23,7 +23,7 @@ All the models can be downloaded from NGC:
 ngc registry model download-version "nvaie/pcbclassification:deployable_v1.1"
 ```
 
-### Visual Change Detection
+### Visual Change Classification
 - **Visual Changenet Classification**: [Visual Changenet Classification Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/visual_changenet_classification)
 
 ```bash
@@ -47,9 +47,13 @@ ngc registry model download-version "nvidia/tao/mask_grounding_dino:mask_groundi
 ```
 
 ### Resnet50 RT-DETR Detector
-- **Resnet50 RT-DETR**: [To be added]
+- **Resnet50 RT-DETR**: [TrafficCamNet Lite](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite)
 
-## Build the microservice
+```bash
+ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:deployable_v1.0"
+```
+
+## Generate the inference pipeline
 
 First, follow the instructions in the top-level README to set up Inference Builder. Once the setup is complete, you need to generate the inference package before building the microservice. This can be done using the Inference Builder tool as shown below:
 
@@ -106,10 +110,13 @@ Configurations for sample tao models can be found from builder/samples/ds_app:
 
 When being used along with the TAO Finetune Microservice, the microservice can directly use the model files and configs exported from Finetune Microservice.
 
-Once the model files are ready, you can set the TAO_MODEL_NAME to the model you want in docker-compose.yml and run the following command to build and start the microservice:
+Once the model files are ready, you MUST set the TAO_MODEL_NAME to the model you want for "tao-cv" service in builder/samples/docker-compose.yml, and run the following command to build and start the microservice:
 
 ```bash
+export GITLAB_TOKEN={Your GITLAB token}
+export TAO_MODEL_NAME={Your model folder under ~/.cache/model-repo}
 cd builder/samples
+sed -i "s/TAO_MODEL_NAME: .*/TAO_MODEL_NAME: $TAO_MODEL_NAME/" docker-compose.yml
 docker compose up tao-cv --build
 ```
 
@@ -124,7 +131,7 @@ The OpenAPI compatible interactive documentation endpoint is available on the se
 ### Run inference on a single image
 
 ```bash
-PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "your_file.jpg"))
+PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "path_to_your_file.jpg"))
 
 curl -X POST \
   'http://localhost:8800/v1/inference' \
@@ -134,8 +141,40 @@ curl -X POST \
   \"input\": [ \"$PAYLOAD\" ],
   \"model\": \"nvidia/nvdino-v2\"
 }"
-
 ```
+
+For Grounding DINO and Mask Grounding DINO to properly work, you also need to specify the open labels by adding "text" field in you request:
+
+```bash
+PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "path_to_your_file.jpg"))
+
+curl -X POST \
+  'http://localhost:8800/v1/inference' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d "{
+  \"input\": [ \"$PAYLOAD\" ],
+  \"text\": [ [\"car\", \"people\"] ],
+  \"model\": \"nvidia/nvdino-v2\"
+}"
+
+### Run inference on two images
+
+Two images are required by visual changenet model, and you need to provide both golden image and test image:
+
+```bash
+GOLDEN_PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "path_to_your_file.jpg"))
+TEST_PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "path_to_your_file.jpg"))
+
+curl -X POST \
+  'http://localhost:8800/v1/inference' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d "{
+  \"input\": [ \"$GOLDEN_PAYLOAD\", \"$TEST_PAYLOAD\" ],
+  \"text\": [ [\"car\", \"people\"] ],
+  \"model\": \"nvidia/nvdino-v2\"
+}"
 
 ### Run inference on a single video
 
@@ -179,7 +218,28 @@ curl -X 'POST' \
   } ],
   "model": "nvidia/nvdino-v2"
 }' -N
+```
 
+For Grounding DINO and Mask Grounding DINO to properly work, you also need to specify the open labels by adding "text" field in you request:
+
+```base
+curl -X 'POST' \
+  'http://localhost:8800/v1/inference' \
+  -H 'accept: application/x-ndjson' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "input": [ {
+    "id": "b6eccf7e-0758-4bba-9e51-d6f65b6794f5",
+    "path": "/tmp/assets/b6eccf7e-0758-4bba-9e51-d6f65b6794f5/its_1920_30s.mp4",
+    "size": 3472221,
+    "duration": 30000000000,
+    "contentType": "video/mp4"
+  } ],
+  "text": [
+    ["car", "people"]
+  ],
+  "model": "nvidia/nvdino-v2"
+}' -N
 ```
 
 The OpenAPI specification also serves as the guideline for developing customized inference client and integrate it to any application.

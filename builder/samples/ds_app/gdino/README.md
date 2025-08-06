@@ -24,6 +24,7 @@ cp builder/samples/ds_app/gdino/gdino/* $MODEL_REPO/gdino/
 ## Generate the deepstream application package and build it into a container image:
 
 ```bash
+export GITLAB_TOKEN={Your Gitlab Token}
 python builder/main.py builder/samples/ds_app/gdino/ds_gdino.yaml -o builder/samples/ds_app --server-type serverless -c builder/samples/tao/processors.py -t \
 && docker build --build-arg GITLAB_TOKEN=$GITLAB_TOKEN -t deepstream-app builder/samples/ds_app
 ```
@@ -44,7 +45,7 @@ docker run --rm --net=host --gpus all \
     deepstream-app \
     --media-url /opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4 \
     --mime video/mp4 \
-    --text "car"
+    --text "car,person"
 ```
 
 ### Run with RTSP input
@@ -58,7 +59,8 @@ docker run --rm --net=host --gpus all \
     -e DISPLAY=$DISPLAY \
     deepstream-app \
     --media-url rtsp://<url_path> \
-    --mime video/mp4
+    --mime video/mp4 \
+    --text "car,person"
 ```
 
 **Examples:**
@@ -71,10 +73,10 @@ docker run --rm --net=host --gpus all \
     deepstream-app \
     --media-url rtsp://127.0.0.1/video1 \
     --mime video/mp4
+    --text "car,person"
 ```
 
 ### Run with image input
-
 
 ```bash
 docker run --rm --net=host --gpus all \
@@ -85,5 +87,5 @@ docker run --rm --net=host --gpus all \
     deepstream-app \
     --media-url /sample_input/test.jpg \
     --mime image/jpeg \
-    --text "car"
+    --text "car,person"
 ```

@@ -136,8 +136,11 @@ class GDinoTokenizer:
         self.max_text_len = 256
 
     def __call__(self, *args, **kwargs):
-        caption = [" . ".join(args[0]) + ' .']
-        input_ids, attention_mask, position_ids, token_type_ids, text_self_attention_masks, pos_map = tokenize_captions(self.tokenizer, args[0], caption, self.max_text_len)
+        labels = args[0]
+        if isinstance(labels, str):
+            labels = labels.split(",")
+        caption = [" . ".join(labels) + ' .']
+        input_ids, attention_mask, position_ids, token_type_ids, text_self_attention_masks, pos_map = tokenize_captions(self.tokenizer, labels, caption, self.max_text_len)
         return input_ids, attention_mask, position_ids, token_type_ids, text_self_attention_masks, pos_map
 
 

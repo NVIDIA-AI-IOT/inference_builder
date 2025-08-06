@@ -26,6 +26,12 @@ The sample steps apply to the other classification model: changenet-classify
 
 ## Generate the deepstream application package and build it into a container image
 
+Set up your Gitlab token:
+
+```bash
+export GITLAB_TOKEN={Your Gitlab Token}
+```
+
 For pcbclassification sample, please use ds_pcb.yaml as the configuration:
 
 ```bash
