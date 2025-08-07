@@ -67,6 +67,79 @@ def validate_script_command(script_command: str) -> bool:
     return True
 
 
+def validate_safe_path(path: str) -> bool:
+    """Validate file path to prevent directory traversal and command injection."""
+    if not path or not isinstance(path, str):
+        return False
+    
+    # Check for path traversal attempts
+    if '..' in path or '//' in path:
+        return False
+    
+    # Check for absolute paths that could access system directories
+    if os.path.isabs(path):
+        system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin', '/root']
+        for sys_dir in system_dirs:
+            if path.startswith(sys_dir):
+                return False
+    
+    # Check for invalid characters
+    invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\\']
+    if any(char in path for char in invalid_chars):
+        return False
+    
+    return True
+
+def validate_config_file_path(config_file: str) -> bool:
+    """Validate configuration file path for security."""
+    if not validate_safe_path(config_file):
+        return False
+    
+    # Ensure it's a JSON file
+    if not config_file.lower().endswith('.json'):
+        return False
+    
+    return True
+
+def validate_dockerfile_path(dockerfile: str) -> bool:
+    """Validate Dockerfile path for security."""
+    if not validate_safe_path(dockerfile):
+        return False
+    
+    # Ensure it's a Dockerfile or has .dockerfile extension
+    if not (dockerfile.lower() == 'dockerfile' or dockerfile.lower().endswith('.dockerfile')):
+        return False
+    
+    return True
+
+def validate_log_directory(log_dir: str) -> bool:
+    """Validate log directory path for security."""
+    if not validate_safe_path(log_dir):
+        return False
+    
+    # Prevent access to system directories
+    if log_dir.startswith('/') and not log_dir.startswith('./'):
+        return False
+    
+    return True
+
+def validate_gitlab_token(token: str) -> bool:
+    """Validate GitLab token format."""
+    if not token:
+        return True  # Empty token is allowed
+    
+    # Basic validation for GitLab token format
+    if not isinstance(token, str) or len(token) < 10:
+        return False
+    
+    # Check for suspicious patterns
+    suspicious_patterns = ['<script', 'javascript:', 'data:', 'vbscript:']
+    if any(pattern in token.lower() for pattern in suspicious_patterns):
+        return False
+    
+    return True
+
+
 class DockerBuildTester:
     def __init__(self, dockerfile_path: str, base_dir: str, log_dir: Optional[str] = None):
         self.dockerfile_path = Path(dockerfile_path)
@@ -662,47 +735,116 @@ def main():
     parser.add_argument("--no-cleanup", action="store_true", help="Don't cleanup images after testing")
     parser.add_argument("--gitlab-token", help="GitLab token for private repos")
 
-    args = parser.parse_args()
-
-    # Validate arguments to prevent security issues
-    # Validate dockerfile path
-    if not os.path.isfile(args.dockerfile):
-        logger.error(f"❌ Dockerfile not found: {args.dockerfile}")
-        sys.exit(1)
-
-    # Validate base directory
-    if not os.path.isdir(args.base_dir):
-        logger.error(f"❌ Base directory not found: {args.base_dir}")
-        sys.exit(1)
-
-    # Validate config file
-    if not os.path.isfile(args.config_file):
-        logger.error(f"❌ Config file not found: {args.config_file}")
-        sys.exit(1)
-
-    # Validate log directory path (prevent directory traversal)
-    log_dir_path = Path(args.log_dir).resolve()
-    current_dir = Path.cwd().resolve()
+    # Parse arguments with security validation
     try:
-        log_dir_path.relative_to(current_dir)
-    except ValueError:
-        logger.error(f"❌ Log directory path is outside current directory: {args.log_dir}")
+        args = parser.parse_args()
+    except Exception as e:
+        logger.error(f"❌ Argument parsing failed: {str(e)}")
         sys.exit(1)
 
-    # Initialize tester
-    tester = DockerBuildTester(args.dockerfile, args.base_dir, args.log_dir)
+    # Comprehensive security validation
+    validation_errors = []
+    
+    # Validate dockerfile path
+    if not validate_dockerfile_path(args.dockerfile):
+        validation_errors.append(f"Invalid Dockerfile path: {args.dockerfile}")
+    
+    # Validate base directory
+    if not validate_safe_path(args.base_dir):
+        validation_errors.append(f"Invalid base directory path: {args.base_dir}")
+    
+    # Validate config file
+    if not validate_config_file_path(args.config_file):
+        validation_errors.append(f"Invalid config file path: {args.config_file}")
+    
+    # Validate output file if provided
+    if args.output and not validate_safe_path(args.output):
+        validation_errors.append(f"Invalid output file path: {args.output}")
+    
+    # Validate log directory
+    if not validate_log_directory(args.log_dir):
+        validation_errors.append(f"Invalid log directory path: {args.log_dir}")
+    
+    # Validate GitLab token if provided
+    if args.gitlab_token and not validate_gitlab_token(args.gitlab_token):
+        validation_errors.append("Invalid GitLab token format")
+    
+    # Exit if any validation errors
+    if validation_errors:
+        logger.error("❌ Security validation failed:")
+        for error in validation_errors:
+            logger.error(f"  - {error}")
+        sys.exit(1)
 
-    # Load test configurations from file
-    with open(args.config_file, 'r') as f:
-        test_configs = json.load(f)
+    # Additional file existence checks with security
+    try:
+        # Validate dockerfile path
+        if not os.path.isfile(args.dockerfile):
+            logger.error(f"❌ Dockerfile not found: {args.dockerfile}")
+            sys.exit(1)
 
-    # Run tests
-    logger.info(f"Starting test suite with {len(test_configs)} configurations")
-    logger.info(f"Logs will be saved to: {args.log_dir}")
-    results = tester.run_test_suite(test_configs, cleanup=not args.no_cleanup, gitlab_token=args.gitlab_token)
+        # Validate base directory
+        if not os.path.isdir(args.base_dir):
+            logger.error(f"❌ Base directory not found: {args.base_dir}")
+            sys.exit(1)
 
-    # Generate report
-    tester.generate_report(results, args.output)
+        # Validate config file
+        if not os.path.isfile(args.config_file):
+            logger.error(f"❌ Config file not found: {args.config_file}")
+            sys.exit(1)
+
+        # Validate log directory path (prevent directory traversal)
+        log_dir_path = Path(args.log_dir).resolve()
+        current_dir = Path.cwd().resolve()
+        try:
+            log_dir_path.relative_to(current_dir)
+        except ValueError:
+            logger.error(f"❌ Log directory path is outside current directory: {args.log_dir}")
+            sys.exit(1)
+
+    except Exception as e:
+        logger.error(f"❌ File validation failed: {str(e)}")
+        sys.exit(1)
+
+    # Initialize tester with validated arguments
+    try:
+        tester = DockerBuildTester(args.dockerfile, args.base_dir, args.log_dir)
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize DockerBuildTester: {str(e)}")
+        sys.exit(1)
+
+    # Load test configurations from file with security validation
+    try:
+        with open(args.config_file, 'r') as f:
+            test_configs = json.load(f)
+        
+        # Validate JSON structure
+        if not isinstance(test_configs, list):
+            logger.error("❌ Config file must contain a list of test configurations")
+            sys.exit(1)
+            
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ Invalid JSON in config file: {str(e)}")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"❌ Failed to load config file: {str(e)}")
+        sys.exit(1)
+
+    # Run tests with error handling
+    try:
+        logger.info(f"Starting test suite with {len(test_configs)} configurations")
+        logger.info(f"Logs will be saved to: {args.log_dir}")
+        results = tester.run_test_suite(test_configs, cleanup=not args.no_cleanup, gitlab_token=args.gitlab_token)
+    except Exception as e:
+        logger.error(f"❌ Test suite execution failed: {str(e)}")
+        sys.exit(1)
+
+    # Generate report with error handling
+    try:
+        tester.generate_report(results, args.output)
+    except Exception as e:
+        logger.error(f"❌ Report generation failed: {str(e)}")
+        sys.exit(1)
 
     # Exit with appropriate code
     if results["failed"] > 0:

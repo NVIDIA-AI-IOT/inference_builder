@@ -73,6 +73,59 @@ def validate_safe_path(path_component: str) -> bool:
 
     return True
 
+def validate_config_path(config_path: str) -> bool:
+    """Validate configuration file path for security."""
+    if not config_path or not isinstance(config_path, str):
+        return False
+    
+    # Check for path traversal attempts
+    if '..' in config_path or '//' in config_path:
+        return False
+    
+    # Check for absolute paths that could access system directories
+    if os.path.isabs(config_path):
+        system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin', '/root']
+        for sys_dir in system_dirs:
+            if config_path.startswith(sys_dir):
+                return False
+    
+    # Ensure it's a YAML file
+    if not config_path.lower().endswith(('.yaml', '.yml')):
+        return False
+    
+    # Check for invalid characters
+    invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\\']
+    if any(char in config_path for char in invalid_chars):
+        return False
+    
+    return True
+
+def validate_dump_vis_path(dump_vis_path: str) -> bool:
+    """Validate dump visualization path for security."""
+    if not dump_vis_path:
+        return True  # Empty path is allowed
+    
+    if not isinstance(dump_vis_path, str):
+        return False
+    
+    # Check for path traversal attempts
+    if '..' in dump_vis_path or '//' in dump_vis_path:
+        return False
+    
+    # Check for absolute paths that could access system directories
+    if os.path.isabs(dump_vis_path):
+        system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin', '/root']
+        for sys_dir in system_dirs:
+            if dump_vis_path.startswith(sys_dir):
+                return False
+    
+    # Check for invalid characters
+    invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\\']
+    if any(char in dump_vis_path for char in invalid_chars):
+        return False
+    
+    return True
+
 class SegmentationEvaluator:
     """Class responsible for collecting predictions and computing segmentation metrics."""
 
@@ -448,20 +501,81 @@ def parse_args():
                       help='Inference server port')
     parser.add_argument('--dump-vis-path', type=str, default=None,
                       help='Path to dump visualized predictions result images')
-    return parser.parse_args()
+    
+    # Parse arguments with security validation
+    try:
+        args = parser.parse_args()
+    except Exception as e:
+        logger.error(f"Argument parsing failed: {str(e)}")
+        sys.exit(1)
+
+    # Comprehensive security validation
+    validation_errors = []
+    
+    # Validate config path
+    if not validate_config_path(args.config):
+        validation_errors.append(f"Invalid config file path: {args.config}")
+    
+    # Validate host
+    if not validate_safe_path(args.host):
+        validation_errors.append(f"Invalid host parameter: {args.host}")
+    
+    # Validate port
+    if not validate_safe_path(args.port):
+        validation_errors.append(f"Invalid port parameter: {args.port}")
+    
+    # Validate dump visualization path
+    if not validate_dump_vis_path(args.dump_vis_path):
+        validation_errors.append(f"Invalid dump visualization path: {args.dump_vis_path}")
+    
+    # Exit if any validation errors
+    if validation_errors:
+        logger.error("Security validation failed:")
+        for error in validation_errors:
+            logger.error(f"  - {error}")
+        sys.exit(1)
+
+    # Additional security checks
+    try:
+        # Validate config file existence
+        if not os.path.isfile(args.config):
+            logger.error(f"Config file not found: {args.config}")
+            sys.exit(1)
+        
+        # Validate dump visualization directory creation if provided
+        if args.dump_vis_path:
+            try:
+                os.makedirs(args.dump_vis_path, exist_ok=True)
+            except Exception as e:
+                logger.error(f"Cannot create dump visualization directory: {str(e)}")
+                sys.exit(1)
+                
+    except Exception as e:
+        logger.error(f"Security validation failed: {str(e)}")
+        sys.exit(1)
+
+    return args
 
 def main():
     args = parse_args()
 
-    # Initialize evaluator
-    evaluator = SegmentationEvaluator(
-        host=args.host,
-        port=args.port,
-        config_path=args.config
-    )
+    # Initialize evaluator with error handling
+    try:
+        evaluator = SegmentationEvaluator(
+            host=args.host,
+            port=args.port,
+            config_path=args.config
+        )
+    except Exception as e:
+        logger.error(f"Failed to initialize SegmentationEvaluator: {str(e)}")
+        sys.exit(1)
 
-    # Run evaluation
-    metrics = evaluator.evaluate(dump_vis_path=args.dump_vis_path)
+    # Run evaluation with error handling
+    try:
+        metrics = evaluator.evaluate(dump_vis_path=args.dump_vis_path)
+    except Exception as e:
+        logger.error(f"Evaluation failed: {str(e)}")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

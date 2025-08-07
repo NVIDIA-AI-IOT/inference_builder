@@ -75,6 +75,76 @@ def validate_safe_path(path_component: str) -> bool:
 
     return True
 
+def validate_config_path(config_path: str) -> bool:
+    """Validate configuration file path for security."""
+    if not config_path or not isinstance(config_path, str):
+        return False
+    
+    # Check for path traversal attempts
+    if '..' in config_path or '//' in config_path:
+        return False
+    
+    # Check for absolute paths that could access system directories
+    if os.path.isabs(config_path):
+        system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin', '/root']
+        for sys_dir in system_dirs:
+            if config_path.startswith(sys_dir):
+                return False
+    
+    # Ensure it's a YAML file
+    if not config_path.lower().endswith(('.yaml', '.yml')):
+        return False
+    
+    # Check for invalid characters
+    invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\\']
+    if any(char in config_path for char in invalid_chars):
+        return False
+    
+    return True
+
+def validate_csv_path(csv_path: str) -> bool:
+    """Validate CSV file path for security."""
+    if not csv_path:
+        return True  # Empty path is allowed
+    
+    if not isinstance(csv_path, str):
+        return False
+    
+    # Check for path traversal attempts
+    if '..' in csv_path or '//' in csv_path:
+        return False
+    
+    # Check for absolute paths that could access system directories
+    if os.path.isabs(csv_path):
+        system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin', '/root']
+        for sys_dir in system_dirs:
+            if csv_path.startswith(sys_dir):
+                return False
+    
+    # Ensure it's a CSV file
+    if not csv_path.lower().endswith('.csv'):
+        return False
+    
+    # Check for invalid characters
+    invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\\']
+    if any(char in csv_path for char in invalid_chars):
+        return False
+    
+    return True
+
+def validate_integer_parameter(value: int, min_val: int = 1, max_val: int = 1000000) -> bool:
+    """Validate integer parameters for security."""
+    if value is None:
+        return True  # None is allowed
+    
+    if not isinstance(value, int):
+        return False
+    
+    if value < min_val or value > max_val:
+        return False
+    
+    return True
+
 class DataCollector:
     """Class responsible for collecting ground truth and predictions."""
 
@@ -540,24 +610,102 @@ def parse_args():
                       help='Path to CSV file containing predictions')
     parser.add_argument('--dump-csv', type=str,
                       help='Path to dump predictions in CSV format')
-    return parser.parse_args()
+    
+    # Parse arguments with security validation
+    try:
+        args = parser.parse_args()
+    except Exception as e:
+        logger.error(f"Argument parsing failed: {str(e)}")
+        sys.exit(1)
+
+    # Comprehensive security validation
+    validation_errors = []
+    
+    # Validate config path
+    if not validate_config_path(args.config):
+        validation_errors.append(f"Invalid config file path: {args.config}")
+    
+    # Validate host
+    if not validate_safe_path(args.host):
+        validation_errors.append(f"Invalid host parameter: {args.host}")
+    
+    # Validate port
+    if not validate_safe_path(args.port):
+        validation_errors.append(f"Invalid port parameter: {args.port}")
+    
+    # Validate integer parameters
+    if not validate_integer_parameter(args.max_images_per_class, 1, 10000):
+        validation_errors.append(f"Invalid max_images_per_class: {args.max_images_per_class}")
+    
+    if not validate_integer_parameter(args.total_images, 1, 100000):
+        validation_errors.append(f"Invalid total_images: {args.total_images}")
+    
+    # Validate CSV paths
+    if not validate_csv_path(args.csv_path):
+        validation_errors.append(f"Invalid CSV path: {args.csv_path}")
+    
+    if not validate_csv_path(args.dump_csv):
+        validation_errors.append(f"Invalid dump CSV path: {args.dump_csv}")
+    
+    # Exit if any validation errors
+    if validation_errors:
+        logger.error("Security validation failed:")
+        for error in validation_errors:
+            logger.error(f"  - {error}")
+        sys.exit(1)
+
+    # Additional security checks
+    try:
+        # Validate config file existence
+        if not os.path.isfile(args.config):
+            logger.error(f"Config file not found: {args.config}")
+            sys.exit(1)
+        
+        # Validate CSV file existence if provided
+        if args.csv_path and not os.path.isfile(args.csv_path):
+            logger.error(f"CSV file not found: {args.csv_path}")
+            sys.exit(1)
+        
+        # Validate dump CSV directory creation if provided
+        if args.dump_csv:
+            dump_csv_dir = os.path.dirname(args.dump_csv)
+            if dump_csv_dir:
+                try:
+                    os.makedirs(dump_csv_dir, exist_ok=True)
+                except Exception as e:
+                    logger.error(f"Cannot create dump CSV directory: {str(e)}")
+                    sys.exit(1)
+                
+    except Exception as e:
+        logger.error(f"Security validation failed: {str(e)}")
+        sys.exit(1)
+
+    return args
 
 def main():
     args = parse_args()
 
-    # Initialize evaluator
-    evaluator = ClassificationEvaluator(
-        host=args.host,
-        port=args.port,
-        config_path=args.config,
-        max_images_per_class=args.max_images_per_class,
-        total_images=args.total_images,
-        csv_path=args.csv_path,
-        dump_csv=args.dump_csv
-    )
+    # Initialize evaluator with error handling
+    try:
+        evaluator = ClassificationEvaluator(
+            host=args.host,
+            port=args.port,
+            config_path=args.config,
+            max_images_per_class=args.max_images_per_class,
+            total_images=args.total_images,
+            csv_path=args.csv_path,
+            dump_csv=args.dump_csv
+        )
+    except Exception as e:
+        logger.error(f"Failed to initialize ClassificationEvaluator: {str(e)}")
+        sys.exit(1)
 
-    # Run evaluation
-    metrics = evaluator.evaluate()
+    # Run evaluation with error handling
+    try:
+        metrics = evaluator.evaluate()
+    except Exception as e:
+        logger.error(f"Evaluation failed: {str(e)}")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
