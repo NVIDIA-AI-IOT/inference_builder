@@ -165,7 +165,8 @@ models:
         dims: [ -1 ]
     parameters:
       max_num_tokens: 19200
-      disable_kv_cache_reuse: true
+      kv_cache_config:
+        enable_block_reuse: false
     preprocessors:
       - kind: "custom"
         name: "qwen-vl-video-processor"
