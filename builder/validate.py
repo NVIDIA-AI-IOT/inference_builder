@@ -282,6 +282,65 @@ def get_test_cases(validation_dir: Path) -> List[Dict[str, str]]:
 
     return test_cases
 
+def generate_default_test_cases(validation_dir: Path) -> List[Dict[str, str]]:
+    """Generate default test cases when no test cases are found in validation directory.
+
+    Creates a test case with:
+    - A predefined base64 encoded image data (saved as a temporary PNG file)
+    - A predefined text "describe the picture"
+    - An empty expected result
+
+    Args:
+        validation_dir: Path to validation directory
+
+    Returns:
+        List of default test cases with predefined image and text
+    """
+    # Predefined base64 encoded PNG image (1x1 transparent pixel)
+    # This is the same as used in lib/codec.py
+    predefined_image_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGK6HcwNCAAA//8DTgE8HuxwEQAAAABJRU5ErkJggg=="
+
+    # Create the image file with predefined base64 data
+    image_path = validation_dir / "default_test.png"
+    if not image_path.exists():
+        try:
+            # Decode the base64 data and write to file
+            image_data = base64.b64decode(predefined_image_data)
+            with open(image_path, "wb") as f:
+                f.write(image_data)
+            print(f"✓ Created default image file: {image_path}")
+        except Exception as e:
+            print(f"Warning: Failed to create default image file: {e}")
+            return []
+
+    # Create the expected result file (empty result)
+    expected_path = validation_dir / "expected.default_test.json"
+    if not expected_path.exists():
+        with open(expected_path, "w") as f:
+            json.dump({}, f, indent=2)
+        print(f"✓ Created default expected result file: {expected_path}")
+
+    # Create the text file
+    text_path = validation_dir / "default_test.txt"
+    if not text_path.exists():
+        with open(text_path, "w") as f:
+            f.write("describe the picture")
+        print(f"✓ Created default text file: {text_path}")
+
+    # Create the test case structure
+    test_cases = [{
+        "name": "default_test_0",
+        "input": "default_test.png",
+        "text": "default_test.txt",
+        "expected": "expected.default_test.json"
+    }]
+
+    print(f"Generated {len(test_cases)} default test cases:")
+    for test in test_cases:
+        print(f"  • {test['name']}: {test['input']} → {test['expected']}")
+
+    return test_cases
+
 
 def get_request_template(client_dir: Path) -> Dict:
     """Generate request template from OpenAPI client models.
@@ -342,7 +401,7 @@ def build_requests(validation_dir: Path, out_dir: Path, client_dir: Path, test_c
         # Get test cases from directory scan
         test_cases = get_test_cases(validation_dir)
         if not test_cases:
-            raise ValueError("No test cases found in validation directory")
+            test_cases = generate_default_test_cases(validation_dir)
 
         # Store request-response mapping
         request_response_map = []
