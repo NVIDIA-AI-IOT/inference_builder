@@ -119,29 +119,35 @@ class GenericInference(InferenceBase):
                 logger.debug(f"Injecting tensors {tensors}")
                 input.put(tensors)
                 input.put(Stop(reason="end"))
-        # fetch result
+
+        # start the async bridges to fetch the results and deposit them to the async queues
         loop = asyncio.get_event_loop()
         for a_output, output in zip(self._async_outputs, self._outputs):
             self._async_executor.submit(thread_to_async_bridge, output, a_output, loop)
+
+        # Wait for all the results from one inference request
         while not self._stop_event.is_set():
             try:
                 logger.debug("Waiting for tensors from async queue")
                 response_data = dict()
                 results = await asyncio.gather(*(ao.get() for ao in self._async_outputs))
+                error = False
                 for data in results:
                     logger.debug(f"Got output data: {data}")
                     if isinstance(data, Error):
-                        logger.info(f"Got Error: {data.message}")
-                        return
+                        logger.warning(f"Got Error: {data.message}")
+                        error = True
+                        break
                     elif isinstance(data, Stop):
                         logger.info(f"Got Stop: {data.reason}")
                         return
                     # collect the output
                     for k, v in data.items():
                         response_data[k] = v
-                # post-process the data from all the outputs
-                response_data = self._post_process(response_data)
-                yield response_data
+                if not error:
+                    # post-process the data from all the outputs
+                    response_data = self._post_process(response_data)
+                    yield response_data
             except Exception as e:
                 logger.exception(e)
 
