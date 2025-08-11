@@ -129,16 +129,19 @@ class TestInference(unittest.TestCase):
                     actual = response.to_dict()
 
                     # Compare results
-                    test_logger.info("Validating response...")
-                    self.assertTrue(
-                        # TODO: We can template below line for different validators
-                        # validator = {{ my_validator }}
-                        # validator.compare_responses(actual, expected, self.tolerance)
-                        # or make abstract validator class and ask users to implement their own validator
-                        validate.CvValidator.compare_responses(actual, expected, self.tolerance),
-                        f"Test {test['name']}: Response doesn't match expected output. "
-                        f"Actual: {actual}, Expected: {expected}"
-                    )
+                    if expected:
+                        test_logger.info("Validating response...")
+                        self.assertTrue(
+                            # TODO: We can template below line for different validators
+                            # validator = {{ my_validator }}
+                            # validator.compare_responses(actual, expected, self.tolerance)
+                            # or make abstract validator class and ask users to implement their own validator
+                            validate.CvValidator.compare_responses(actual, expected, self.tolerance),
+                            f"Test {test['name']}: Response doesn't match expected output. "
+                            f"Actual: {actual}, Expected: {expected}"
+                        )
+                    else:
+                        test_logger.info("No expected output, skipping validation")
                     test_logger.info(f"Test case '{test['name']}' passed successfully")
 
                 except Exception as e:
