@@ -438,6 +438,23 @@ def prompt_save_reference():
         if user_input is None:
             return False
 
+        # Security validation: Check for suspicious patterns in user input
+        if not isinstance(user_input, str):
+            return False
+        
+        # Check for null bytes and control characters
+        if '\x00' in user_input or any(ord(c) < 32 for c in user_input if c not in ['\t', '\n', '\r']):
+            return False
+        
+        # Prevent excessively long input
+        if len(user_input) > 100:
+            return False
+        
+        # Check for dangerous patterns (although unlikely in y/n prompt)
+        dangerous_patterns = [';', '|', '&', '`', '$', '(', ')', '>', '<', '\\']
+        if any(pattern in user_input for pattern in dangerous_patterns):
+            return False
+
         # Strip whitespace and convert to lowercase for comparison
         user_input = user_input.strip().lower()
 
@@ -732,14 +749,26 @@ def validate_text_input(text: List[str]) -> bool:
         if not isinstance(text_item, str):
             return False
         
+        # Check for null bytes and control characters
+        if '\x00' in text_item or any(ord(c) < 32 for c in text_item if c not in ['\t', '\n', '\r']):
+            return False
+        
         # Check for suspicious patterns
-        suspicious_patterns = ['<script', 'javascript:', 'data:', 'vbscript:', 'file://']
+        suspicious_patterns = ['<script', 'javascript:', 'data:', 'vbscript:', 'file://', 'eval(', 'exec(']
         if any(pattern in text_item.lower() for pattern in suspicious_patterns):
             return False
         
-        # Check for command injection patterns
-        command_patterns = [';', '|', '&', '`', '$', '(', ')', '>', '<']
+        # Check for command injection patterns (enhanced)
+        command_patterns = [';', '|', '&', '`', '$', '(', ')', '>', '<', '\\', '\n', '\r']
         if any(pattern in text_item for pattern in command_patterns):
+            return False
+        
+        # Check for path traversal attempts
+        if '..' in text_item or '//' in text_item:
+            return False
+        
+        # Prevent excessively long input (potential DoS)
+        if len(text_item) > 1000:  # Reasonable limit
             return False
     
     return True

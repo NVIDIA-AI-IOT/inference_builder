@@ -40,96 +40,18 @@ project_root = current_dir.parent
 sys.path.append(str(project_root))
 
 from nim_client import main as nim_client_main, convert_masks_to_image_size
+from validation_utils import (
+    validate_safe_path, validate_config_path, validate_dump_vis_path,
+    validate_directory_path, validate_split_name
+)
 
-def validate_safe_path(path_component: str) -> bool:
-    """Validate that a path component is safe and doesn't contain traversal sequences.
 
-    Args:
-        path_component: The path component to validate
-
-    Returns:
-        bool: True if safe, False if potentially malicious
-    """
-    # Check for path traversal sequences
-    if '..' in path_component:
-        return False
-
-    # Check for absolute paths
-    if os.path.isabs(path_component):
-        return False
-
-    # Check for hidden files starting with dot (optional security measure)
-    if path_component.startswith('.'):
-        return False
-
-    # Check for empty or whitespace-only names
-    if not path_component.strip():
-        return False
-
-    # Check for invalid characters that might be used in attacks
-    invalid_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|']
-    if any(char in path_component for char in invalid_chars):
-        return False
-
-    return True
-
-def validate_config_path(config_path: str) -> bool:
-    """Validate configuration file path for security."""
-    if not config_path or not isinstance(config_path, str):
-        return False
-    
-    # Check for path traversal attempts
-    if '..' in config_path or '//' in config_path:
-        return False
-    
-    # Check for absolute paths that could access system directories
-    if os.path.isabs(config_path):
-        system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin', '/root']
-        for sys_dir in system_dirs:
-            if config_path.startswith(sys_dir):
-                return False
-    
-    # Ensure it's a YAML file
-    if not config_path.lower().endswith(('.yaml', '.yml')):
-        return False
-    
-    # Check for invalid characters
-    invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\\']
-    if any(char in config_path for char in invalid_chars):
-        return False
-    
-    return True
-
-def validate_dump_vis_path(dump_vis_path: str) -> bool:
-    """Validate dump visualization path for security."""
-    if not dump_vis_path:
-        return True  # Empty path is allowed
-    
-    if not isinstance(dump_vis_path, str):
-        return False
-    
-    # Check for path traversal attempts
-    if '..' in dump_vis_path or '//' in dump_vis_path:
-        return False
-    
-    # Check for absolute paths that could access system directories
-    if os.path.isabs(dump_vis_path):
-        system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin', '/root']
-        for sys_dir in system_dirs:
-            if dump_vis_path.startswith(sys_dir):
-                return False
-    
-    # Check for invalid characters
-    invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\\']
-    if any(char in dump_vis_path for char in invalid_chars):
-        return False
-    
-    return True
 
 class SegmentationEvaluator:
     """Class responsible for collecting predictions and computing segmentation metrics."""
 
-    def __init__(self, host: str, port: str, model_name: str = "nvdino-v2", config_path: str = None):
+    def __init__(self, host: str, port: str, model_name: str = "nvdino-v2",
+                 config_path: str = None):
         """Initialize the segmentation evaluator.
 
         Example config YAML structure:
@@ -158,17 +80,32 @@ class SegmentationEvaluator:
 
             # Extract dataset info
             dataset_config = self.config['dataset']['segment']
-            self.root_dir = dataset_config['root_dir']
-            self.val_split = dataset_config['validation_split']
+            raw_root_dir = dataset_config['root_dir']
+            raw_val_split = dataset_config['validation_split']
+            
+            # Validate extracted config values for security
+            if not validate_directory_path(raw_root_dir):
+                raise ValueError(
+                    f"Invalid root directory path in config: {raw_root_dir}")
+
+            if not validate_split_name(raw_val_split):
+                raise ValueError(
+                    f"Invalid validation split name in config: {raw_val_split}")
+            
+            self.root_dir = raw_root_dir
+            self.val_split = raw_val_split
             self.palette = dataset_config['palette']
             self.num_classes = len(self.palette)
 
             # Create label mappings
             # Example: if palette has background (id=0) and foreground (id=1)
             # label_id_train_id_mapping = {0: 0, 1: 1}
-            self.label_id_train_id_mapping = {item['label_id']: idx for idx, item in enumerate(self.palette)}
+            self.label_id_train_id_mapping = {
+                item['label_id']: idx for idx, item in enumerate(self.palette)}
             # train_id_name_mapping = {0: ["background"], 1: ["foreground"]}
-            self.train_id_name_mapping = {idx: [item['mapping_class']] for idx, item in enumerate(self.palette)}
+            self.train_id_name_mapping = {
+                idx: [item['mapping_class']]
+                for idx, item in enumerate(self.palette)}
 
     def _load_ground_truth(self, mask_path: str) -> np.ndarray:
         """Load ground truth mask and convert to training IDs.
