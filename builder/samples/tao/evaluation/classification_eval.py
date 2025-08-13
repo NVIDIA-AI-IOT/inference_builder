@@ -42,113 +42,17 @@ project_root = current_dir.parent
 sys.path.append(str(project_root))
 
 from nim_client import main as nim_client_main
+from validation_utils import (
+    validate_safe_path, validate_config_path, validate_csv_path,
+    validate_directory_path, validate_test_prefix, validate_integer_parameter
+)
 
-def validate_safe_path(path_component: str) -> bool:
-    """Validate that a path component is safe and doesn't contain traversal sequences.
-
-    Args:
-        path_component: The path component to validate
-
-    Returns:
-        bool: True if safe, False if potentially malicious
-    """
-    # Check for path traversal sequences
-    if '..' in path_component:
-        return False
-
-    # Check for absolute paths
-    if os.path.isabs(path_component):
-        return False
-
-    # Check for hidden files starting with dot (optional security measure)
-    if path_component.startswith('.'):
-        return False
-
-    # Check for empty or whitespace-only names
-    if not path_component.strip():
-        return False
-
-    # Check for invalid characters that might be used in attacks
-    invalid_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|']
-    if any(char in path_component for char in invalid_chars):
-        return False
-
-    return True
-
-def validate_config_path(config_path: str) -> bool:
-    """Validate configuration file path for security."""
-    if not config_path or not isinstance(config_path, str):
-        return False
-    
-    # Check for path traversal attempts
-    if '..' in config_path or '//' in config_path:
-        return False
-    
-    # Check for absolute paths that could access system directories
-    if os.path.isabs(config_path):
-        system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin', '/root']
-        for sys_dir in system_dirs:
-            if config_path.startswith(sys_dir):
-                return False
-    
-    # Ensure it's a YAML file
-    if not config_path.lower().endswith(('.yaml', '.yml')):
-        return False
-    
-    # Check for invalid characters
-    invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\\']
-    if any(char in config_path for char in invalid_chars):
-        return False
-    
-    return True
-
-def validate_csv_path(csv_path: str) -> bool:
-    """Validate CSV file path for security."""
-    if not csv_path:
-        return True  # Empty path is allowed
-    
-    if not isinstance(csv_path, str):
-        return False
-    
-    # Check for path traversal attempts
-    if '..' in csv_path or '//' in csv_path:
-        return False
-    
-    # Check for absolute paths that could access system directories
-    if os.path.isabs(csv_path):
-        system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin', '/root']
-        for sys_dir in system_dirs:
-            if csv_path.startswith(sys_dir):
-                return False
-    
-    # Ensure it's a CSV file
-    if not csv_path.lower().endswith('.csv'):
-        return False
-    
-    # Check for invalid characters
-    invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\\']
-    if any(char in csv_path for char in invalid_chars):
-        return False
-    
-    return True
-
-def validate_integer_parameter(value: int, min_val: int = 1, max_val: int = 1000000) -> bool:
-    """Validate integer parameters for security."""
-    if value is None:
-        return True  # None is allowed
-    
-    if not isinstance(value, int):
-        return False
-    
-    if value < min_val or value > max_val:
-        return False
-    
-    return True
 
 class DataCollector:
     """Class responsible for collecting ground truth and predictions."""
 
-    def __init__(self, root_dir: str, test_prefix: str, max_images_per_class: int = None, total_images: int = None):
+    def __init__(self, root_dir: str, test_prefix: str,
+                 max_images_per_class: int = None, total_images: int = None):
         """Initialize data collector.
 
         Args:
@@ -449,9 +353,10 @@ class MetricsCalculator:
 class ClassificationEvaluator:
     """Main class for classification evaluation."""
 
-    def __init__(self, host: str, port: str, model_name: str = "nvdino-v2", config_path: str = None,
-                 max_images_per_class: int = None, total_images: int = None,
-                 csv_path: Optional[str] = None, dump_csv: Optional[str] = None):
+    def __init__(self, host: str, port: str, model_name: str = "nvdino-v2",
+                 config_path: str = None, max_images_per_class: int = None,
+                 total_images: int = None, csv_path: Optional[str] = None,
+                 dump_csv: Optional[str] = None):
         """Initialize evaluator.
 
         Args:
@@ -477,8 +382,20 @@ class ClassificationEvaluator:
 
             # Extract dataset info
             dataset_config = self.config['dataset']
-            self.root_dir = dataset_config['root_dir']
-            self.test_prefix = dataset_config['test']['data_prefix']
+            raw_root_dir = dataset_config['root_dir']
+            raw_test_prefix = dataset_config['test']['data_prefix']
+
+            # Validate extracted config values for security
+            if not validate_directory_path(raw_root_dir):
+                raise ValueError(
+                    f"Invalid root directory path in config: {raw_root_dir}")
+
+            if not validate_test_prefix(raw_test_prefix):
+                raise ValueError(
+                    f"Invalid test prefix in config: {raw_test_prefix}")
+
+            self.root_dir = raw_root_dir
+            self.test_prefix = raw_test_prefix
 
         # Initialize components
         self.data_collector = DataCollector(
@@ -670,6 +587,10 @@ def parse_args():
         if args.dump_csv:
             dump_csv_dir = os.path.dirname(args.dump_csv)
             if dump_csv_dir:
+                # Validate the directory component for security
+                if not validate_directory_path(dump_csv_dir):
+                    logger.error(f"Invalid dump CSV directory path: {dump_csv_dir}")
+                    sys.exit(1)
                 try:
                     os.makedirs(dump_csv_dir, exist_ok=True)
                 except Exception as e:
