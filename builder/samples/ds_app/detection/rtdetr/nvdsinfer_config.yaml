@@ -29,8 +29,8 @@ property:
   network-mode: 2
   network-type: 0
   num-detected-classes: 5
-  onnx-file: model.onnx
-  model-engine-file: model.onnx_b4_gpu0_fp16.engine
+  onnx-file: resnet50_trafficamnet_rtdetr.onnx
+  model-engine-file: resnet50_trafficamnet_rtdetr.onnx_b4_gpu0_fp16.engine
   parse-bbox-func-name: NvDsInferParseCustomDDETRTAO
   workspace-size: 1048576
   labelfile-path: labels.txt
