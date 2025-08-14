@@ -53,7 +53,7 @@ RUN mkdir trt_oss_src && \
     git submodule update --init --recursive && \
     mkdir -p build && cd build && \
     cmake .. \
-    -DGPU_ARCHS="80;86;90" \
+    -DGPU_ARCHS="80;86;90;100" \
     -DTRT_LIB_DIR=/usr/lib/x86_64-linux-gnu \
     -DTRT_OUT_DIR=/tmp/out \
     -DCUDA_VERSION=$CUDA_VERSION_MAJOR_MINOR \
