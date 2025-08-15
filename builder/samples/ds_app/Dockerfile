@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     torch==2.7.0 \
     numpy==1.26.4 \
     omegaconf==2.3.0 \
-    transformers
+    transformers==4.54.1
 
 # Build TRT customized plugins
 ARG TRT_VERSION_MAJOR=10
