@@ -28,7 +28,7 @@ nvcr.io/nvidia/tensorrt-pb25h1:25.03.02-py3 \
 trtexec --onnx=/changenet/changenet_768.onnx --saveEngine=/changenet/model.plan --fp16
 ```
 
-# Build the NIM inference flow:
+# Build the inference flow:
 
 ```bash
 python builder/main.py \
@@ -46,7 +46,7 @@ cd builder/samples
 docker compose up --build ms-changenet
 ```
 
-# Test the NIM with a client:
+# Test the microservice with a client:
 
 ```bash
 cd builder/samples/changenet

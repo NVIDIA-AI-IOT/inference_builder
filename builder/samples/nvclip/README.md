@@ -1,6 +1,6 @@
 # Introduction
 
-This sample demonstrate how to create the inference package for an embedding NIM with tensorrt backend (polygrapy) and fastapi server.
+This sample demonstrate how to create the inference package for an embedding model with tensorrt backend (polygrapy) and fastapi server.
 
 The sample has been tested on following platforms
 - RTX 4090
@@ -42,7 +42,7 @@ Then copy the model config from source tree to the model folder:
 ```
 cp builder/samples/nvclip/optimizer/configs/* ~/.cache/model-repo/nvclip_clipa_vit_h14_700M_text
 
-# Build the NIM inference flow
+# Build the inference flow
 
 ```bash
 python builder/main.py builder/samples/nvclip/tensorrt_nvclip.yaml -a builder/samples/nvclip/openapi.yaml -c builder/samples/nvclip/processors.py -o builder/samples/nvclip --server-type fastapi -t
@@ -55,7 +55,7 @@ cd builder/samples
 docker compose up --build ms-nvclip
 ```
 
-# Test the NIM with a client:
+# Test the microservice with a client:
 
 ```bash
 cd builder/samples/nvclip
