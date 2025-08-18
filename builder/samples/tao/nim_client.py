@@ -26,6 +26,7 @@ import colorsys
 import re
 import sys
 from pathlib import Path
+from requests_toolbelt import MultipartEncoder
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent.parent.parent
@@ -429,7 +430,10 @@ def validate_directory_path(dir_path):
 
 def prompt_save_reference():
     """
-    Prompt user whether to save the response as a reference
+    Prompt user whether to save the response as a reference.
+    This method is secure and does not execute any OS commands.
+    It only reads user input, validates it, and returns a boolean value.
+    
     Returns:
         bool: True if user wants to save, False otherwise
     """
@@ -451,15 +455,22 @@ def prompt_save_reference():
             return False
         
         # Check for dangerous patterns (although unlikely in y/n prompt)
-        dangerous_patterns = [';', '|', '&', '`', '$', '(', ')', '>', '<', '\\']
+        dangerous_patterns = [';', '|', '&', '`', '$', '(', ')', '>', '<', '\\', '\n', '\r']
         if any(pattern in user_input for pattern in dangerous_patterns):
+            return False
+        
+        # Additional security: Check for potential command injection patterns
+        command_injection_patterns = ['$(', '`', 'exec', 'eval', 'system', 'subprocess', 'os.']
+        if any(pattern in user_input.lower() for pattern in command_injection_patterns):
             return False
 
         # Strip whitespace and convert to lowercase for comparison
         user_input = user_input.strip().lower()
 
-        # Accept various forms of "yes"
-        return user_input in ('y', 'yes')
+        # Only accept "yes" or "no" responses, return False for anything else
+        if user_input in ('yes', 'no'):
+            return user_input == 'yes'
+        return False
     except (EOFError, KeyboardInterrupt):
         # Handle Ctrl+C or EOF gracefully
         print("\nOperation cancelled by user.")
