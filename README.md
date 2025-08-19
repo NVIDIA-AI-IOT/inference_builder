@@ -25,6 +25,18 @@ Compared to manually crafting inference source code, Inference Builder offers de
 
 ## Getting started
 
+The recommended OS for running the Inference Builder is Ubuntu 24.04 with python 3.12, and Nvidia GPU from the list below is supported.
+
+Supported GPUs:
+- RTX 40x0 series
+- RTX 50x0 series
+- A100
+- A6000
+- H100
+- B200
+- Jetson Thor
+- DGX Spark
+
 ### Clone the repository
 
 ```bash
@@ -43,11 +55,10 @@ sudo apt install protobuf-compiler
 Create python virtual env (Optional) and install dependent packages
 
 ```bash
-$ python -m venv /path/to/new/virtual/environment
+$ python -m venv .venv
 # Activate the venc
-$ source /path/to/new/virtual/environment/bin/activate
+$ source .venv/bin/activate
 # Install the dependent packages
-$ cd inference-builder
 $ pip3 install -r requirements.txt
 
 ```
@@ -148,7 +159,7 @@ Breakdown of the configuration:
 - The pipeline supports two inputs:
   - media_url: the path or URL to the input media.
   - mime: the media type (e.g., "video/mp4" or "image/jpeg").
-- The pipeline supports batch processing with up to 4 media items at a time as indicated by max_batch_size.
+- The pipeline supports batch processing with up to 4 media items at a time as indicated by max_batch_size, and the number can be adjusted to suit the capabilities of the hardware platform and the requirements of the model.
 - The output is a custom DeepStream metadata object, which carries information about the detected bounding boxes and labels for detection models.
 
 ### Input and Output Definition
@@ -230,7 +241,7 @@ Below are the supported responder types:
 - list_files: list all the file assets in the server.
 - add_live_stream: add a live stream as an asset
 - del_live_stream: delete a live stream from the asset pool
-- list_live_stremas: list all the live streams known by the server
+- list_live_streams: list all the live streams known by the server
 
 ### Routing
 
