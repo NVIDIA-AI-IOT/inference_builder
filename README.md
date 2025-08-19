@@ -34,7 +34,8 @@ Supported GPUs:
 - A6000
 - H100
 - B200
-- Thor
+- Jetson Thor
+- DGX Spark
 
 ### Clone the repository
 
