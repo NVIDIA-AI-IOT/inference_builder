@@ -14,7 +14,12 @@
 # limitations under the License.
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.2" AS inference_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.2-ma" AS inference_base
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends libyaml-cpp-dev pkg-config cmake
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
@@ -25,21 +30,21 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 # Build TRT customized plugins
 ARG TRT_VERSION_MAJOR=10
-ARG TRT_VERSION_MINOR=9
+ARG TRT_VERSION_MINOR=13
 ARG TRT_VERSION_PATCH=0
-ARG TRT_VERSION_BUILD=34
+ARG TRT_VERSION_BUILD=0
 
 ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
 ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
 ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
 
-ARG CUDA_VERSION_MAJOR=12
-ARG CUDA_VERSION_MINOR=8
-ARG CUDA_VERSION_PATCH=93
-ARG CUDA_VERSION_BUILD=35583870_0
+ARG CUDA_VERSION_MAJOR=13
+ARG CUDA_VERSION_MINOR=0
+ARG CUDA_VERSION_PATCH=0
+ARG CUDA_VERSION_BUILD=1
 ARG CUDA_VERSION_MAJOR_MINOR=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR
 ARG CUDA_VERSION_FULL=$CUDA_VERSION_MAJOR_MINOR.$CUDA_VERSION_PATCH.$CUDA_VERSION_BUILD
-ARG CUDNN_VERSION=9.3.0.75
+ARG CUDNN_VERSION=9.12.0.46-1
 
 ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
 
@@ -53,15 +58,17 @@ RUN mkdir trt_oss_src && \
     git submodule update --init --recursive && \
     mkdir -p build && cd build && \
     cmake .. \
-    -DGPU_ARCHS="80;86;90;100" \
-    -DTRT_LIB_DIR=/usr/lib/x86_64-linux-gnu \
+    -DGPU_ARCHS="110;120;121" \
+    -DTRT_LIB_DIR=/usr/lib/aarch64-linux-gnu \
     -DTRT_OUT_DIR=/tmp/out \
     -DCUDA_VERSION=$CUDA_VERSION_MAJOR_MINOR \
     -DCUDNN_VERSION=$CUDNN_VERSION \
+    -DCMAKE_C_COMPILER=/usr/bin/gcc \
     && for i in {1..50}; do make -j 12 && break; done
-RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
-    cp /tmp/out/libnvinfer_plugin_static.a /usr/lib/x86_64-linux-gnu/libnvinfer_plugin_static.a && \
-    cp /tmp/out/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+RUN echo "Listing /tmp/out:" && ls -l /tmp/out/libnvinfer_plugin.so.*
+RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/aarch64-linux-gnu/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+    cp /tmp/out/libnvinfer_plugin_static.a /usr/lib/aarch64-linux-gnu/libnvinfer_plugin_static.a && \
+    cp /tmp/out/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/aarch64-linux-gnu/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
     cp /tmp/out/trtexec /usr/local/bin/ && \
     cd ../../../ && \
     rm -rf trt_oss_src
@@ -79,7 +86,7 @@ RUN mkdir ds_tao_apps_src && \
    git clone -b $DS_TAO_APPS_TAG $DS_TAO_APPS_REPO ds_tao_apps && \
    cd ds_tao_apps/post_processor && \
    echo "$PWD Building DS TAO apps post processing..." && \
-   CUDA_MODULE_LOADING=LAZY CUDA_VER=12.8 make && \
+   CUDA_MODULE_LOADING=LAZY CUDA_VER=$CUDA_VERSION_MAJOR_MINOR make && \
    [ -f libnvds_infercustomparser_tao.so ] && echo "$PWD post processing build successful" || echo "$PWD post processing build falied" && \
    cp libnvds_infercustomparser_tao.so /opt/nvidia/deepstream/deepstream/lib && \
    cd ../../../ && \
