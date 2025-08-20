@@ -18,7 +18,10 @@ For example: if you define a model with name "resnet", you must put all the mode
 You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/resnet/ directory, then copy the other required configurations to the same directory:
 
 ```bash
-cp builder/samples/ds_app/detection/resnet/* $MODEL_REPO/resnet/
+ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:deployable_v1.0"
+mv trafficcamnet_transformer_lite_vdeployable_v1.0 $MODEL_REPO/rtdetr
+chmod 777 $MODEL_REPO/rtdetr
+cp builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/rtdetr/
 ```
 
 ## Generate the deepstream application package and build it into a container image

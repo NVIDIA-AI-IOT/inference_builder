@@ -18,7 +18,7 @@ name: "deepstream-app"
 model_repo: "/workspace/models"
 
 models:
-- name: resnet
+- name: rtdetr
   backend: deepstream/nvinfer
   max_batch_size: 4
   input:
