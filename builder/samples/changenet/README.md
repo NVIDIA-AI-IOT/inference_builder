@@ -17,6 +17,8 @@ The model used in the sample can be found on NGC: https://catalog.ngc.nvidia.com
 ngc registry model download-version "nvidia/tao/visual_changenet_segmentation_landsatscd:deployable_v1.2"
 # Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
 mv visual_changenet_segmentation_landsatscd_vdeployable_v1.2 ~/.cache/model-repo/visual_changenet
+# Change the access right for docker command
+chmod 777  ~/.cache/model-repo/visual_changenet
 ```
 
 ## Create the optimized TensorRT Engine:

@@ -54,7 +54,7 @@ cd builder/samples
 docker compose up ms-qwen --build
 ```
 
-**Note:** If the inference pipeline was generated with trtllm, you must comment out line 42 in Dockerfile before running "docker compose".
+**Note:** If the inference pipeline was generated with trtllm, you must comment out line 48 in Dockerfile before running "docker compose".
 
 ## Test the model with a client
 
