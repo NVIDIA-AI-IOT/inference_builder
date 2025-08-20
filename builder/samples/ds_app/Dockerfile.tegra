@@ -13,19 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+FROM gitlab-master.nvidia.com:5005/dl/dgx/pytorch:25.08-py3.33012958-base AS pytorch_src
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.2-ma" AS inference_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream-l4t:8.0.0-triton-opt-dev74" AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends libyaml-cpp-dev pkg-config cmake
 
+RUN --mount=type=bind,from=pytorch_src,source=/usr/local/lib/python3.12/dist-packages,target=/tmp/pytorch_src \
+    cp -r /tmp/pytorch_src/{torch,functorch,torchgen,torch-*,torchvision*,flash_attn*,tensorrt*} \
+    /usr/local/lib/python3.12/dist-packages/ && \
+    cp -r /tmp/pytorch_src/triton /usr/local/lib/python3.12/dist-packages/ && \
+    sed -i '/self.capability = target.arch/a\        if self.capability == 121: self.capability = 120' /usr/local/lib/python3.12/dist-packages/triton/backends/nvidia/compiler.py
+COPY --from=pytorch_src /usr/local/lib/libnvpl* /usr/local/lib/
+
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
-    torch==2.7.0 \
+    jinja2==3.1.6 \
     numpy==1.26.4 \
     omegaconf==2.3.0 \
+    networkx==3.5 \
+    sympy==1.14.0 \
+    pillow==11.3 \
     transformers==4.54.1
 
 # Build TRT customized plugins
