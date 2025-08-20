@@ -26,7 +26,7 @@ The sample steps apply to the other classification model: changenet-classify
 
 ## Generate the deepstream application package and build it into a container image
 
-**Note:** For Thor and Spark, please use "-f builder/samples/ds_app/Dockerfile.tegra"
+**Note:** For Tegra Thor and DGX Spark, please use "-f builder/samples/ds_app/Dockerfile.tegra"
 
 Set up your Gitlab token:
 
