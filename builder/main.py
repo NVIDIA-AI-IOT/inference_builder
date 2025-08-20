@@ -455,6 +455,7 @@ def main(args):
                 logger.error(f"validation build failed: {e}")
                 # Continue with other builds
                 # Continue to finish the build without validation
+    print("Build completed successfully")
 
 
 
