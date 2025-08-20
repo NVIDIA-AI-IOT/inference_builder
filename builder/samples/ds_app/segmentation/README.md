@@ -18,6 +18,9 @@ For example: if you define a model with name "citysemsegformer", you must put al
 You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/citysemsegformer/ directory, then copy the other required model files to the same directory:
 
 ```bash
+ngc registry model download-version "nvidia/tao/citysemsegformer:deployable_onnx_v1.0"
+mv citysemsegformer_vdeployable_onnx_v1.0 $MODEL_REPO/citysemsegformer
+chmod 777 $MODEL_REPO/citysemsegformer
 cp builder/samples/ds_app/segmentation/citysemsegformer/* $MODEL_REPO/citysemsegformer/
 ```
 

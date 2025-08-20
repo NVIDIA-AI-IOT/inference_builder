@@ -18,6 +18,9 @@ For example: if you define a model with name "gdino", you must put all the model
 You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/gdino/ directory, then copy the other required model files to the same directory:
 
 ```bash
+ngc registry model download-version "nvidia/tao/grounding_dino:grounding_dino_swin_tiny_commercial_deployable_v1.0"
+mv grounding_dino_vgrounding_dino_swin_tiny_commercial_deployable_v1.0 $MODEL_REPO/gdino
+chmod 777 $MODEL_REPO/gdino
 cp builder/samples/ds_app/gdino/gdino/* $MODEL_REPO/gdino/
 ```
 

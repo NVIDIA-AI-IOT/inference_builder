@@ -18,6 +18,9 @@ For example: if you define a model with name "pcbclassification", you must put a
 You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/pcbclassification/ directory, then copy the other required model files to the same directory:
 
 ```bash
+ngc registry model download-version "nvaie/pcbclassification:deployable_v1.1"
+mv pcbclassification_vdeployable_v1.1 $MODEL_REPO/pcbclassification
+chmod 777 $MODEL_REPO/pcbclassification
 cp builder/samples/ds_app/classification/pcbclassification/* $MODEL_REPO/pcbclassification/
 ```
 
