@@ -65,6 +65,7 @@ curl -X "POST" \
 ```
 
 You'll get a response 200 with a json body like below:
+
 {
   "data": {
     "id": "577a9f11-2b24-4db8-82c8-2601e0c2b6e4",
@@ -103,7 +104,7 @@ python builder/main.py builder/samples/qwen/trtllm_nvdec_qwen.yaml --api-spec bu
 
 #### Build and Start the Inference Microservice:
 
-**⚠️ Important** **Before building the docker image for TensorRT-LLM backend, you must comment out line 48 in `./Dockerfile` as below**.
+**⚠️ Important:** **Before building the docker image for TensorRT-LLM backend, you must comment out line 48 in `./Dockerfile` as below**.
 
 ```
 line47: # Comment out the following lines if using local built trtllm image
@@ -142,6 +143,7 @@ curl -X "POST" \
 ```
 
 You'll get a response 200 with a json body like below:
+
 {
   "data": {
     "id": "577a9f11-2b24-4db8-82c8-2601e0c2b6e4",
