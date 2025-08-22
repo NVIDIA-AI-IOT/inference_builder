@@ -39,9 +39,10 @@ If the above process is correct, there'll be 2 folders appearing under model-rep
 
 Then copy the model config from source tree to the model folder:
 
-```
+```bash
 sudo chmod 777 ~/.cache/model-repo/nvclip_clipa_vit_h14_700M_text ~/.cache/model-repo/nvclip_clipa_vit_h14_700M_vision
 cp builder/samples/nvclip/optimizer/configs/* ~/.cache/model-repo/nvclip_clipa_vit_h14_700M_text
+```
 
 # Build the inference flow
 
@@ -56,9 +57,11 @@ cd builder/samples
 docker compose up --build ms-nvclip
 ```
 
-# Test the microservice with a client:
+# Test the microservice with a client
+
+After the server is successfully started, open a new terminal in your inference-builder folder to launch the client with a jpeg or png file.
 
 ```bash
-cd builder/samples/nvclip
+source .venv/bin/activate && cd builder/samples/nvclip
 ./test_client.sh <sample.png>
 ```

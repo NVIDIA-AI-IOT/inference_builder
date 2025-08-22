@@ -55,11 +55,11 @@ sudo apt install protobuf-compiler
 Create python virtual env (Optional) and install dependent packages
 
 ```bash
-$ python -m venv .venv
+python -m venv .venv
 # Activate the venc
-$ source .venv/bin/activate
+source .venv/bin/activate
 # Install the dependent packages
-$ pip3 install -r requirements.txt
+pip3 install -r requirements.txt
 
 ```
 
