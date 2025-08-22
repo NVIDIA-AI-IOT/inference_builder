@@ -21,7 +21,7 @@ git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct  ~/.cache/model-rep
 
 ## Generate the inference package
 
-First you must follow the top level README.md to set up the environment, and then run the specific command based on the backend you preferred.
+First you must follow the top level README.md to set up the environment, and then run one of the specific command from below based on the backend you choose.
 
 ### Using baseline pytorch backend via transformer APIs:
 
@@ -58,24 +58,27 @@ docker compose up ms-qwen --build
 
 ## Test the model with a client
 
+After the server is successfully started which takes approximately 10 seconds, open a new terminal in your inference-builder folder.
+
 There is an OpenAI client included in the sample for testing, and for image input, you can directly run the client with image path:
 
 ```bash
-cd builder/samples/qwen
+source .venv/bin/activate && cd builder/samples/qwen
 python client.py --images <your_image.jpg>
 ```
 
 For video input, you need to first upload a test video file:
 
 ```bash
-curl -X 'POST' \
-  'http://localhost:8800/v1/files' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: multipart/form-data' \
-  -F 'file=@its_1920_30s.mp4;type=video/mp4'
+export VIDEO_FILE=<your_video.mp4>
+curl -X "POST" \
+  "http://localhost:8800/v1/files" \
+  -H "accept: application/json" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@$VIDEO_FILE;type=video/mp4"
 ```
 
-You'll get a response 200 with a json body:
+You'll get a response 200 with a json body like below:
 {
   "data": {
     "id": "577a9f11-2b24-4db8-82c8-2601e0c2b6e4",
@@ -86,13 +89,13 @@ You'll get a response 200 with a json body:
   }
 }
 
-Run the client.py with the returned video path:
+Run the client.py with the video path from your response:
 
 ```bash
 python client.py --videos /tmp/assets/577a9f11-2b24-4db8-82c8-2601e0c2b6e4/its_1920_30s.mp4
 ```
 
-OR run the client.py with the returned asset id if H/W encoder configuration is used:
+OR run the client.py with the returned asset id if the inference pipeline is built from trtllm_nvdec_qwen.yaml with H/W decoder enabled:
 
 ```bash
 python client.py --videos 577a9f11-2b24-4db8-82c8-2601e0c2b6e4?frames=8
