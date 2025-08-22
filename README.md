@@ -50,9 +50,10 @@ git submodule update --init --recursive
 ```bash
 sudo apt update
 sudo apt install protobuf-compiler
+sudo apt install python3.12-venv
 ```
 
-Create python virtual env (Optional) and install dependent packages
+Create python virtual env and install dependent packages
 
 ```bash
 python -m venv .venv
