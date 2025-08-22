@@ -32,6 +32,8 @@ trtexec --onnx=/changenet/changenet_768.onnx --saveEngine=/changenet/model.plan 
 
 # Build the inference flow:
 
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment.
+
 ```bash
 python builder/main.py \
   --server-type triton \

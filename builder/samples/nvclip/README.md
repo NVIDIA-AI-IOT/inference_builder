@@ -46,6 +46,8 @@ cp builder/samples/nvclip/optimizer/configs/* ~/.cache/model-repo/nvclip_clipa_v
 
 # Build the inference flow
 
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment.
+
 ```bash
 python builder/main.py builder/samples/nvclip/tensorrt_nvclip.yaml -a builder/samples/nvclip/openapi.yaml -c builder/samples/nvclip/processors.py -o builder/samples/nvclip --server-type fastapi -t
 ```
