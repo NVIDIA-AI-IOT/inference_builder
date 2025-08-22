@@ -64,7 +64,7 @@ curl -X "POST" \
   -F "file=@$VIDEO_FILE;type=video/mp4"
 ```
 
-You'll get a response 200 with a json body like below:
+You'll get a response 200 with a json body which includes the id and path of the uploaded asset like below:
 
 {
   "data": {
@@ -142,7 +142,7 @@ curl -X "POST" \
   -F "file=@$VIDEO_FILE;type=video/mp4"
 ```
 
-You'll get a response 200 with a json body like below:
+You'll get a response 200 with a json body which includes the id and path of the uploaded asset like below:
 
 {
   "data": {
