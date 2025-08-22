@@ -4,7 +4,9 @@ This directory contains sample configurations demonstrating how to build DeepStr
 
 ## Models used in the Samples
 
-All the models can be downloaded from NGC (A few of them may need active subscription):
+All the models can be downloaded from NGC (A few of them may need active subscription). 
+
+If you don't have NGC CLI installed, please download and install it from [this page](https://org.ngc.nvidia.com/setup/installers/cli).
 
 ### Image Classification
 - **PCB Classification**: [PCB Classification Model](https://catalog.ngc.nvidia.com/orgs/nvaie/models/pcbclassification)

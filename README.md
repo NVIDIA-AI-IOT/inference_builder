@@ -25,17 +25,7 @@ Compared to manually crafting inference source code, Inference Builder offers de
 
 ## Getting started
 
-The recommended OS for running the Inference Builder is Ubuntu 24.04 with python 3.12, and Nvidia GPU from the list below is supported.
-
-Supported GPUs:
-- RTX 40x0 series
-- RTX 50x0 series
-- A100
-- A6000
-- H100
-- B200
-- Jetson Thor
-- DGX Spark
+The recommended OS for running the Inference Builder is Ubuntu 24.04 with python 3.12.
 
 ### Clone the repository
 
