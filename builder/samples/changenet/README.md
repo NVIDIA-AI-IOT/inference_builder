@@ -48,9 +48,12 @@ cd builder/samples
 docker compose up --build ms-changenet
 ```
 
-# Test the microservice with a client:
+# Test the microservice with a client
+
+After the server is successfully started, open a new terminal to launch the client to compare two sample images:
 
 ```bash
+source .venv/bin/activate
 cd builder/samples/changenet
-python nim_client.py --host 127.0.0.1 --port 8803 --file <test1.jpg> <test2.jpg>
+python nim_client.py --host 127.0.0.1 --port 8803 --file test_0.jpg golden_0.jpg
 ```
