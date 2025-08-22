@@ -263,7 +263,6 @@ components:
           description: 'A 2D array of text to be used for the extra prompt on the inference.'
         model:
           type: string
-          enum: [nvidia/nvdino-v2, nvidia/c-radio-p3-v3, nvidia/convnext]
           title: Model
           description: ID of the CV model.
           example: nvidia/nvdino-v2
