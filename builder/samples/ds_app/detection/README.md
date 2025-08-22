@@ -1,8 +1,7 @@
 ## Introduction
 
 This sample demonstrates how to build a deepstream application with Inference Builder using object detection models:
-1. resnet
-2. rtdetr
+1. rtdetr: trafficcamnet_transformer_lite_vdeployable_v1.0 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite
 
 ## Prerequisites
 
@@ -10,39 +9,74 @@ Model files are loaded from '/workspace/models/{MODEL_NAME}' within the containe
 You need to export MODEL_REPO environment variable to the path where you want to store the model files.
 
 ```bash
-export MODEL_REPO=/path/to/your/model/repo
+export MODEL_REPO=~/.cache/model-repo/
 ```
 
-For example: if you define a model with name "resnet", you must put all the model files including nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/resnet' for the model to be correctly loaded.
+For example: if you define a model with name "rtdetr", you must put all the model files including nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/rtdetr' for the model to be correctly loaded.
 
-You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/resnet/ directory, then copy the other required configurations to the same directory:
+You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/rtdetr/ directory, then copy the other required configurations to the same directory:
 
 ```bash
 ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:deployable_v1.0"
+# Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
 mv trafficcamnet_transformer_lite_vdeployable_v1.0 $MODEL_REPO/rtdetr
 chmod 777 $MODEL_REPO/rtdetr
 cp builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/rtdetr/
 ```
 
-## Generate the deepstream application package and build it into a container image
+## Generate the DeepStream Application Package and Build Container Image
 
-**Note:** For Tegra Thor and DGX Spark, please use "-f builder/samples/ds_app/Dockerfile.tegra"
+### For x86 Architecture
 
 ```bash
-export GITLAB_TOKEN={Your Gitlab Token}
-python builder/main.py builder/samples/ds_app/detection/ds_detect.yaml -o builder/samples/ds_app --server-type serverless -t \
-&& docker build --build-arg GITLAB_TOKEN=$GITLAB_TOKEN -t deepstream-app builder/samples/ds_app
+export GITLAB_TOKEN={Your GitLab Token}
+python builder/main.py builder/samples/ds_app/detection/ds_detect.yaml \
+    -o builder/samples/ds_app \
+    --server-type serverless \
+    -t \
+&& docker build \
+    --build-arg GITLAB_TOKEN=$GITLAB_TOKEN \
+    -t deepstream-app \
+    builder/samples/ds_app
+```
+
+### For Tegra Architecture
+
+```bash
+export GITLAB_TOKEN={Your GitLab Token}
+python builder/main.py builder/samples/ds_app/detection/ds_detect.yaml \
+    -o builder/samples/ds_app \
+    --server-type serverless \
+    -t \
+&& docker build \
+    --build-arg GITLAB_TOKEN=$GITLAB_TOKEN \
+    -t deepstream-app \
+    -f builder/samples/ds_app/Dockerfile.tegra \
+    builder/samples/ds_app
 ```
 
 ## Run the deepstream app with different inputs:
 
-**Note:** You need to set the `$SAMPLE_INPUT` environment variable to point to your samples directory if you perform inference on media files in you host.
-
-**Note:** You need to have a display on your host and run `xhost +` to give the container access to it if you set enable_display to true in your render_config.
+**Note:** You can optionally set the `$SAMPLE_INPUT` environment variable to point to your samples directory if you perform inference on media files in your host.
 
 ```bash
+# Update this with your actual samples directory path
 export SAMPLE_INPUT=/path/to/your/samples/directory
 ```
+
+**Note:** When you set `enable_display: true` under the `render_config` section of your inference builder config, you need to have a display on your host and run both commands in this order to give the container access to it.
+
+First, set the display environment variable:
+```bash
+export DISPLAY=:0  # or :1 depending on your system
+```
+
+Then, allow X server connections from any host:
+```bash
+xhost +
+```
+
+If the configuration is successful, you will see this message in the log: `access control disabled, clients can connect from any host`.
 
 ### Run with video input
 
@@ -58,27 +92,16 @@ docker run --rm --net=host --gpus all \
 
 ### Run with RTSP input
 
-**Note:** Replace `rtsp://<url_path>` with your actual RTSP stream URL. The application supports various RTSP stream formats including H.264, H.265, and MJPEG.
+**Note:** Replace `rtsp://<url_path>` (which is just a placeholder) with your actual RTSP stream URL. The application supports various RTSP stream formats including H.264, H.265, and MJPEG.
 
 ```bash
+# Replace rtsp://<url_path> with your actual RTSP stream URL
 docker run --rm --net=host --gpus all \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
     deepstream-app \
     --media-url rtsp://<url_path> \
-    --mime video/mp4
-```
-
-**Examples:**
-
-```bash
-docker run --rm --net=host --gpus all \
-    -v $MODEL_REPO:/workspace/models \
-    -v /tmp/.X11-unix/:/tmp/.X11-unix \
-    -e DISPLAY=$DISPLAY \
-    deepstream-app \
-    --media-url rtsp://127.0.0.1/video1 \
     --mime video/mp4
 ```
 
@@ -96,6 +119,7 @@ docker run --rm --net=host --gpus all \
 **Note:** To use a custom source configuration file, you need to mount your file into the docker container and reference it from within the container's filesystem. This allows you to use your own source configuration instead of the default one.
 
 ```bash
+# /workspace/inputs/source_list_dynamic.yaml is just a placeholder for any config present in $SAMPLE_INPUT directory
 docker run --rm --net=host --gpus all \
     -v $MODEL_REPO:/workspace/models \
     -v $SAMPLE_INPUT:/workspace/inputs \
@@ -108,6 +132,7 @@ docker run --rm --net=host --gpus all \
 ### Run with image input
 
 ```bash
+# /sample_input/test_1.jpg is just a placeholder for any image present in $SAMPLE_INPUT directory
 docker run --rm --net=host --gpus all \
     -v $SAMPLE_INPUT:/sample_input \
     -v $MODEL_REPO:/workspace/models \
@@ -181,12 +206,33 @@ mosquitto -p 1883
 
 **Generate the deepstream application package and build it into a container image:**
 
-**Note:** For Thor and Spark, please use "-f builder/samples/ds_app/Dockerfile.tegra"
+### For x86 Architecture
 
 ```bash
-export GITLAB_TOKEN={You Gitlab Token}
-python builder/main.py builder/samples/ds_app/detection/ds_mv3dt.yaml -o builder/samples/ds_app --server-type serverless -t \
-&& docker build --build-arg GITLAB_TOKEN=$GITLAB_TOKEN -t deepstream-app builder/samples/ds_app
+export GITLAB_TOKEN={Your GitLab Token}
+python builder/main.py builder/samples/ds_app/detection/ds_mv3dt.yaml \
+    -o builder/samples/ds_app \
+    --server-type serverless \
+    -t \
+&& docker build \
+    --build-arg GITLAB_TOKEN=$GITLAB_TOKEN \
+    -t deepstream-app \
+    builder/samples/ds_app
+```
+
+### For Tegra Architecture
+
+```bash
+export GITLAB_TOKEN={Your GitLab Token}
+python builder/main.py builder/samples/ds_app/detection/ds_mv3dt.yaml \
+    -o builder/samples/ds_app \
+    --server-type serverless \
+    -t \
+&& docker build \
+    --build-arg GITLAB_TOKEN=$GITLAB_TOKEN \
+    -t deepstream-app \
+    -f builder/samples/ds_app/Dockerfile.tegra \
+    builder/samples/ds_app
 ```
 
 **Run with multi-camera video input:**
