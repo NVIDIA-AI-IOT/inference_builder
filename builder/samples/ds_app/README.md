@@ -2,9 +2,11 @@
 
 This directory contains sample configurations demonstrating how to build DeepStream applications using Inference Builder.
 
+While the samples support Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
+
 ## Models used in the Samples
 
-All the models can be downloaded from NGC (A few of them may need active subscription). 
+All the models can be downloaded from NGC and certain models need active subscription.
 
 If you don't have NGC CLI installed, please download and install it from [this page](https://org.ngc.nvidia.com/setup/installers/cli).
 

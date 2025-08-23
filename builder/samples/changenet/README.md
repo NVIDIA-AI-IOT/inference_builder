@@ -2,10 +2,7 @@
 
 This sample demonstrates how to build an inference pipeline for models that use triton backend. It also shows how to incorporate CVCUDA in customized processors to accelerate media processing.
 
-The sample has been tested on following platforms
-- RTX 4090
-- H100
-- A6000
+While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
 
 # Prerequisites
 

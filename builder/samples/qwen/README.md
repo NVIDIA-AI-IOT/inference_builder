@@ -11,6 +11,8 @@ Three configurations are provided, allowing you to choose based on your specific
 2. trtllm_qwen.yaml: leveraging TensroRT LLM APIs for better performance
 3. trtllm_nvdec_qwen.yaml: leveraging h/w decoder and TensorRT LLM for the best performance
 
+While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
+
 ## Prerequisites
 
 The model checkpoints can be downloaded from huggingface (Be sure to have git-lfs installed):
@@ -48,15 +50,15 @@ Wait for the server to start, then open a new terminal in your inference-builder
 
 ```bash
 source .venv/bin/activate && cd builder/samples/qwen
-python client.py --images <your_image.jpg> # replace placeholder <your_image.jpg> with a true file
+python client.py --images <your_image.jpg> # replace placeholder <your_image.jpg> with an actual file
 ```
 
 For video input, you need to first upload a test video file:
 
-**⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with a true file path in your system**.
+**⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with an actual file path in your system**.
 
 ```bash
-export VIDEO_FILE=<your_video.mp4> # replace the placeholder <your_video.mp4> with a true file
+export VIDEO_FILE=<your_video.mp4> # replace the placeholder <your_video.mp4> with an actual file
 curl -X "POST" \
   "http://localhost:8800/v1/files" \
   -H "accept: application/json" \
@@ -126,12 +128,12 @@ Wait for the server to start, then open a new terminal in your inference-builder
 
 ```bash
 source .venv/bin/activate && cd builder/samples/qwen
-python client.py --images <your_image.jpg> # replace placeholder <your_image.jpg> with a true file
+python client.py --images <your_image.jpg> # replace placeholder <your_image.jpg> with an actual file
 ```
 
 For video input, you need to first upload a test video file.
 
-**⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with a true file path in your system**.
+**⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with an actual file path in your system**.
 
 ```bash
 export VIDEO_FILE=<your_video.mp4>

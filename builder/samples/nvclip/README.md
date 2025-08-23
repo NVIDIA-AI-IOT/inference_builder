@@ -2,10 +2,7 @@
 
 This sample demonstrate how to create the inference package for an embedding model with tensorrt backend (polygrapy) and fastapi server.
 
-The sample has been tested on following platforms
-- RTX 4090
-- H100
-- A6000
+While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
 
 # Prerequisites
 

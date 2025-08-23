@@ -1,7 +1,10 @@
 # Metropolis Computer Vision Inference Microservice HOWTO
 
 ## Introduction
+
 This example demonstrates how to Metropolis Computer Vision Inference Microservices with Inference Builder and using them to perform inference on images and videos.
+
+While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
 
 ## Prerequisites
 
@@ -13,7 +16,7 @@ Below packages are required to build and run the microservice:
 
 ## Models used in the Samples
 
-The models used in the example can all be found in NGC (A few of them may need active subscription). 
+The models used in the example can all be found in NGC and certain models need active subscription.
 
 If you don't have NGC CLI installed, please download and install it from [this page](https://org.ngc.nvidia.com/setup/installers/cli).
 
@@ -87,7 +90,7 @@ The OpenAPI compatible interactive documentation endpoint is available on the se
 
 - Run inference on a single image
 
-**⚠️ Important:** **replace the placeholder "absolute_path_to_your_file.jpg" in below command with a true file with absolute path in your system**.
+**⚠️ Important:** **replace the placeholder "absolute_path_to_your_file.jpg" in below command with an actual file with absolute path in your system**.
 
 ```bash
 PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "absolute_path_to_your_file.jpg"))
@@ -104,10 +107,10 @@ curl -X POST \
 
 - Run inference on a single video
 
-**⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with a true file path in your system**.
+**⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with an actual file path in your system**.
 
 ```bash
-export VIDEO_FILE=<your_video.mp4> # replace the placeholder <your_video.mp4> with a true file
+export VIDEO_FILE=<your_video.mp4> # replace the placeholder <your_video.mp4> with an actual file
 curl -X "POST" \
   "http://localhost:8800/v1/files" \
   -H "accept: application/json" \
@@ -187,7 +190,7 @@ The OpenAPI compatible interactive documentation endpoint is available on the se
 
 - Run inference on a single image
 
-**⚠️ Important:** **replace the placeholder "path_to_your_file.jpg" in below command with a true file path in your system**.
+**⚠️ Important:** **replace the placeholder "path_to_your_file.jpg" in below command with an actual file path in your system**.
 
 ```bash
 PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "path_to_your_file.jpg"))
@@ -205,10 +208,10 @@ curl -X POST \
 
 - Run inference on a single video
 
-**⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with a true file path in your system**.
+**⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with an actual file path in your system**.
 
 ```bash
-export VIDEO_FILE=<your_video.mp4> # replace the placeholder <your_video.mp4> with a true file
+export VIDEO_FILE=<your_video.mp4> # replace the placeholder <your_video.mp4> with an actual file
 curl -X "POST" \
   "http://localhost:8800/v1/files" \
   -H "accept: application/json" \

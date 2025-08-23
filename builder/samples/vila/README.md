@@ -2,8 +2,7 @@
 
 This sample demonstrates how to build the inference pipeline for VILA 1.5 and how to integrate it into a microservice.
 
-The sample has been tested on following platforms:
-- H100
+While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
 
 # Prerequisites
 
