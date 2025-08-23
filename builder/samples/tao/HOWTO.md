@@ -184,7 +184,7 @@ docker compose up tao-cv --build
 
 4. Test  the microservice
 
-The microservice provides a REST API that can be used to run inference on images andGrounding Dino model and Mask Grounding Dino model videos.
+The microservice provides a REST API that can be used to run inference on images and videos.
 
 The OpenAPI compatible interactive documentation endpoint is available on the server for detailed API usage: http://localhost:8800/docs, and examples to show the basic inference use cases are listed as below:
 
