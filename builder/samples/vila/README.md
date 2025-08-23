@@ -32,6 +32,8 @@ cd builder/samples/vila && docker build --target trt_optimize -t vila-trt-optimi
 docker run -it --rm --gpus all -v ~/.cache/model-repo/vila:/workspace/checkpoints/optimized -v ~/.cache/model-repo:/workspace/checkpoints/baseline -e LLM_BATCH_SIZE=8 -e LLM_PRECISION=int4_awq vila-trt-optimize
 ```
 
+The build may take a while, please be patient. ⌛
+
 Once the above process is completed, we'll have the output under ~/.cache/model-repo/vila:
 
 ```
@@ -54,19 +56,23 @@ The two engine files of visual_encoder.engine and rank0.engine will be used by T
 
 # Build the inference pipeline:
 
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment.
+
 ```bash
 python builder/main.py --server-type triton builder/samples/vila/tensorrt_vila1.5.yaml -a builder/samples/vila/openapi.json -c builder/samples/vila/processors.py -o builder/samples/vila -t
 ```
 
 
-# Build and run the docker image:
+# Build and run the docker image
 
 ```bash
 cd builder/samples
 docker compose up --build ms-vila
 ```
 
-# Test with the client:
+# Test with the client
+
+Wait for the server to start, then open a new terminal in your inference-builder folder and run following command
 
 ```bash
 cd builder/samples/vila
