@@ -32,6 +32,7 @@ trtexec --onnx=/changenet/changenet_768.onnx --saveEngine=/changenet/model.plan 
 Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment.
 
 ```bash
+source .venv/bin/activate
 python builder/main.py \
   --server-type triton \
   -a builder/samples/changenet/openapi.yaml \

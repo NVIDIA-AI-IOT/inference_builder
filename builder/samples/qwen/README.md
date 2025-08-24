@@ -21,9 +21,13 @@ The model checkpoints can be downloaded from huggingface (Be sure to have git-lf
 git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct  ~/.cache/model-repo/Qwen2.5-VL-7B-Instruct
 ```
 
-## Build and Test the Qwen2.5-VL-7B-Instruct Inference Microservice
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference-builder folder, then activate your virtual environment:
 
-Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment.
+```bash
+source .venv/bin/activate
+```
+
+## Build and Test the Qwen2.5-VL-7B-Instruct Inference Microservice
 
 ### Using baseline pytorch backend via transformer APIs:
 

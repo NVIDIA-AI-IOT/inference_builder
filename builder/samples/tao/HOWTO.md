@@ -8,12 +8,6 @@ While the sample supports Ampere, Hopper, and Blackwell architectures, the model
 
 ## Prerequisites
 
-Below packages are required to build and run the microservice:
-
-- Docker
-- Docker Compose
-- NVIDIA Container Toolkit
-
 ## Models used in the Samples
 
 The models used in the example can all be found in NGC and certain models need active subscription.
@@ -59,11 +53,18 @@ mkdir -p ~/.cache/model-repo && chmod 777 ~/.cache/model-repo
 export MODEL_REPO=~/.cache/model-repo
 ```
 
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference-builder folder, then activate your virtual environment:
+
+```bash
+source .venv/bin/activate
+```
+
+
 ### Generic TAO CV Inference Microservice
 
 This microservice supports common CV models including image classification, object detection and segmentation.
 
-1. Generate the inference pipeline using inference builder (Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment.)
+1. Generate the inference pipeline using inference builder
 
 ```bash
 python builder/main.py builder/samples/tao/ds_tao.yaml \

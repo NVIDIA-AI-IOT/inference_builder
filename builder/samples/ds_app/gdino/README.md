@@ -109,7 +109,8 @@ docker run --rm --net=host --gpus all \
     -e DISPLAY=$DISPLAY \
     deepstream-app \
     --media-url rtsp://<url_path> \
-    --mime video/mp4
+    --mime video/mp4 \
+    --text "car,person"
 ```
 
 
