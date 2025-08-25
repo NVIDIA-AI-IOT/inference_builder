@@ -59,6 +59,11 @@ Assume you've followed the [top level instructions](../../../README.md#getting-s
 source .venv/bin/activate
 ```
 
+And export your GITLAB TOKEN:
+
+```bash
+export GITLAB_TOKEN={Your GITLAB token} # replace the placeholder {Your GITLAB token} with your gitlab token
+```
 
 ### Generic TAO CV Inference Microservice
 
@@ -84,7 +89,6 @@ cp builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/$TAO_MODEL_NAME/
 3. Build and run the container image
 
 ```bash
-export GITLAB_TOKEN={Your GITLAB token} # replace the placeholder {Your GITLAB token} with your gitlab token
 cd builder/samples
 sed -i "s/TAO_MODEL_NAME: .*/TAO_MODEL_NAME: $TAO_MODEL_NAME/" docker-compose.yml
 docker compose up tao-cv --build
@@ -183,7 +187,6 @@ cp builder/samples/ds_app/gdino/gdino/* $MODEL_REPO/$TAO_MODEL_NAME/
 3. Build and run the container image
 
 ```bash
-export GITLAB_TOKEN={Your GITLAB token} # replace the placeholder {Your GITLAB token} with your gitlab token
 cd builder/samples
 sed -i "s/TAO_MODEL_NAME: .*/TAO_MODEL_NAME: $TAO_MODEL_NAME/" docker-compose.yml
 docker compose up tao-cv --build
@@ -285,7 +288,6 @@ cp builder/samples/ds_app/classification/changenet-classify/* $MODEL_REPO/$TAO_M
 3. Build and run the container image
 
 ```bash
-export GITLAB_TOKEN={Your GITLAB token} # replace the placeholder {Your GITLAB token} with your gitlab token
 cd builder/samples
 sed -i "s/TAO_MODEL_NAME: .*/TAO_MODEL_NAME: $TAO_MODEL_NAME/" docker-compose.yml
 docker compose up tao-cv --build
