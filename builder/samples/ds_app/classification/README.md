@@ -17,9 +17,11 @@ sudo chmod -R 777 ~/.cache/model-repo/
 export MODEL_REPO=~/.cache/model-repo/
 ```
 
-For example: if you define a model with name "pcbclassification", you must put all the model files including nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/pcbclassification' for the model to be correctly loaded.
+You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/{model-name}/ directory, then copy the other required configurations to the same directory:
 
-You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/pcbclassification/ directory, then copy the other required configurations to the same directory:
+### For pcbclassification sample
+
+Please use `pcbclassification` as the directory:
 
 ```bash
 ngc registry model download-version "nvaie/pcbclassification:deployable_v1.1"
@@ -29,7 +31,17 @@ chmod 777 $MODEL_REPO/pcbclassification
 cp -r builder/samples/ds_app/classification/pcbclassification/* $MODEL_REPO/pcbclassification/
 ```
 
-The same steps apply to the other classification model: changenet-classify
+### For changenet-classify sample
+
+Please use `changenet-classify` as the directory:
+
+```bash
+ngc registry model download-version "nvidia/tao/visual_changenet_classification:visual_changenet_nvpcb_deployable_v1.0"
+mv visual_changenet_classification_vvisual_changenet_nvpcb_deployable_v1.0 $MODEL_REPO/changenet-classify/
+# Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
+chmod 777 $MODEL_REPO/changenet-classify
+cp -r builder/samples/ds_app/classification/changenet-classify/* $MODEL_REPO/changenet-classify/
+```
 
 ## Generate the DeepStream Application Package and Build Container Image
 
@@ -109,6 +121,8 @@ python builder/main.py builder/samples/ds_app/classification/ds_changenet.yaml \
 export SAMPLE_INPUT=/path/to/your/samples/directory
 ```
 
+### For pcbclassification sample
+
 ```bash
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
@@ -122,6 +136,8 @@ docker run --rm --net=host --gpus all \
     --media-url /sample_input/test_1.jpg \
     --mime image/jpeg
 ```
+
+### For changenet-classify sample
 
 **Note:** For changenet classification model, it requires two images as input. Here we are using the sample images provided in the sample_input directory as a reference.
 
