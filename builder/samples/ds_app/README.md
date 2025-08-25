@@ -13,41 +13,20 @@ If you don't have NGC CLI installed, please download and install it from [this p
 ### Image Classification
 - **PCB Classification**: [PCB Classification Model](https://catalog.ngc.nvidia.com/orgs/nvaie/models/pcbclassification)
 
-```bash
-ngc registry model download-version "nvaie/pcbclassification:deployable_v1.1"
-```
 
 ### Visual Change Detection
 - **Visual Changenet Classification**: [Visual Changenet Classification Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/visual_changenet_classification)
-
-```bash
-ngc registry model download-version "nvidia/tao/visual_changenet_classification:visual_changenet_nvpcb_deployable_v1.0"
-```
 
 ### Semantic Segmentation
 - **CitySemSegFormer**: [CitySemSegFormer Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/citysemsegformer)
 - **Mask2Fomer**: [Masked-attention Mask Transformer](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask2former)
 
-```bash
-ngc registry model download-version "nvidia/tao/citysemsegformer:deployable_onnx_v1.0"
-ngc registry model download-version "nvidia/tao/mask2former:mask2former_swint_deployable_v1.0"
-```
-
 ### Grounding Dino
 - **Grounding DINO**: [Grounding DINO Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/grounding_dino)
 - **Mask Grounding DINO**: [Mask Grounding DINO Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask_grounding_dino)
 
-```bash
-ngc registry model download-version "nvidia/tao/grounding_dino:grounding_dino_swin_tiny_commercial_deployable_v1.0"
-ngc registry model download-version "nvidia/tao/mask_grounding_dino:mask_grounding_dino_swin_tiny_commercial_deployable_v1.0"
-```
-
-### Resnet50 RT-DETR Detector
-- **Resnet50 RT-DETR**: [TrafficCamNet Lite](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite)
-
-```bash
-ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:deployable_v1.0"
-```
+### RT-DETR Detector
+- **RT-DETR**: [TrafficCamNet Lite](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite)
 
 ## Getting Started
 

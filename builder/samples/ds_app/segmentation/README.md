@@ -19,9 +19,9 @@ sudo chmod -R 777 ~/.cache/model-repo/
 export MODEL_REPO=~/.cache/model-repo/
 ```
 
-For example: if you define a model with name "citysemsegformer", you must put all the model files including nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/citysemsegformer' for the model to be correctly loaded.
+You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/{model-name}/ directory, then copy the other required configurations to the same directory:
 
-You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/citysemsegformer/ directory, then copy the other required configurations to the same directory:
+### For citysegformer sample
 
 ```bash
 ngc registry model download-version "nvidia/tao/citysemsegformer:deployable_onnx_v1.0"
@@ -29,6 +29,16 @@ ngc registry model download-version "nvidia/tao/citysemsegformer:deployable_onnx
 mv citysemsegformer_vdeployable_onnx_v1.0 $MODEL_REPO/citysemsegformer
 chmod 777 $MODEL_REPO/citysemsegformer
 cp -r builder/samples/ds_app/segmentation/citysemsegformer/* $MODEL_REPO/citysemsegformer/
+```
+
+### For mask2former sample
+
+```bash
+ngc registry model download-version "nvidia/tao/mask2former:mask2former_swint_deployable_v1.0"
+# Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
+mv mask2former_vmask2former_swint_deployable_v1.0 $MODEL_REPO/mask2former
+chmod 777 $MODEL_REPO/mask2former
+cp -r builder/samples/ds_app/segmentation/mask2former/* $MODEL_REPO/mask2former/
 ```
 
 ## Generate the deepstream application package and build it into a container image:

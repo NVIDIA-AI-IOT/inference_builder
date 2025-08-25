@@ -19,9 +19,11 @@ sudo chmod -R 777 ~/.cache/model-repo/
 export MODEL_REPO=~/.cache/model-repo/
 ```
 
-For example: if you define a model with name "gdino", you must put all the model files including nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/gdino' for the model to be correctly loaded.
+You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/{model-name}/ directory, then copy the other required configurations to the same directory:
 
-You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/gdino/ directory, then copy the other required configurations to the same directory:
+### for gdino sample
+
+Please use `gdino` as the directory:
 
 ```bash
 ngc registry model download-version "nvidia/tao/grounding_dino:grounding_dino_swin_tiny_commercial_deployable_v1.0"
@@ -29,6 +31,18 @@ ngc registry model download-version "nvidia/tao/grounding_dino:grounding_dino_sw
 mv grounding_dino_vgrounding_dino_swin_tiny_commercial_deployable_v1.0 $MODEL_REPO/gdino
 chmod 777 $MODEL_REPO/gdino
 cp -r builder/samples/ds_app/gdino/gdino/* $MODEL_REPO/gdino/
+```
+
+### for mask_gdino sample
+
+Please use `mask_gdino` as the directory:
+
+```bash
+ngc registry model download-version "nvidia/tao/mask_grounding_dino:mask_grounding_dino_swin_tiny_commercial_deployable_v1.0"
+# Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
+mv mask_grounding_dino_vmask_grounding_dino_swin_tiny_commercial_deployable_v1.0 
+chmod 777 $MODEL_REPO/mask_gdino
+cp -r builder/samples/ds_app/gdino/mask_gdino/* $MODEL_REPO/mask_gdino/ $MODEL_REPO/mask_gdino
 ```
 
 ## Generate the deepstream application package and build it into a container image:
