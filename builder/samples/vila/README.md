@@ -58,6 +58,7 @@ The two engine files of visual_encoder.engine and rank0.engine will be used by T
 Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment.
 
 ```bash
+source .venv/bin/activate
 python builder/main.py --server-type triton builder/samples/vila/tensorrt_vila1.5.yaml -a builder/samples/vila/openapi.json -c builder/samples/vila/processors.py -o builder/samples/vila -t
 ```
 

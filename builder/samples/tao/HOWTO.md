@@ -8,12 +8,6 @@ While the sample supports Ampere, Hopper, and Blackwell architectures, the model
 
 ## Prerequisites
 
-Below packages are required to build and run the microservice:
-
-- Docker
-- Docker Compose
-- NVIDIA Container Toolkit
-
 ## Models used in the Samples
 
 The models used in the example can all be found in NGC and certain models need active subscription.
@@ -52,11 +46,25 @@ All three CV inference microservices in the example are built the same way; the 
 
 Using the same steps shown in this example, you can also build the CV inference microservice with fine-tuned models exported from [TAO Deploy](https://docs.nvidia.com/tao/tao-toolkit/text/tao_deploy/tao_deploy_overview.html).
 
+Before you begin, create the model repository as described below.
+
+```bash
+mkdir -p ~/.cache/model-repo && chmod 777 ~/.cache/model-repo
+export MODEL_REPO=~/.cache/model-repo
+```
+
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference-builder folder, then activate your virtual environment:
+
+```bash
+source .venv/bin/activate
+```
+
+
 ### Generic TAO CV Inference Microservice
 
 This microservice supports common CV models including image classification, object detection and segmentation.
 
-1. Generate the inference pipeline using inference builder (Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment.)
+1. Generate the inference pipeline using inference builder
 
 ```bash
 python builder/main.py builder/samples/tao/ds_tao.yaml \
@@ -66,11 +74,11 @@ python builder/main.py builder/samples/tao/ds_tao.yaml \
 2. Download the model files from NGC and apply the configurations. (here, we use object detection model `trafficcamnet_transformer_lite` as an example)
 
 ```bash
-mkdir -p ~/.cache/model-repo
-ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:deployable_v1.0" --dest ~/.cache/model-repo
-chmod 777 ~/.cache/model-repo/trafficcamnet_transformer_lite_vdeployable_v1.0
+
+ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:deployable_v1.0" --dest $MODEL_REPO
+chmod 777 $MODEL_REPO/trafficcamnet_transformer_lite_vdeployable_v1.0
 export TAO_MODEL_NAME=trafficcamnet_transformer_lite_vdeployable_v1.0
-cp builder/samples/ds_app/detection/rtdetr/* ~/.cache/model-repo/$TAO_MODEL_NAME/
+cp builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/$TAO_MODEL_NAME/
 ```
 
 3. Build and run the container image
@@ -166,11 +174,10 @@ python builder/main.py builder/samples/tao/ds_gdino.yaml \
 2. Download the model files from NGC and apply the configurations. (here, we use Grounding Dino model as an example)
 
 ```bash
-mkdir -p ~/.cache/model-repo
-ngc registry model download-version "nvidia/tao/grounding_dino:grounding_dino_swin_tiny_commercial_deployable_v1.0" --dest ~/.cache/model-repo
-chmod 777 ~/.cache/model-repo/grounding_dino_vgrounding_dino_swin_tiny_commercial_deployable_v1.0
+ngc registry model download-version "nvidia/tao/grounding_dino:grounding_dino_swin_tiny_commercial_deployable_v1.0" --dest $MODEL_REPO
+chmod 777 $MODEL_REPO/grounding_dino_vgrounding_dino_swin_tiny_commercial_deployable_v1.0
 export TAO_MODEL_NAME=grounding_dino_vgrounding_dino_swin_tiny_commercial_deployable_v1.0
-cp builder/samples/ds_app/gdino/gdino/* ~/.cache/model-repo/$TAO_MODEL_NAME/
+cp builder/samples/ds_app/gdino/gdino/* $MODEL_REPO/$TAO_MODEL_NAME/
 ```
 
 3. Build and run the container image
@@ -269,11 +276,10 @@ python builder/main.py builder/samples/tao/ds_changenet.yaml \
 2. Download the model files from NGC and apply the configurations.
 
 ```bash
-mkdir -p ~/.cache/model-repo
-ngc registry model download-version "nvidia/tao/visual_changenet_classification:visual_changenet_nvpcb_deployable_v1.0" --dest ~/.cache/model-repo
-chmod 777 ~/.cache/model-repo/visual_changenet_classification_vvisual_changenet_nvpcb_deployable_v1.0
+ngc registry model download-version "nvidia/tao/visual_changenet_classification:visual_changenet_nvpcb_deployable_v1.0" --dest $MODEL_REPO
+chmod 777 $MODEL_REPO/visual_changenet_classification_vvisual_changenet_nvpcb_deployable_v1.0
 export TAO_MODEL_NAME=visual_changenet_classification_vvisual_changenet_nvpcb_deployable_v1.0
-cp builder/samples/ds_app/classification/changenet-classify/* ~/.cache/model-repo/$TAO_MODEL_NAME/
+cp builder/samples/ds_app/classification/changenet-classify/* $MODEL_REPO/$TAO_MODEL_NAME/
 ```
 
 3. Build and run the container image

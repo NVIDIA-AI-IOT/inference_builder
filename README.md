@@ -54,19 +54,6 @@ pip3 install -r requirements.txt
 
 ```
 
-Ensure nvidia runtime added to `/etc/docker/daemon.json` to run GPU-enabled containers
-
-```bash
-{
-    "runtimes": {
-        "nvidia": {
-            "args": [],
-            "path": "nvidia-container-runtime"
-        }
-    }
-}
-```
-
 ## Usage
 
 Before using the tool, you must prepare a YAML configuration file to define the inference flow. If server integration is required, you also need to provide an OpenAPI specification that defines the server and update the configuration with server templates based on the OpenAPI specification.
