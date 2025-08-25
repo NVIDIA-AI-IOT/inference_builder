@@ -154,10 +154,10 @@ curl -X 'POST' \
   -H 'Content-Type: application/json' \
   -d '{
   "input": [ {
-    "id": "b6eccf7e-0758-4bba-9e51-d6f65b6794f5",
-    "path": "/tmp/assets/b6eccf7e-0758-4bba-9e51-d6f65b6794f5/its_1920_30s.mp4",
-    "size": 3472221,
-    "duration": 30000000000,
+    "id": "53c2d620-976e-49a4-90a3-3db20b95d225",
+    "path": "/tmp/assets/53c2d620-976e-49a4-90a3-3db20b95d225/output.mp4",
+    "size": 82223,
+    "duration": 2000000000,
     "contentType": "video/mp4"
   } ],
   "model": "nvidia/tao"
@@ -256,10 +256,10 @@ curl -X 'POST' \
   -H 'Content-Type: application/json' \
   -d '{
   "input": [ {
-    "id": "b6eccf7e-0758-4bba-9e51-d6f65b6794f5",
-    "path": "/tmp/assets/b6eccf7e-0758-4bba-9e51-d6f65b6794f5/its_1920_30s.mp4",
-    "size": 3472221,
-    "duration": 30000000000,
+    "id": "53c2d620-976e-49a4-90a3-3db20b95d225",
+    "path": "/tmp/assets/53c2d620-976e-49a4-90a3-3db20b95d225/output.mp4",
+    "size": 82223,
+    "duration": 2000000000,
     "contentType": "video/mp4"
   } ],
   "text": [
