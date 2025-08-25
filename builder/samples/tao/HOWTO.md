@@ -27,10 +27,10 @@ If you don't have NGC CLI installed, please download and install it from [this p
 - **Grounding DINO**: [Grounding DINO Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/grounding_dino)
 - **Mask Grounding DINO**: [Mask Grounding DINO Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask_grounding_dino)
 
-### Resnet50 RT-DETR Detector
+### Object Detection
 - **Resnet50 RT-DETR**: [TrafficCamNet Lite](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite)
 
-Required configuration files can be found in the deepstream sample folder:
+You’ll find the DeepStream runtime configuration files for the above models in the ds_app samples; they must be placed alongside the model files.
 
 - builder/samples/ds_app/classification/changenet-classify/: Visual Changenet classification model with 2 image inputs
 - builder/samples/ds_app/classification/pcbclassification/: PCB classification model
@@ -38,11 +38,11 @@ Required configuration files can be found in the deepstream sample folder:
 - builder/samples/ds_app/gdino/gdino: Grounding Dino detection model
 - builder/samples/ds_app/gdino/mask_gdino: Mask Grounding Dino detection model
 
-When being used along with the TAO Finetune Microservice, the microservices can directly use the model files and configs exported from [TAO Deploy](https://docs.nvidia.com/tao/tao-toolkit/text/tao_deploy/tao_deploy_overview.html).
+When being used along with the TAO Finetune Microservice, the Inference Microservices can directly use the model files and configs exported from [TAO Deploy](https://docs.nvidia.com/tao/tao-toolkit/text/tao_deploy/tao_deploy_overview.html).
 
 ## Build CV Inference Microservices
 
-All three CV inference microservices in the example are built the same way; the only differences are their configurations and cusotmized processors.
+All three CV Inference Microservices in the example are built the same way; the only differences are their configurations and cusotmized processors.
 
 Using the same steps shown in this example, you can also build the CV inference microservice with fine-tuned models exported from [TAO Deploy](https://docs.nvidia.com/tao/tao-toolkit/text/tao_deploy/tao_deploy_overview.html).
 
