@@ -120,7 +120,7 @@ curl -X POST \
 
 First you need to upload a video file to the server.
 
-**⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with an actual file path in your system**.
+**⚠️ Important:** **replace the placeholder `<your_video.mp4>` in below command with an actual file path in your system**.
 
 ```bash
 export VIDEO_FILE=<your_video.mp4> # replace the placeholder <your_video.mp4> with an actual file
@@ -221,7 +221,7 @@ curl -X POST \
 
 First you need to upload a video file to the server.
 
-**⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with an actual file path in your system**.
+**⚠️ Important:** **replace the placeholder `<your_video.mp4>` in below command with an actual file path in your system**.
 
 ```bash
 export VIDEO_FILE=<your_video.mp4> # replace the placeholder <your_video.mp4> with an actual file
