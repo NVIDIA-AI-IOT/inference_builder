@@ -101,10 +101,10 @@ Examples to show the basic inference use cases are listed as below:
 
 - Run inference on a single image
 
-**⚠️ Important:** **replace the placeholder "absolute_path_to_your_file.jpg" in below command with an actual file with absolute path in your system**.
+**⚠️ Important:** **replace the placeholder `<absolute_path_to_your_file.jpg>` in below command with an actual file with absolute path in your system.**
 
 ```bash
-PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "absolute_path_to_your_file.jpg"))
+PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "<absolute_path_to_your_file.jpg>"))
 
 curl -X POST \
   'http://localhost:8800/v1/inference' \
@@ -201,10 +201,10 @@ Examples to show the basic inference use cases are listed as below:
 
 - Run inference on a single image
 
-**⚠️ Important:** **replace the placeholder "path_to_your_file.jpg" in below command with an actual file path in your system**.
+**⚠️ Important:** **replace the placeholder `<absolute_path_to_your_file.jpg>` in below command with an actual file with absolute path in your system.**
 
 ```bash
-PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "path_to_your_file.jpg"))
+PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "<absolute_path_to_your_file.jpg>"))
 
 curl -X POST \
   'http://localhost:8800/v1/inference' \
