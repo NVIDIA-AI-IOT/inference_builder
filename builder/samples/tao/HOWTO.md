@@ -143,9 +143,9 @@ The expected response would be like:
   }
 }
 
-Now you can invoke the inference API based on the data object in the above response.
+Now you can invoke the inference API based on the data object in the above response following the command below.
 
-**⚠️ Important:** **use the content of data object as the single element of the input list in the payload**.
+**⚠️ Important:** **use the content of data object from your actual response as the single element of the input list in the payload**.
 
 ```base
 curl -X 'POST' \
@@ -244,9 +244,9 @@ The expected response would be like:
   }
 }
 
-Now you can invoke the inference API based on the data object in the above response.
+Now you can invoke the inference API based on the data object in the above response following the command below.
 
-**⚠️ Important:** **use the content of data object as the single element of the input list in the payload**.
+**⚠️ Important:** **use the content of data object from your actual response as the single element of the input list in the payload**.
 
 
 ```base
