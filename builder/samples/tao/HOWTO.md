@@ -118,6 +118,8 @@ curl -X POST \
 
 - Run inference on a single video
 
+First you need to upload a video file to the server.
+
 **⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with an actual file path in your system**.
 
 ```bash
@@ -216,6 +218,8 @@ curl -X POST \
 ```
 
 - Run inference on a single video
+
+First you need to upload a video file to the server.
 
 **⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with an actual file path in your system**.
 
