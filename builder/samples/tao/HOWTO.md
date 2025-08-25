@@ -79,7 +79,6 @@ python builder/main.py builder/samples/tao/ds_tao.yaml \
 2. Download the model files from NGC and apply the configurations. (here, we use object detection model `trafficcamnet_transformer_lite` as an example)
 
 ```bash
-
 ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:deployable_v1.0" --dest $MODEL_REPO
 chmod 777 $MODEL_REPO/trafficcamnet_transformer_lite_vdeployable_v1.0
 export TAO_MODEL_NAME=trafficcamnet_transformer_lite_vdeployable_v1.0
