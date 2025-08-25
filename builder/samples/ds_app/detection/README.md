@@ -5,10 +5,14 @@ This sample demonstrates how to build a deepstream application with Inference Bu
 
 ## Prerequisites
 
+**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory.
+
 Model files are loaded from '/workspace/models/{MODEL_NAME}' within the container, thus the volume must be correctly mapped from the host.
 You need to export MODEL_REPO environment variable to the path where you want to store the model files.
 
 ```bash
+mkdir ~/.cache/model-repo/
+sudo chmod -R 777 ~/.cache/model-repo/
 export MODEL_REPO=~/.cache/model-repo/
 ```
 
@@ -21,7 +25,7 @@ ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:d
 # Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
 mv trafficcamnet_transformer_lite_vdeployable_v1.0 $MODEL_REPO/rtdetr
 chmod 777 $MODEL_REPO/rtdetr
-cp builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/rtdetr/
+cp -r builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/rtdetr/
 ```
 
 ## Generate the DeepStream Application Package and Build Container Image
@@ -64,7 +68,8 @@ python builder/main.py builder/samples/ds_app/detection/ds_detect.yaml \
 export SAMPLE_INPUT=/path/to/your/samples/directory
 ```
 
-**Note:** When you set `enable_display: true` under the `render_config` section of your inference builder config, you need to have a display on your host and run both commands in this order to give the container access to it.
+**Note:** When you set `enable_display: true` under the `render_config` section of your inference builder config, you need to have a display on your host and run both commands in this order to give the container access to it. For more information about render configuration options, see the [render configuration documentation](https://gitlab-master.nvidia.com/DeepStreamSDK/inference-builder/-/tree/main/builder/samples/ds_app?ref_type=heads#render-configuration).
+
 
 First, set the display environment variable:
 ```bash
@@ -81,6 +86,8 @@ If the configuration is successful, you will see this message in the log: `acces
 ### Run with video input
 
 ```bash
+# media-url: the path or URL to the input media.
+# mime: the media type (e.g., "video/mp4" or "image/jpeg").
 docker run --rm --net=host --gpus all \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
@@ -95,6 +102,8 @@ docker run --rm --net=host --gpus all \
 **Note:** Replace `rtsp://<url_path>` (which is just a placeholder) with your actual RTSP stream URL. The application supports various RTSP stream formats including H.264, H.265, and MJPEG.
 
 ```bash
+# media-url: the path or URL to the input media.
+# mime: the media type (e.g., "video/mp4" or "image/jpeg").
 # Replace rtsp://<url_path> with your actual RTSP stream URL
 docker run --rm --net=host --gpus all \
     -v $MODEL_REPO:/workspace/models \
@@ -108,6 +117,7 @@ docker run --rm --net=host --gpus all \
 ### Run with source config
 
 ```bash
+# source-config: path to the source configuration file that defines input sources
 docker run --rm --net=host --gpus all \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
@@ -119,6 +129,7 @@ docker run --rm --net=host --gpus all \
 **Note:** To use a custom source configuration file, you need to mount your file into the docker container and reference it from within the container's filesystem. This allows you to use your own source configuration instead of the default one.
 
 ```bash
+# source-config: path to the source configuration file that defines input sources
 # /workspace/inputs/source_list_dynamic.yaml is just a placeholder for any config present in $SAMPLE_INPUT directory
 docker run --rm --net=host --gpus all \
     -v $MODEL_REPO:/workspace/models \
@@ -132,6 +143,8 @@ docker run --rm --net=host --gpus all \
 ### Run with image input
 
 ```bash
+# media-url: the path or URL to the input media.
+# mime: the media type (e.g., "video/mp4" or "image/jpeg").
 # /sample_input/test_1.jpg is just a placeholder for any image present in $SAMPLE_INPUT directory
 docker run --rm --net=host --gpus all \
     -v $SAMPLE_INPUT:/sample_input \
@@ -153,10 +166,16 @@ This section demonstrates how to set up and run the MV3DT specific models for mu
    Download the model content from [Google Drive](https://drive.google.com/drive/folders/1EiLjPYjGeIF2duElHlH11lu94_fO5WEZ?usp=drive_link) into your `$MODEL_REPO` directory.
 
     **Note:** MV3DT-specific model files will be made publicly available in a future release (required for DS-8.0). The download instructions above will be updated once the models are hosted on the official NGC catalog or other public repositories.
+    
+    **Note:** After downloading the models inside $MODEL_REPO, you would have four model directories like this:
+    - PeopleNetTransformer
+    - BodyPose3DNet
+    - ReID-MTMC
+    - PeopleNet2.6.3
 
 2. **Copy Required Files:**
    ```bash
-   cp builder/samples/ds_app/detection/PeopleNetTransformer/* $MODEL_REPO/PeopleNetTransformer/
+   cp -r builder/samples/ds_app/detection/PeopleNetTransformer/* $MODEL_REPO/PeopleNetTransformer/
    ```
 
 3. **Create Output Directories:**
@@ -238,6 +257,8 @@ python builder/main.py builder/samples/ds_app/detection/ds_mv3dt.yaml \
 **Run with multi-camera video input:**
 
 ```bash
+# media-url: the path or URL to the input media.
+# mime: the media type (e.g., "video/mp4" or "image/jpeg").
 docker run --rm --net=host --gpus all \
     -v $MODEL_REPO:/workspace/models \
     -v $SAMPLE_INPUT:/workspace/inputs \

@@ -6,10 +6,14 @@ This sample demonstrates how to build a deepstream application with Inference Bu
 
 ## Prerequisites
 
+**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory.
+
 Model files are loaded from '/workspace/models/{MODEL_NAME}' within the container, thus the volume must be correctly mapped from the host.
 You need to export MODEL_REPO environment variable to the path where you want to store the model files.
 
 ```bash
+mkdir ~/.cache/model-repo/
+sudo chmod -R 777 ~/.cache/model-repo/
 export MODEL_REPO=~/.cache/model-repo/
 ```
 
@@ -22,7 +26,7 @@ ngc registry model download-version "nvaie/pcbclassification:deployable_v1.1"
 # Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
 mv pcbclassification_vdeployable_v1.1 $MODEL_REPO/pcbclassification
 chmod 777 $MODEL_REPO/pcbclassification
-cp builder/samples/ds_app/classification/pcbclassification/* $MODEL_REPO/pcbclassification/
+cp -r builder/samples/ds_app/classification/pcbclassification/* $MODEL_REPO/pcbclassification/
 ```
 
 The same steps apply to the other classification model: changenet-classify
@@ -106,6 +110,8 @@ export SAMPLE_INPUT=/path/to/your/samples/directory
 ```
 
 ```bash
+# media-url: the path or URL to the input media.
+# mime: the media type (e.g., "video/mp4" or "image/jpeg").
 # /sample_input/test_1.jpg is just a placeholder for any image present in $SAMPLE_INPUT directory
 docker run --rm --net=host --gpus all \
     -v $SAMPLE_INPUT:/sample_input \
@@ -120,6 +126,8 @@ docker run --rm --net=host --gpus all \
 **Note:** For changenet classification model, it requires two images as input. Here we are using the sample images provided in the sample_input directory as a reference.
 
 ```bash
+# media-url: the path or URL to the input media.
+# mime: the media type (e.g., "video/mp4" or "image/jpeg").
 # /sample_input/test_1.jpg and /sample_input/golden_1.jpg are just a placeholder for the images present in $SAMPLE_INPUT directory
 docker run --rm --net=host --gpus all \
     -v $SAMPLE_INPUT:/sample_input \
