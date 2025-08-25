@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This example demonstrates how to Metropolis Computer Vision Inference Microservices with Inference Builder and using them to perform inference on images and videos.
+This example demonstrates how to build Metropolis Computer Vision Inference Microservices with Inference Builder and use them to perform inference on images and videos.
 
 While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
 
@@ -42,7 +42,7 @@ When being used along with the TAO Finetune Microservice, the microservices can 
 
 ## Build CV Inference Microservices
 
-All three CV inference microservices in the example are built the same way; the only differences are their configurations and processors.
+All three CV inference microservices in the example are built the same way; the only differences are their configurations and cusotmized processors.
 
 Using the same steps shown in this example, you can also build the CV inference microservice with fine-tuned models exported from [TAO Deploy](https://docs.nvidia.com/tao/tao-toolkit/text/tao_deploy/tao_deploy_overview.html).
 
