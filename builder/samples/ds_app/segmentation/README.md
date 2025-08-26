@@ -16,7 +16,7 @@ You need to export MODEL_REPO environment variable to the path where you want to
 ```bash
 mkdir ~/.cache/model-repo/
 sudo chmod -R 777 ~/.cache/model-repo/
-export MODEL_REPO=~/.cache/model-repo/
+export MODEL_REPO=~/.cache/model-repo
 ```
 
 You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/{model-name}/ directory, then copy the other required configurations to the same directory:

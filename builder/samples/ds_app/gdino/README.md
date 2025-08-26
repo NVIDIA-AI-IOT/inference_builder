@@ -16,7 +16,7 @@ You need to export MODEL_REPO environment variable to the path where you want to
 ```bash
 mkdir ~/.cache/model-repo/
 sudo chmod -R 777 ~/.cache/model-repo/
-export MODEL_REPO=~/.cache/model-repo/
+export MODEL_REPO=~/.cache/model-repo
 ```
 
 You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/{model-name}/ directory, then copy the other required configurations to the same directory:
@@ -40,9 +40,9 @@ Please use `mask_gdino` as the directory:
 ```bash
 ngc registry model download-version "nvidia/tao/mask_grounding_dino:mask_grounding_dino_swin_tiny_commercial_deployable_v1.0"
 # Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
-mv mask_grounding_dino_vmask_grounding_dino_swin_tiny_commercial_deployable_v1.0 
+mv mask_grounding_dino_vmask_grounding_dino_swin_tiny_commercial_deployable_v1.0 $MODEL_REPO/mask_gdino
 chmod 777 $MODEL_REPO/mask_gdino
-cp -r builder/samples/ds_app/gdino/mask_gdino/* $MODEL_REPO/mask_gdino/ $MODEL_REPO/mask_gdino
+cp -r builder/samples/ds_app/gdino/mask_gdino/* $MODEL_REPO/mask_gdino/
 ```
 
 ## Generate the deepstream application package and build it into a container image:
