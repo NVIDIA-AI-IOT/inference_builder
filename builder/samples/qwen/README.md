@@ -11,7 +11,7 @@ Three configurations are provided, allowing you to choose based on your specific
 2. trtllm_qwen.yaml: leveraging TensroRT LLM APIs for better performance
 3. trtllm_nvdec_qwen.yaml: leveraging h/w decoder and TensorRT LLM for the best performance
 
-While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
+We provide a sample Dockerfile for the example, which you can use to build a Docker image and test the microservice on any x86 system with an NVIDIA Hopper, and Blackwell GPU. Given the model requires high GPU usage, we recommend to test it on on an H100 or B200 system.
 
 ## Prerequisites
 

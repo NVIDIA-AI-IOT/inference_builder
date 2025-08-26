@@ -2,7 +2,7 @@
 
 This sample demonstrates how to build an inference pipeline for models that use triton backend. It also shows how to incorporate CVCUDA in customized processors to accelerate media processing.
 
-While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
+We provide a sample Dockerfile for the example, which you can use to build a Docker image and test the microservice on any x86 system with an NVIDIA Ampere, Hopper, and Blackwell GPU.
 
 # Prerequisites
 
@@ -50,7 +50,7 @@ docker compose up --build ms-changenet
 
 # Test the microservice with a client
 
-After the server is successfully started, open a new terminal in your inference-builder folder to launch the client to compare two sample images (you need a display for running the client to show the result):
+After the server has started successfully, open a new terminal in the inference-builder folder and launch the client to compare two sample images. A display environment is required for the client to visualize the results.
 
 ```bash
 source .venv/bin/activate && cd builder/samples/changenet

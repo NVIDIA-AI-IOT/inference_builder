@@ -2,9 +2,9 @@
 
 ## Introduction
 
-This example demonstrates how to build Metropolis Computer Vision Inference Microservices with Inference Builder and use them to perform inference on images and videos. A Dockerfile for building the TAO Inference Microservice image is provided, along with the necessary inference configuration files for constructing the pipeline.
+This example demonstrates how to build Metropolis Computer Vision Inference Microservices with Inference Builder and use them to perform inference on images and videos.
 
-While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
+We provide the Dockerfile which you can use to build a Docker image and deploy the microservice on any x86 system with an NVIDIA Ampere, Hopper, and Blackwell GPU.
 
 ## Prerequisites
 
@@ -83,6 +83,13 @@ ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:d
 chmod 777 $MODEL_REPO/trafficcamnet_transformer_lite_vdeployable_v1.0
 export TAO_MODEL_NAME=trafficcamnet_transformer_lite_vdeployable_v1.0
 cp builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/$TAO_MODEL_NAME/
+chmod 666 $MODEL_REPO/$TAO_MODEL_NAME/*
+```
+
+After downloading is complete, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
+
+```
+labels.txt  nvdsinfer_config.yaml  resnet50_trafficamnet_rtdetr.onnx
 ```
 
 3. Build and run the container image
@@ -187,6 +194,13 @@ ngc registry model download-version "nvidia/tao/grounding_dino:grounding_dino_sw
 chmod 777 $MODEL_REPO/grounding_dino_vgrounding_dino_swin_tiny_commercial_deployable_v1.0
 export TAO_MODEL_NAME=grounding_dino_vgrounding_dino_swin_tiny_commercial_deployable_v1.0
 cp builder/samples/ds_app/gdino/gdino/* $MODEL_REPO/$TAO_MODEL_NAME/
+chmod 666 $MODEL_REPO/$TAO_MODEL_NAME/*
+```
+
+After downloading is complete, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
+
+```
+experiment.yaml  grounding_dino_swin_tiny_commercial_deployable.onnx  nvdsinfer_config.yaml  nvdspreprocess_config.yaml
 ```
 
 3. Build and run the container image
@@ -295,6 +309,13 @@ ngc registry model download-version "nvidia/tao/visual_changenet_classification:
 chmod 777 $MODEL_REPO/visual_changenet_classification_vvisual_changenet_nvpcb_deployable_v1.0
 export TAO_MODEL_NAME=visual_changenet_classification_vvisual_changenet_nvpcb_deployable_v1.0
 cp builder/samples/ds_app/classification/changenet-classify/* $MODEL_REPO/$TAO_MODEL_NAME/
+chmod 666 $MODEL_REPO/$TAO_MODEL_NAME/*
+```
+
+After downloading is complete, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
+
+```
+experiment.yaml  grounding_dino_swin_tiny_commercial_deployable.onnx  nvdsinfer_config.yaml  nvdspreprocess_config.yaml
 ```
 
 3. Build and run the container image

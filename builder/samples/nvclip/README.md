@@ -2,7 +2,7 @@
 
 This sample demonstrate how to create the inference package for an embedding model with tensorrt backend (polygrapy) and fastapi server.
 
-While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
+We provide a sample Dockerfile for the example, which you can use to build a Docker image and test the microservice on any x86 system with an NVIDIA Ampere, Hopper, and Blackwell GPU.
 
 # Prerequisites
 
