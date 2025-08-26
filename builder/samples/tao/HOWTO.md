@@ -341,17 +341,19 @@ Changenet Classification model detects if a part is missing by comparing the tes
 Open the a new terminal and go the inference-builder folder, run the commands from your console:
 
 ```bash
-GOLDEN_PAYLOAD=$(echo -n "data:image/png;base64,"$(base64 -w 0 "builder/samples/tao/IMG_0002_C75.png"))
-TEST_PAYLOAD=$(echo -n "data:image/png;base64,"$(base64 -w 0 "builder/samples/tao/IMG_0002_C71.png"))
-
+GOLDEN_PAYLOAD=$(echo -n "data:image/png;base64,"$(base64 -w 0 "builder/samples/tao/pass_0.png"))
+TEST_PAYLOAD=$(echo -n "data:image/png;base64,"$(base64 -w 0 "builder/samples/tao/pass_1.png"))
+cat > payload.json <<EOF
+{
+  "input": [ "$GOLDEN_PAYLOAD", "$TEST_PAYLOAD" ],
+  "model": "nvidia/tao"
+}
+EOF
 curl -X POST \
   'http://localhost:8800/v1/inference' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
-  -d "{
-  \"input\": [ \"$GOLDEN_PAYLOAD\", \"$TEST_PAYLOAD\" ],
-  \"model\": \"nvidia/tao\"
-}"
+  -d @payload.json
 ```
 
 The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For the above sample input, a label of "notdefect" is expected.
