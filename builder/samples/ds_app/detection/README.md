@@ -88,7 +88,7 @@ If the configuration is successful, you will see this message in the log: `acces
 ```bash
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
-docker run --rm --net=host --gpus all \
+docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
@@ -105,7 +105,7 @@ docker run --rm --net=host --gpus all \
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
 # Replace rtsp://<url_path> with your actual RTSP stream URL
-docker run --rm --net=host --gpus all \
+docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
@@ -118,7 +118,7 @@ docker run --rm --net=host --gpus all \
 
 ```bash
 # source-config: path to the source configuration file that defines input sources
-docker run --rm --net=host --gpus all \
+docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
@@ -131,7 +131,7 @@ docker run --rm --net=host --gpus all \
 ```bash
 # source-config: path to the source configuration file that defines input sources
 # /workspace/inputs/source_list_dynamic.yaml is just a placeholder for any config present in $SAMPLE_INPUT directory
-docker run --rm --net=host --gpus all \
+docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v $SAMPLE_INPUT:/workspace/inputs \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
@@ -146,7 +146,7 @@ docker run --rm --net=host --gpus all \
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
 # /sample_input/test_1.jpg is just a placeholder for any image present in $SAMPLE_INPUT directory
-docker run --rm --net=host --gpus all \
+docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $SAMPLE_INPUT:/sample_input \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
@@ -259,7 +259,7 @@ python builder/main.py builder/samples/ds_app/detection/ds_mv3dt.yaml \
 ```bash
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
-docker run --rm --net=host --gpus all \
+docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v $SAMPLE_INPUT:/workspace/inputs \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \

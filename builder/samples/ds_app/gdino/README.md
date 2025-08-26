@@ -108,7 +108,7 @@ If the configuration is successful, you will see this message in the log: `acces
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
 # text: the text prompt for object detection (e.g., "car,person").
-docker run --rm --net=host --gpus all \
+docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
@@ -127,7 +127,7 @@ docker run --rm --net=host --gpus all \
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
 # text: the text prompt for object detection (e.g., "car,person").
 # Replace rtsp://<url_path> with your actual RTSP stream URL
-docker run --rm --net=host --gpus all \
+docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
@@ -145,7 +145,7 @@ docker run --rm --net=host --gpus all \
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
 # text: the text prompt for object detection (e.g., "car,person").
 # /sample_input/test.jpg is just a placeholder for any image present in $SAMPLE_INPUT directory
-docker run --rm --net=host --gpus all \
+docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $SAMPLE_INPUT:/sample_input \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
