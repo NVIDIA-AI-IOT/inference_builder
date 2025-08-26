@@ -114,15 +114,18 @@ Examples to show the basic inference use cases are listed as below:
 
 ```bash
 PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "<absolute_path_to_your_file.jpg>"))
+cat > payload.json <<EOF
+{
+  "input": [ "$PAYLOAD" ],
+  "model": "nvidia/tao"
+}
+EOF
 
 curl -X POST \
   'http://localhost:8800/v1/inference' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
-  -d "{
-  \"input\": [ \"$PAYLOAD\" ],
-  \"model\": \"nvidia/tao\"
-}"
+  -d @payload.json
 ```
 
 - Run inference on a single video
@@ -154,7 +157,7 @@ The expected response would be like:
 
 Now you can invoke the inference API based on the data object in the above response following the command below.
 
-**⚠️ Important:** **use the content of data object from your actual response as the single element of the input list in the payload**.
+**⚠️ Important:** **Please replace the `id` and `path` below with the values from your return response and run the curl command**.
 
 ```base
 curl -X 'POST' \
@@ -173,7 +176,7 @@ curl -X 'POST' \
 }' -N
 ```
 
-The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame.
+The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame. Given the model is trained for traffic scenes, it detects "car", "roadsign", "bicycle", "person" and "background".
 
 
 ### TAO CV Inference Microservice for Grounding Dino
@@ -225,16 +228,19 @@ Examples to show the basic inference use cases are listed as below:
 
 ```bash
 PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "<absolute_path_to_your_file.jpg>"))
+cat > payload.json <<EOF
+{
+  "input": [ "$PAYLOAD" ],
+  "text": [ ["car", "people"] ],
+  "model": "nvidia/tao"
+}
+EOF
 
 curl -X POST \
   'http://localhost:8800/v1/inference' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
-  -d "{
-  \"input\": [ \"$PAYLOAD\" ],
-  \"text\": [ [\"car\", \"people\"] ],
-  \"model\": \"nvidia/tao\"
-}"
+  -d @payload.json
 ```
 
 - Run inference on a single video
@@ -266,7 +272,7 @@ The expected response would be like:
 
 Now you can invoke the inference API based on the data object in the above response following the command below.
 
-**⚠️ Important:** **use the content of data object from your actual response as the single element of the input list in the payload**.
+**⚠️ Important:** **Please replace the `id` and `path` below with the values from your return response and run the curl command**.
 
 
 ```base

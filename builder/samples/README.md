@@ -27,6 +27,12 @@ Ensure nvidia runtime added to `/etc/docker/daemon.json` to run GPU-enabled cont
 }
 ```
 
+The `docker` group must exist in your system, please check if it has been created using `getent group docker`. Your current user must belong to the `docker` group, If not, run the command below, then log out and back in for the group change to take effect.
+
+```bash
+sudo usermod -aG docker $USER
+```
+
 # Models
 
 Some of the models for examples are from the NVIDIA GPU Cloud (NGC) repository, and certain models from NGC require active subscription. Please download and install the NGC CLI from the [NGC page](https://org.ngc.nvidia.com/setup/installers/cli) and follow the [NGC CLI Guide] (https://docs.ngc.nvidia.com/cli/index.html) to set up the tool.

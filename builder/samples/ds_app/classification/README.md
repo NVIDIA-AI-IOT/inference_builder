@@ -45,6 +45,18 @@ cp -r builder/samples/ds_app/classification/changenet-classify/* $MODEL_REPO/cha
 
 ## Generate the DeepStream Application Package and Build Container Image
 
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference-builder folder, then activate your virtual environment:
+
+```bash
+source .venv/bin/activate
+```
+
+You need to export your GITLAB_TOKEN for pulling source dependencies from gitlab
+
+```bash
+export GITLAB_TOKEN={Your GitLab Token}
+```
+
 ### For pcbclassification sample
 
 Please use ds_pcb.yaml as the configuration:
@@ -52,7 +64,6 @@ Please use ds_pcb.yaml as the configuration:
 #### For x86 Architecture
 
 ```bash
-export GITLAB_TOKEN={Your GitLab Token}
 python builder/main.py builder/samples/ds_app/classification/ds_pcb.yaml \
     -o builder/samples/ds_app \
     --server-type serverless \
@@ -66,7 +77,6 @@ python builder/main.py builder/samples/ds_app/classification/ds_pcb.yaml \
 #### For Tegra Architecture
 
 ```bash
-export GITLAB_TOKEN={Your GitLab Token}
 python builder/main.py builder/samples/ds_app/classification/ds_pcb.yaml \
     -o builder/samples/ds_app \
     --server-type serverless \
@@ -85,7 +95,6 @@ Please use ds_changenet.yaml as the configuration:
 #### For x86 Architecture
 
 ```bash
-export GITLAB_TOKEN={Your GitLab Token}
 python builder/main.py builder/samples/ds_app/classification/ds_changenet.yaml \
     -o builder/samples/ds_app \
     --server-type serverless \
@@ -99,7 +108,6 @@ python builder/main.py builder/samples/ds_app/classification/ds_changenet.yaml \
 #### For Tegra Architecture
 
 ```bash
-export GITLAB_TOKEN={Your GitLab Token}
 python builder/main.py builder/samples/ds_app/classification/ds_changenet.yaml \
     -o builder/samples/ds_app \
     --server-type serverless \
@@ -113,6 +121,8 @@ python builder/main.py builder/samples/ds_app/classification/ds_changenet.yaml \
 
 
 ## Run the deepstream app with image inputs:
+
+**Note:** The TensorRT engine is generated during the first time run and it takes several minutes. 
 
 **Note:** You can optionally set the `$SAMPLE_INPUT` environment variable to point to your samples directory if you perform inference on media files in your host.
 

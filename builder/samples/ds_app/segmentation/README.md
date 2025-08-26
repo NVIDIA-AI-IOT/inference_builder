@@ -43,10 +43,21 @@ cp -r builder/samples/ds_app/segmentation/mask2former/* $MODEL_REPO/mask2former/
 
 ## Generate the deepstream application package and build it into a container image:
 
-### For x86 Architecture
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference-builder folder, then activate your virtual environment:
+
+```bash
+source .venv/bin/activate
+```
+
+You need to export your GITLAB_TOKEN for pulling source dependencies from gitlab
 
 ```bash
 export GITLAB_TOKEN={Your GitLab Token}
+```
+
+### For x86 Architecture
+
+```bash
 python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml \
     -o builder/samples/ds_app \
     --server-type serverless \
@@ -60,7 +71,6 @@ python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml \
 ### For Tegra Architecture
 
 ```bash
-export GITLAB_TOKEN={Your GitLab Token}
 python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml \
     -o builder/samples/ds_app \
     --server-type serverless \
@@ -73,6 +83,8 @@ python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml \
 ```
 
 ## Run the deepstream app with different inputs:
+
+**Note:** The TensorRT engine is generated during the first time run and it takes several minutes. 
 
 **Note:** You can optionally set the `$SAMPLE_INPUT` environment variable to point to your samples directory if you perform inference on media files in your host.
 
