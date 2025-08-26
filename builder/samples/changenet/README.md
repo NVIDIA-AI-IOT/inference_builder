@@ -50,7 +50,7 @@ docker compose up --build ms-changenet
 
 # Test the microservice with a client
 
-After the server is successfully started, open a new terminal in your inference-builder folder to launch the client to compare two sample images:
+After the server is successfully started, open a new terminal in your inference-builder folder to launch the client to compare two sample images (you need a display for running the client to show the result):
 
 ```bash
 source .venv/bin/activate && cd builder/samples/changenet
