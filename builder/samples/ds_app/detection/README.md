@@ -13,7 +13,7 @@ You need to export MODEL_REPO environment variable to the path where you want to
 ```bash
 mkdir ~/.cache/model-repo/
 sudo chmod -R 777 ~/.cache/model-repo/
-export MODEL_REPO=~/.cache/model-repo/
+export MODEL_REPO=~/.cache/model-repo
 ```
 
 For example: if you define a model with name "rtdetr", you must put all the model files including nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/rtdetr' for the model to be correctly loaded.
