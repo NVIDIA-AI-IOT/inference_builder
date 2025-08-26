@@ -127,14 +127,14 @@ export SAMPLE_INPUT=/path/to/your/samples/directory
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
 export SAMPLE_INPUT=$(realpath builder/samples/ds_app/classification/sample-inputs/)
-docker run --rm --net=host --gpus all \
+docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $SAMPLE_INPUT:/sample_input \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
     deepstream-app \
     --media-url /sample_input/IMG_0002_C71.png \
-    --mime image/jpeg
+    --mime image/png
 ```
 
 ### For changenet-classify sample
@@ -145,7 +145,7 @@ docker run --rm --net=host --gpus all \
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
 # /sample_input/test_1.jpg and /sample_input/golden_1.jpg are just a placeholder for the images present in $SAMPLE_INPUT directory
-docker run --rm --net=host --gpus all \
+docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $SAMPLE_INPUT:/sample_input \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
