@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This example demonstrates how to build Metropolis Computer Vision Inference Microservices with Inference Builder and use them to perform inference on images and videos.
+This example demonstrates how to build Metropolis Computer Vision Inference Microservices with Inference Builder and use them to perform inference on images and videos. A Dockerfile for building the TAO Inference Microservice image is provided, along with the necessary inference configuration files for constructing the pipeline.
 
 While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
 
@@ -42,11 +42,11 @@ When being used along with the TAO Finetune Microservice, the Inference Microser
 
 ## Build CV Inference Microservices
 
-All three CV Inference Microservices in the example are built the same way; the only differences are their configurations and cusotmized processors.
+All three CV Inference Microservices in the example are built the same way; the only differences are their configurations and customized processors.
 
 Using the same steps shown in this example, you can also build the CV inference microservice with fine-tuned models exported from [TAO Deploy](https://docs.nvidia.com/tao/tao-toolkit/text/tao_deploy/tao_deploy_overview.html).
 
-Before you begin, create the model repository as described below.
+Before you begin, create a model repository. Place all model files and runtime configuration files in a single, self-contained folder. The pipeline selects the model based on the TAO_MODEL_NAME environment variable (set in docker-compose.yaml), which must match the model folder name.
 
 ```bash
 mkdir -p ~/.cache/model-repo && chmod 777 ~/.cache/model-repo
@@ -86,6 +86,8 @@ cp builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/$TAO_MODEL_NAME/
 ```
 
 3. Build and run the container image
+
+Building the Docker image from the provided Dockerfile may take 10–20 minutes, depending on your network bandwidth and the hardware in use.
 
 ```bash
 cd builder/samples
@@ -164,6 +166,8 @@ curl -X 'POST' \
 }' -N
 ```
 
+The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame.
+
 
 ### TAO CV Inference Microservice for Grounding Dino
 
@@ -186,6 +190,8 @@ cp builder/samples/ds_app/gdino/gdino/* $MODEL_REPO/$TAO_MODEL_NAME/
 ```
 
 3. Build and run the container image
+
+Building the Docker image from the provided Dockerfile may take 10–20 minutes, depending on your network bandwidth and the hardware in use.
 
 ```bash
 cd builder/samples
@@ -268,6 +274,9 @@ curl -X 'POST' \
   "model": "nvidia/tao"
 }' -N
 ```
+
+The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame.
+
 ### TAO CV Inference Microservice for Changenet Classification
 
 This microservice supports Visual Changenet Classification model.
@@ -289,6 +298,8 @@ cp builder/samples/ds_app/classification/changenet-classify/* $MODEL_REPO/$TAO_M
 ```
 
 3. Build and run the container image
+
+Building the Docker image from the provided Dockerfile may take 10–20 minutes, depending on your network bandwidth and the hardware in use.
 
 ```bash
 cd builder/samples
@@ -315,3 +326,5 @@ curl -X POST \
   \"model\": \"nvidia/tao\"
 }"
 ```
+
+The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For the above sample input, a label of "notdefect" is expected.

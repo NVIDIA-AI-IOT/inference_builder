@@ -4,6 +4,8 @@ The samples in this folder demonstrates how to use Inference Builder to create i
 
 For examples that run as microservices, we’ve provided an all-in-one docker-compose.yml to manage them together. You can customize the container behavior by changing the configurations there accordingly.
 
+While Inference Builder works with Ampere, Hopper, and Blackwell architectures, the examples’ model and backend choices set the real hardware requirements. For example, Qwen2.5-7B-Instruct model with TensorRT-LLM backend requires very high GPU memory and can only run on H100 and B200.
+
 # Prerequisite
 
 Below packages are required to build and run the container images:
@@ -24,8 +26,6 @@ Ensure nvidia runtime added to `/etc/docker/daemon.json` to run GPU-enabled cont
     }
 }
 ```
-
-While Inference Builder supports Ampere, Hopper, and Blackwell architectures, it is the examples’ model and backend choices set the real hardware requirements
 
 # Models
 
