@@ -59,7 +59,6 @@ You need to export your GITLAB_TOKEN for pulling source dependencies from gitlab
 export GITLAB_TOKEN={Your GitLab Token}
 ```
 
-
 ### For x86 Architecture
 
 ```bash
