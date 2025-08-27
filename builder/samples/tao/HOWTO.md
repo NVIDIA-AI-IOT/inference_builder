@@ -4,7 +4,7 @@
 
 This example demonstrates how to build Metropolis Computer Vision Inference Microservices with Inference Builder and use them to perform inference on images and videos.
 
-We provide the Dockerfile which you can use to build a Docker image and deploy the microservice on any x86 system with an NVIDIA Ampere, Hopper, and Blackwell GPU. 
+We provide the Dockerfile which you can use to build a Docker image and deploy the microservice on any x86 system with an NVIDIA Ampere, Hopper, and Blackwell GPU. We also provide a sample OpenAPI specification that you can use as a reference when customizing your own API definitions.
 
 You can use the models listed below with your microservices, or use your own checkpoints generated from TAO Fine-Tune Microservices. In addition, you can modify the Dockerfile to add or remove dependencies that are specifically required by your model.
 
