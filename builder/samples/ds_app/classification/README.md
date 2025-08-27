@@ -154,15 +154,15 @@ docker run --rm --net=host --gpus all --runtime=nvidia \
 ```bash
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
-# /sample_input/test_1.jpg and /sample_input/golden_1.jpg are just a placeholder for the images present in $SAMPLE_INPUT directory
+export SAMPLE_INPUT=$(realpath builder/samples/tao/)
 docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $SAMPLE_INPUT:/sample_input \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
     deepstream-app \
-    --media-url /sample_input/test_1.jpg /sample_input/golden_1.jpg \
-    --mime image/jpeg image/jpeg
+    --media-url /sample_input/pass_0.png /sample_input/pass_1.png \
+    --mime image/png image/png
 ```
 
 For classification samples, the output is a list of labels defined in labels.txt. e.g, for pcbclassification model, the output label will be "missing" if there is a part missing from the input image.

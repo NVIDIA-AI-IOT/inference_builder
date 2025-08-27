@@ -37,4 +37,26 @@ sudo usermod -aG docker $USER
 
 Some of the models for examples are from the NVIDIA GPU Cloud (NGC) repository, and certain models from NGC require active subscription. Please download and install the NGC CLI from the [NGC page](https://org.ngc.nvidia.com/setup/installers/cli) and follow the [NGC CLI Guide] (https://docs.ngc.nvidia.com/cli/index.html) to set up the tool.
 
+# List of Examples:
 
+## Deepstream Backend
+
+- ds_app: examples of building standalone deepstream application.
+- tao: examples of building inference microservices using deepstream pipeline and fastapi
+
+## Triton Backend
+
+- changenet: example of building inference microservices with triton server
+
+## TensorRT Backend
+
+- nvclip: example of building inference microservices with TensorRT backend
+
+## TensorRT-LLM Backend
+
+- qwen: example of building inference microservices with TensorRT-LLM backend for vlm models
+- vila: example of building infernece microservices with TensorRT-LLM using the legacy flow (to be deprecated)
+
+## Dry-run
+
+- dummy: This is an example of building dry-run inference pipeline to test the data flow.
