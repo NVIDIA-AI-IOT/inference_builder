@@ -2,9 +2,6 @@
 
 This sample demonstrates how to build a deepstream application with Inference Builder using segmentation models:
 1. citysemsegformer: deployable_onnx_v1.0 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/citysemsegformer
-2. mask2former: mask2former_swint_deployable_v1.0 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask2former
-
-**Note:** For both citysemsegformer and mask2former models, the steps are the same as described below. Users just need to replace the model name from "citysemsegformer" to "mask2former" in the commands and directory names.
 
 ## Prerequisites
 
@@ -21,8 +18,6 @@ export MODEL_REPO=~/.cache/model-repo
 
 You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/{model-name}/ directory, then copy the other required configurations to the same directory:
 
-### For citysegformer sample
-
 ```bash
 ngc registry model download-version "nvidia/tao/citysemsegformer:deployable_onnx_v1.0"
 # Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
@@ -31,22 +26,23 @@ chmod 777 $MODEL_REPO/citysemsegformer
 cp -r builder/samples/ds_app/segmentation/citysemsegformer/* $MODEL_REPO/citysemsegformer/
 ```
 
-### For mask2former sample
+## Generate the deepstream application package and build it into a container image:
+
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference-builder folder, then activate your virtual environment:
 
 ```bash
-ngc registry model download-version "nvidia/tao/mask2former:mask2former_swint_deployable_v1.0"
-# Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
-mv mask2former_vmask2former_swint_deployable_v1.0 $MODEL_REPO/mask2former
-chmod 777 $MODEL_REPO/mask2former
-cp -r builder/samples/ds_app/segmentation/mask2former/* $MODEL_REPO/mask2former/
+source .venv/bin/activate
 ```
 
-## Generate the deepstream application package and build it into a container image:
+You need to export your GITLAB_TOKEN for pulling source dependencies from gitlab
+
+```bash
+export GITLAB_TOKEN={Your GitLab Token}
+```
 
 ### For x86 Architecture
 
 ```bash
-export GITLAB_TOKEN={Your GitLab Token}
 python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml \
     -o builder/samples/ds_app \
     --server-type serverless \
@@ -60,7 +56,6 @@ python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml \
 ### For Tegra Architecture
 
 ```bash
-export GITLAB_TOKEN={Your GitLab Token}
 python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml \
     -o builder/samples/ds_app \
     --server-type serverless \
@@ -73,6 +68,8 @@ python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml \
 ```
 
 ## Run the deepstream app with different inputs:
+
+**Note:** The TensorRT engine is generated during the first time run and it takes several minutes.
 
 **Note:** You can optionally set the `$SAMPLE_INPUT` environment variable to point to your samples directory if you perform inference on media files in your host.
 

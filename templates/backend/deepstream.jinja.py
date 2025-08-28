@@ -558,6 +558,7 @@ class MetadataOutput(BaseTensorOutput):
                 top = int(object_meta.rect_params.top)
                 width = int(object_meta.rect_params.width)
                 height = int(object_meta.rect_params.height)
+                instance_mask = object_meta.mask_params.mask_array
                 metadata.shape = [self._shape[0], self._shape[1]]
                 metadata.bboxes.append([left, top, left + width, top + height])
                 metadata.probs.append(object_meta.confidence)
@@ -566,6 +567,8 @@ class MetadataOutput(BaseTensorOutput):
                         labels.append(classifier.get_n_label(i))
                 metadata.labels.append(labels)
                 metadata.objects.append(object_meta.object_id)
+                if instance_mask:
+                    metadata.seg_maps.append(instance_mask.astype(int))
             for user_meta in frame_meta.segmentation_items:
                 seg_meta = user_meta.as_segmentation()
                 if seg_meta:

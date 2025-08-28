@@ -4,14 +4,15 @@ The sample configuration supports multiple input types including image data, ima
 
 Build the dummy inference flow:
 
-cd builder
-python main.py samples/dummy/dummy.yaml -a samples/dummy/openapi.yaml -c samples/dummy/processors.py -o samples/dummy  --server-type fastapi -t
-
+```bash
+python builder/main.py builder/samples/dummy/dummy.yaml -a builder/samples/dummy/openapi.yaml -c builder/samples/dummy/processors.py -o builder/samples/dummy  --server-type fastapi -t
+```
 Run the dummy inference flow:
 
-cd samples
+```bash
+cd builder/samples
 docker compose up --build dry-run
-
+```
 Test the dummy inference flow:
 
 Go to http://localhost:8800/docs to see the swagger ui.

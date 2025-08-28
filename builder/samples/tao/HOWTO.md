@@ -2,9 +2,11 @@
 
 ## Introduction
 
-This example demonstrates how to build Metropolis Computer Vision Inference Microservices with Inference Builder and use them to perform inference on images and videos. A Dockerfile for building the TAO Inference Microservice image is provided, along with the necessary inference configuration files for constructing the pipeline.
+This example demonstrates how to build Metropolis Computer Vision Inference Microservices with Inference Builder and use them to perform inference on images and videos.
 
-While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
+We provide the Dockerfile which you can use to build a Docker image and deploy the microservice on any x86 system with an NVIDIA Ampere, Hopper, and Blackwell GPU. We also provide a sample OpenAPI specification that you can use as a reference when customizing your own API definitions.
+
+You can use the models listed below with your microservices, or use your own checkpoints generated from TAO Fine-Tune Microservices. In addition, you can modify the Dockerfile to add or remove dependencies that are specifically required by your model.
 
 ## Prerequisites
 
@@ -83,6 +85,13 @@ ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:d
 chmod 777 $MODEL_REPO/trafficcamnet_transformer_lite_vdeployable_v1.0
 export TAO_MODEL_NAME=trafficcamnet_transformer_lite_vdeployable_v1.0
 cp builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/$TAO_MODEL_NAME/
+chmod 666 $MODEL_REPO/$TAO_MODEL_NAME/*
+```
+
+After downloading is complete, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
+
+```
+labels.txt  nvdsinfer_config.yaml  resnet50_trafficamnet_rtdetr.onnx
 ```
 
 3. Build and run the container image
@@ -97,7 +106,7 @@ docker compose up tao-cv --build
 
 4. Test the microservice
 
-The microservice provides a REST API that can be used to run inference on images and videos. Once the server is ready, an OpenAPI compatible interactive documentation endpoint is available on the server for detailed API usage: http://localhost:8800/docs.
+The microservice exposes a REST API that accepts inference requests with images and videos over HTTP, and it works with any frontend that is compatible with the OpenAPI spec. Once the server is ready, an OpenAPI compatible interactive documentation endpoint is available on the server for detailed API usage: http://localhost:8800/docs. Considering the compatibility, we test the raw API using curl commands.
 
 Examples to show the basic inference use cases are listed as below:
 
@@ -107,15 +116,18 @@ Examples to show the basic inference use cases are listed as below:
 
 ```bash
 PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "<absolute_path_to_your_file.jpg>"))
+cat > payload.json <<EOF
+{
+  "input": [ "$PAYLOAD" ],
+  "model": "nvidia/tao"
+}
+EOF
 
 curl -X POST \
   'http://localhost:8800/v1/inference' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
-  -d "{
-  \"input\": [ \"$PAYLOAD\" ],
-  \"model\": \"nvidia/tao\"
-}"
+  -d @payload.json
 ```
 
 - Run inference on a single video
@@ -147,7 +159,7 @@ The expected response would be like:
 
 Now you can invoke the inference API based on the data object in the above response following the command below.
 
-**⚠️ Important:** **use the content of data object from your actual response as the single element of the input list in the payload**.
+**⚠️ Important:** **Please replace the `id` and `path` below with the values from your return response and run the curl command**.
 
 ```base
 curl -X 'POST' \
@@ -163,10 +175,10 @@ curl -X 'POST' \
     "contentType": "video/mp4"
   } ],
   "model": "nvidia/tao"
-}' -N
+The microservice exposes a REST API that accepts inference requests with images and videos over HTTP, and it works with any frontend that is compatible with the OpenAPI spec. Once the server is ready, an OpenAPI compatible interactive documentation endpoint is available on the server for detailed API usage: http://localhost:8800/docs. Considering the compatibility, we test the raw API using curl commands.}' -N
 ```
 
-The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame.
+The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame. Given the model is trained for traffic scenes, it detects "car", "roadsign", "bicycle", "person" and "background".
 
 
 ### TAO CV Inference Microservice for Grounding Dino
@@ -187,6 +199,13 @@ ngc registry model download-version "nvidia/tao/grounding_dino:grounding_dino_sw
 chmod 777 $MODEL_REPO/grounding_dino_vgrounding_dino_swin_tiny_commercial_deployable_v1.0
 export TAO_MODEL_NAME=grounding_dino_vgrounding_dino_swin_tiny_commercial_deployable_v1.0
 cp builder/samples/ds_app/gdino/gdino/* $MODEL_REPO/$TAO_MODEL_NAME/
+chmod 666 $MODEL_REPO/$TAO_MODEL_NAME/*
+```
+
+After downloading is complete, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
+
+```
+experiment.yaml  grounding_dino_swin_tiny_commercial_deployable.onnx  nvdsinfer_config.yaml  nvdspreprocess_config.yaml
 ```
 
 3. Build and run the container image
@@ -201,7 +220,7 @@ docker compose up tao-cv --build
 
 4. Test  the microservice
 
-The microservice provides a REST API that can be used to run inference on images and videos. Once the server is ready, an OpenAPI compatible interactive documentation endpoint is available on the server for detailed API usage: http://localhost:8800/docs.
+The microservice exposes a REST API that accepts inference requests with images and videos over HTTP, and it works with any frontend that is compatible with the OpenAPI spec. Once the server is ready, an OpenAPI compatible interactive documentation endpoint is available on the server for detailed API usage: http://localhost:8800/docs. Considering the compatibility, we test the raw API using curl commands.
 
 Examples to show the basic inference use cases are listed as below:
 
@@ -211,16 +230,19 @@ Examples to show the basic inference use cases are listed as below:
 
 ```bash
 PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "<absolute_path_to_your_file.jpg>"))
+cat > payload.json <<EOF
+{
+  "input": [ "$PAYLOAD" ],
+  "text": [ ["car", "people"] ],
+  "model": "nvidia/tao"
+}
+EOF
 
 curl -X POST \
   'http://localhost:8800/v1/inference' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
-  -d "{
-  \"input\": [ \"$PAYLOAD\" ],
-  \"text\": [ [\"car\", \"people\"] ],
-  \"model\": \"nvidia/tao\"
-}"
+  -d @payload.json
 ```
 
 - Run inference on a single video
@@ -252,7 +274,7 @@ The expected response would be like:
 
 Now you can invoke the inference API based on the data object in the above response following the command below.
 
-**⚠️ Important:** **use the content of data object from your actual response as the single element of the input list in the payload**.
+**⚠️ Important:** **Please replace the `id` and `path` below with the values from your return response and run the curl command**.
 
 
 ```base
@@ -295,6 +317,13 @@ ngc registry model download-version "nvidia/tao/visual_changenet_classification:
 chmod 777 $MODEL_REPO/visual_changenet_classification_vvisual_changenet_nvpcb_deployable_v1.0
 export TAO_MODEL_NAME=visual_changenet_classification_vvisual_changenet_nvpcb_deployable_v1.0
 cp builder/samples/ds_app/classification/changenet-classify/* $MODEL_REPO/$TAO_MODEL_NAME/
+chmod 666 $MODEL_REPO/$TAO_MODEL_NAME/*
+```
+
+After downloading is complete, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
+
+```
+experiment.yaml  grounding_dino_swin_tiny_commercial_deployable.onnx  nvdsinfer_config.yaml  nvdspreprocess_config.yaml
 ```
 
 3. Build and run the container image
@@ -314,17 +343,19 @@ Changenet Classification model detects if a part is missing by comparing the tes
 Open the a new terminal and go the inference-builder folder, run the commands from your console:
 
 ```bash
-GOLDEN_PAYLOAD=$(echo -n "data:image/png;base64,"$(base64 -w 0 "builder/samples/tao/IMG_0002_C75.png"))
-TEST_PAYLOAD=$(echo -n "data:image/png;base64,"$(base64 -w 0 "builder/samples/tao/IMG_0002_C71.png"))
-
+GOLDEN_PAYLOAD=$(echo -n "data:image/png;base64,"$(base64 -w 0 "builder/samples/tao/pass_0.png"))
+TEST_PAYLOAD=$(echo -n "data:image/png;base64,"$(base64 -w 0 "builder/samples/tao/pass_1.png"))
+cat > payload.json <<EOF
+{
+  "input": [ "$GOLDEN_PAYLOAD", "$TEST_PAYLOAD" ],
+  "model": "nvidia/tao"
+}
+EOF
 curl -X POST \
   'http://localhost:8800/v1/inference' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
-  -d "{
-  \"input\": [ \"$GOLDEN_PAYLOAD\", \"$TEST_PAYLOAD\" ],
-  \"model\": \"nvidia/tao\"
-}"
+  -d @payload.json
 ```
 
 The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For the above sample input, a label of "notdefect" is expected.

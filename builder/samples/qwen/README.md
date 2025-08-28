@@ -11,14 +11,21 @@ Three configurations are provided, allowing you to choose based on your specific
 2. trtllm_qwen.yaml: leveraging TensroRT LLM APIs for better performance
 3. trtllm_nvdec_qwen.yaml: leveraging h/w decoder and TensorRT LLM for the best performance
 
-While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
+We provide a sample Dockerfile for the example, which you can use to build a Docker image and test the microservice on any x86 system with an NVIDIA Hopper, and Blackwell GPU. Given the model requires high GPU usage, we recommend to test it on on an H100 or B200 system.
 
 ## Prerequisites
+
+Before downloading the model file, you need to set up your model repository:
+
+```bash
+mkdir -p ~/.cache/model-repo && chmod 777 ~/.cache/model-repo
+export MODEL_REPO=~/.cache/model-repo
+```
 
 The model checkpoints can be downloaded from huggingface (Be sure to have git-lfs installed):
 
 ```bash
-git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct  ~/.cache/model-repo/Qwen2.5-VL-7B-Instruct
+git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct  $MODEL_REPO/Qwen2.5-VL-7B-Instruct
 ```
 
 Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference-builder folder, then activate your virtual environment:
@@ -40,7 +47,7 @@ python builder/main.py builder/samples/qwen/pytorch_qwen.yaml --api-spec builder
 
 #### Build and Start the Inference Microservice:
 
-The sample folder already contains all the ingredients for building the microservice, all you need is to run the command:
+The sample folder already contains all the ingredients for building the microservice, all you need is to run the command (before you start, be sure you have enough free GPU memory on your system):
 
 ```bash
 cd builder/samples && docker compose up ms-qwen --build
@@ -50,14 +57,16 @@ The build may take a while—images are pulled from NGC and speed depends on you
 
 #### Test the Inference Microservice with a client
 
-Wait for the server to start, then open a new terminal in your inference-builder folder. The sample includes a test OpenAI client. For image input, run the client with the path to an image file.
+Wait for the server to start, then open a new terminal in your inference-builder folder. 
+
+The sample includes a test OpenAI client. For image input, run the client with the path to an image file. (You can use your test images or download the demo picture from https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg)
 
 ```bash
 source .venv/bin/activate && cd builder/samples/qwen
 python client.py --images <your_image.jpg> # replace placeholder <your_image.jpg> with an actual file
 ```
 
-For video input, you need to first upload a test video file:
+For video input, you need to first upload a test video file. (You can use your test videos or download the demo video from https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-VL/space_woaudio.mp4)
 
 **⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with an actual file path in your system**.
 

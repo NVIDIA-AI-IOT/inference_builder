@@ -19,6 +19,8 @@ If you don't have NGC CLI installed, please download and install it from [this p
 
 ### Semantic Segmentation
 - **CitySemSegFormer**: [CitySemSegFormer Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/citysemsegformer)
+
+### Instance Segmentation
 - **Mask2Fomer**: [Masked-attention Mask Transformer](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask2former)
 
 ### Grounding Dino
