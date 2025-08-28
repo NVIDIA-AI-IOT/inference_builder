@@ -68,6 +68,19 @@ docker compose up --build ms-changenet
 
 After the server has started successfully, open a new terminal in the inference-builder folder and launch the client to compare two sample images. A display environment is required for the client to visualize the difference between the two input pictures.
 
+Set the display environment variable:
+
+```bash
+export DISPLAY=:0  # or :1 depending on your system
+```
+
+Then, allow X server connections from any host:
+```bash
+xhost +
+```
+
+If the configuration is successful, you will see this message in the log: `access control disabled, clients can connect from any host`.
+
 ```bash
 source .venv/bin/activate && cd builder/samples/changenet
 python nim_client.py --host 127.0.0.1 --port 8803 --file test_0.jpg golden_0.jpg

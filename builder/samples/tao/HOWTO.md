@@ -114,6 +114,8 @@ Examples to show the basic inference use cases are listed as below:
 
 **⚠️ Important:** **replace the placeholder `<absolute_path_to_your_file.jpg>` in below command with an actual file with absolute path in your system.**
 
+**Note:** If the curl command fails, please try using a smaller image in size.
+
 ```bash
 PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "<absolute_path_to_your_file.jpg>"))
 cat > payload.json <<EOF
@@ -175,8 +177,9 @@ curl -X 'POST' \
     "contentType": "video/mp4"
   } ],
   "model": "nvidia/tao"
-The microservice exposes a REST API that accepts inference requests with images and videos over HTTP, and it works with any frontend that is compatible with the OpenAPI spec. Once the server is ready, an OpenAPI compatible interactive documentation endpoint is available on the server for detailed API usage: http://localhost:8800/docs. Considering the compatibility, we test the raw API using curl commands.}' -N
 ```
+
+The microservice exposes a REST API that accepts inference requests with images and videos over HTTP, and it works with any frontend that is compatible with the OpenAPI spec. Once the server is ready, an OpenAPI compatible interactive documentation endpoint is available on the server for detailed API usage: http://localhost:8800/docs. Considering the compatibility, we test the raw API using curl commands.}' -N
 
 The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame. Given the model is trained for traffic scenes, it detects "car", "roadsign", "bicycle", "person" and "background".
 
@@ -227,6 +230,8 @@ Examples to show the basic inference use cases are listed as below:
 - Run inference on a single image
 
 **⚠️ Important:** **replace the placeholder `<absolute_path_to_your_file.jpg>` in below command with an actual file with absolute path in your system.**
+
+**Note:** If the curl command fails, please try using a smaller image in size.
 
 ```bash
 PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "<absolute_path_to_your_file.jpg>"))

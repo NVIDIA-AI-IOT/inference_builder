@@ -78,7 +78,7 @@ python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml \
 export SAMPLE_INPUT=/path/to/your/samples/directory
 ```
 
-**Note:** When you set `enable_display: true` under the `render_config` section of your inference builder config, you need to have a display on your host and run both commands in this order to give the container access to it. For more information about render configuration options, see the [render configuration documentation](https://gitlab-master.nvidia.com/DeepStreamSDK/inference-builder/-/tree/main/builder/samples/ds_app?ref_type=heads#render-configuration).
+**Note:** When you set `enable_display: true` under the `render_config` section of [ds_segformer.yaml](ds_segformer.yaml), you need to have a display on your host and run both commands in this order to give the container access to it. For more information about render configuration options, see the [render configuration section](../README.md#render-configuration).
 
 First, set the display environment variable:
 ```bash

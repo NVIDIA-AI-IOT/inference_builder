@@ -41,6 +41,7 @@ git submodule update --init --recursive
 sudo apt update
 sudo apt install protobuf-compiler
 sudo apt install python3.12-venv python3.12-dev
+sudo apt install docker-buildx
 ```
 
 Create python virtual env and install dependent packages
