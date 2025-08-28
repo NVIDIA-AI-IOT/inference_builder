@@ -2,6 +2,9 @@
 
 This sample demonstrates how to build a deepstream application with Inference Builder using object detection models:
 1. rtdetr: trafficcamnet_transformer_lite_vdeployable_v1.0 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite
+2. mask2former: mask2former_swint_deployable_v1.0 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask2former
+
+**Note:** For both citysemsegformer and mask2former models, the steps are the same as described below. Users just need to replace the model name from "citysemsegformer" to "mask2former" in the commands and directory names.
 
 ## Prerequisites
 
@@ -20,6 +23,8 @@ For example: if you define a model with name "rtdetr", you must put all the mode
 
 You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/rtdetr/ directory, then copy the other required configurations to the same directory:
 
+### For rtdetr model
+
 ```bash
 ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:deployable_v1.0"
 # Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
@@ -27,6 +32,18 @@ mv trafficcamnet_transformer_lite_vdeployable_v1.0 $MODEL_REPO/rtdetr
 chmod 777 $MODEL_REPO/rtdetr
 cp -r builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/rtdetr/
 ```
+
+### For mask2former model
+
+```bash
+ngc registry model download-version "nvidia/tao/mask2former:mask2former_swint_deployable_v1.0"
+# Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
+mv mask2former_vmask2former_swint_deployable_v1.0 $MODEL_REPO/mask2former
+chmod 777 $MODEL_REPO/mask2former
+cp -r builder/samples/ds_app/segmentation/mask2former/* $MODEL_REPO/mask2former/
+```
+
+By default, rtdetr model is used. If you want to use mask2former, please change the name of the model in ds_detect.yaml from "rtdetr" to "mask2former" before moving to the next step.
 
 ## Generate the DeepStream Application Package and Build Container Image
 
@@ -71,7 +88,7 @@ python builder/main.py builder/samples/ds_app/detection/ds_detect.yaml \
 
 ## Run the deepstream app with different inputs:
 
-**Note:** The TensorRT engine is generated during the first time run and it takes several minutes. 
+**Note:** The TensorRT engine is generated during the first time run and it takes several minutes.
 
 **Note:** You can optionally set the `$SAMPLE_INPUT` environment variable to point to your samples directory if you perform inference on media files in your host.
 
@@ -178,7 +195,7 @@ This section demonstrates how to set up and run the MV3DT specific models for mu
    Download the model content from [Google Drive](https://drive.google.com/drive/folders/1EiLjPYjGeIF2duElHlH11lu94_fO5WEZ?usp=drive_link) into your `$MODEL_REPO` directory.
 
     **Note:** MV3DT-specific model files will be made publicly available in a future release (required for DS-8.0). The download instructions above will be updated once the models are hosted on the official NGC catalog or other public repositories.
-    
+
     **Note:** After downloading the models inside $MODEL_REPO, you would have four model directories like this:
     - PeopleNetTransformer
     - BodyPose3DNet
