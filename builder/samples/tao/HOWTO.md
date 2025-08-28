@@ -103,7 +103,7 @@ cp builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/$TAO_MODEL_NAME/
 chmod 666 $MODEL_REPO/$TAO_MODEL_NAME/*
 ```
 
-After downloading is complete, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
+After completing above steps, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
 
 ```
 labels.txt  nvdsinfer_config.yaml  resnet50_trafficamnet_rtdetr.onnx
@@ -221,7 +221,7 @@ cp builder/samples/ds_app/gdino/gdino/* $MODEL_REPO/$TAO_MODEL_NAME/
 chmod 666 $MODEL_REPO/$TAO_MODEL_NAME/*
 ```
 
-After downloading is complete, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
+After completing above steps, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
 
 ```
 experiment.yaml  grounding_dino_swin_tiny_commercial_deployable.onnx  nvdsinfer_config.yaml  nvdspreprocess_config.yaml
@@ -343,7 +343,7 @@ cp builder/samples/ds_app/classification/changenet-classify/* $MODEL_REPO/$TAO_M
 chmod 666 $MODEL_REPO/$TAO_MODEL_NAME/*
 ```
 
-After downloading is complete, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
+After completing above steps, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
 
 ```
 experiment.yaml  grounding_dino_swin_tiny_commercial_deployable.onnx  nvdsinfer_config.yaml  nvdspreprocess_config.yaml
