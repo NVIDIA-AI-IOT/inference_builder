@@ -37,7 +37,7 @@ nvcr.io/nvidia/tensorrt-pb25h1:25.03.02-py3 \
 trtexec --onnx=/changenet/changenet_768.onnx --saveEngine=/changenet/model.plan --fp16
 ```
 
-Run `ls $MODEL_REPO/visual_changenet -l`, be sure you have `model.plan` generated in your model folder and the file permissions are correct. The process takes approximately 10 minutes and you only need to run it once unless the model file changes. 
+Run `ls $MODEL_REPO/visual_changenet -l`, be sure you have `model.plan` generated in your model folder and the file permissions are correct. The process takes approximately 10 minutes and you only need to run it once unless the model file changes.
 
 # Build the inference flow:
 
@@ -68,20 +68,17 @@ docker compose up --build ms-changenet
 
 After the server has started successfully, open a new terminal in the inference-builder folder and launch the client to compare two sample images. A display environment is required for the client to visualize the difference between the two input pictures.
 
-Set the display environment variable:
+To avoid errors related to display, you need to set the DISPLAY environment variable based on your system:
 
 ```bash
 export DISPLAY=:0  # or :1 depending on your system
 ```
 
-Then, allow X server connections from any host:
-```bash
-xhost +
-```
-
-If the configuration is successful, you will see this message in the log: `access control disabled, clients can connect from any host`.
+Then start the client:
 
 ```bash
 source .venv/bin/activate && cd builder/samples/changenet
 python nim_client.py --host 127.0.0.1 --port 8803 --file test_0.jpg golden_0.jpg
 ```
+
+A new window shows the difference between two images.
