@@ -122,9 +122,11 @@ python builder/main.py builder/samples/ds_app/classification/ds_changenet.yaml \
 
 ## Run the deepstream app with image inputs:
 
-**Note:** The TensorRT engine is generated during the first time run and it takes several minutes. 
+**Note:** The TensorRT engine is generated during the first time run and it takes several minutes.
 
 **Note:** You can optionally set the `$SAMPLE_INPUT` environment variable to point to your samples directory if you perform inference on media files in your host.
+
+**Note:** By default, inference results are printed to the console. To save them instead, append the `-s result.json` option to your `docker run` command.
 
 ```bash
 # Update this with your actual samples directory path

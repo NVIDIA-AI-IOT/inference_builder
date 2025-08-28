@@ -10,27 +10,29 @@ You can use the models listed below with your microservices, or use your own che
 
 ## Prerequisites
 
-## Models used in the Samples
+### Models Used in the Samples
 
 The models used in the example can all be found in NGC and certain models need active subscription.
 
 If you don't have NGC CLI installed, please download and install it from [this page](https://org.ngc.nvidia.com/setup/installers/cli).
 
-### Image Classification
+#### Image Classification
 - **PCB Classification**: [PCB Classification Model](https://catalog.ngc.nvidia.com/orgs/nvaie/models/pcbclassification)
 
-### Visual Change Classification
+#### Visual Change Classification
 - **Visual Changenet Classification**: [Visual Changenet Classification Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/visual_changenet_classification)
 
-### Semantic Segmentation
+#### Semantic Segmentation
 - **CitySemSegFormer**: [CitySemSegFormer Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/citysemsegformer)
 
-### Grounding Dino
+#### Grounding Dino
 - **Grounding DINO**: [Grounding DINO Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/grounding_dino)
 - **Mask Grounding DINO**: [Mask Grounding DINO Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask_grounding_dino)
 
-### Object Detection
+#### Object Detection
 - **Resnet50 RT-DETR**: [TrafficCamNet Lite](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite)
+
+### Runtime Configuration Files
 
 You’ll find the DeepStream runtime configuration files for the above models in the ds_app samples; they must be placed alongside the model files.
 
@@ -41,6 +43,19 @@ You’ll find the DeepStream runtime configuration files for the above models in
 - builder/samples/ds_app/gdino/mask_gdino: Mask Grounding Dino detection model
 
 When being used along with the TAO Finetune Microservice, the Inference Microservices can directly use the model files and configs exported from [TAO Deploy](https://docs.nvidia.com/tao/tao-toolkit/text/tao_deploy/tao_deploy_overview.html).
+
+### Sample Videos
+
+If you don't have any test video in hand, you can copy it from deepstream-sample container image using following commands:
+
+```bash
+docker pull gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.2
+docker create --name temp gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.2
+docker cp temp:/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4 ~/Videos
+docker rm temp
+```
+
+You'll have a sample traffic street video under `~/Videos`, which you can use for testing in the following steps.
 
 ## Build CV Inference Microservices
 
@@ -112,6 +127,8 @@ Examples to show the basic inference use cases are listed as below:
 
 - Run inference on a single image
 
+If you don't have any test image in hand, you can use the one under [builder/samples/tao//validation/citysemsegformer/sample_720p.jpg](./validation/citysemsegformer/sample_720p.jpg).
+
 **⚠️ Important:** **replace the placeholder `<absolute_path_to_your_file.jpg>` in below command with an actual file with absolute path in your system.**
 
 **Note:** If the curl command fails, please try using a smaller image in size.
@@ -134,7 +151,7 @@ curl -X POST \
 
 - Run inference on a single video
 
-First you need to upload a video file to the server.
+First you need to upload a video file to the server (if you don't have a sample video in hand, follow the [prerequisites](#sample-videos) to get one).
 
 **⚠️ Important:** **replace the placeholder `<your_video.mp4>` in below command with an actual file path in your system**.
 
@@ -228,6 +245,8 @@ Examples to show the basic inference use cases are listed as below:
 
 - Run inference on a single image
 
+If you don't have any test image in hand, you can use the one under [builder/samples/tao//validation/citysemsegformer/sample_720p.jpg](./validation/citysemsegformer/sample_720p.jpg).
+
 **⚠️ Important:** **replace the placeholder `<absolute_path_to_your_file.jpg>` in below command with an actual file with absolute path in your system.**
 
 **Note:** If the curl command fails, please try using a smaller image in size.
@@ -251,7 +270,7 @@ curl -X POST \
 
 - Run inference on a single video
 
-First you need to upload a video file to the server.
+First you need to upload a video file to the server (if you don't have a sample video in hand, follow the [prerequisites](#sample-videos) to get one).
 
 **⚠️ Important:** **replace the placeholder `<your_video.mp4>` in below command with an actual file path in your system**.
 

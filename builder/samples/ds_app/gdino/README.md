@@ -90,29 +90,16 @@ python builder/main.py builder/samples/ds_app/gdino/ds_gdino.yaml \
 
 ## Run the deepstream app with different inputs:
 
-**Note:** The TensorRT engine is generated during the first time run and it takes several minutes. 
+**Note:** The TensorRT engine is generated during the first time run and it takes several minutes.
 
 **Note:** You can optionally set the `$SAMPLE_INPUT` environment variable to point to your samples directory if you perform inference on media files in your host.
+
+**Note:** By default, inference results are printed to the console. To save them instead, append the `-s result.json` option to your `docker run` command.
 
 ```bash
 # Update this with your actual samples directory path
 export SAMPLE_INPUT=/path/to/your/samples/directory
 ```
-
-**Note:** When you set `enable_display: true` under the `render_config` section of [ds_gdino.yaml](ds_gdino.yaml), you need to have a display on your host and run both commands in this order to give the container access to it. For more information about render configuration options, see the [render configuration section](../README.md#render-configuration).
-
-First, set the display environment variable:
-```bash
-export DISPLAY=:0  # or :1 depending on your system
-```
-
-Then, allow X server connections from any host:
-```bash
-xhost +
-```
-
-If the configuration is successful, you will see this message in the log: `access control disabled, clients can connect from any host`.
-
 
 ### Run with video input
 
@@ -148,7 +135,6 @@ docker run --rm --net=host --gpus all --runtime=nvidia \
     --mime video/mp4 \
     --text "car,person"
 ```
-
 
 ### Run with image input
 
