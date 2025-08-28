@@ -176,7 +176,8 @@ curl -X 'POST' \
     "duration": 2000000000,
     "contentType": "video/mp4"
   } ],
-  "model": "nvidia/tao"}' -N
+  "model": "nvidia/tao"
+}' -N
 ```
 
 The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame. Given the model is trained for traffic scenes, it detects "car", "roadsign", "bicycle", "person" and "background".
