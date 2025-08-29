@@ -291,7 +291,7 @@ python builder/main.py builder/samples/ds_app/detection/ds_mv3dt.yaml \
     builder/samples/ds_app
 ```
 
-# Build the custom parser for PeopleNetTransformer model
+#### Build the custom parser for PeopleNetTransformer model for Tegra 
 ```bash
 export CUDA_VER=13.0
 make -C $MODEL_REPO/PeopleNetTransformer/custom_parser clean
