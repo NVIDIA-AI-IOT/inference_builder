@@ -41,22 +41,22 @@ Some of the models for examples are from the NVIDIA GPU Cloud (NGC) repository, 
 
 ## Deepstream Backend
 
-- ds_app: examples of building standalone deepstream application.
-- tao: examples of building inference microservices using deepstream pipeline and fastapi
+- [ds_app](./ds_app/): examples of building standalone deepstream application.
+- [tao](./tao/): examples of building inference microservices using deepstream pipeline and fastapi
 
 ## Triton Backend
 
-- changenet: example of building inference microservices with triton server
+- [changenet](./changenet/): example of building inference microservices with triton server
 
 ## TensorRT Backend
 
-- nvclip: example of building inference microservices with TensorRT backend
+- [nvclip](./nvclip/): example of building inference microservices with TensorRT backend
 
 ## TensorRT-LLM Backend
 
-- qwen: example of building inference microservices with TensorRT-LLM backend for vlm models
-- vila: example of building infernece microservices with TensorRT-LLM using the legacy flow (to be deprecated)
+- [qwen](./qwen/): example of building inference microservices with TensorRT-LLM backend for vlm models
+- [vila](./vila/): example of building infernece microservices with TensorRT-LLM using the legacy flow (to be deprecated)
 
 ## Dry-run
 
-- dummy: This is an example of building dry-run inference pipeline to test the data flow.
+- [dummy](./dummy/): This is an example of building dry-run inference pipeline to test the data flow.

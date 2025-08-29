@@ -74,6 +74,19 @@ To avoid errors related to display, you need to set the DISPLAY environment vari
 export DISPLAY=:0  # or :1 depending on your system
 ```
 
+Then, allow X server connections from any host:
+```bash
+xhost +
+```
+
+If the configuration is successful, you will see this message in the log: `access control disabled, clients can connect from any host`.
+
+You need to export your GITLAB_TOKEN for pulling source dependencies from gitlab
+
+```bash
+export GITLAB_TOKEN={Your GitLab Token}
+```
+
 Then start the client:
 
 ```bash

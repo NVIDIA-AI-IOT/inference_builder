@@ -101,6 +101,22 @@ python builder/main.py builder/samples/ds_app/gdino/ds_gdino.yaml \
 export SAMPLE_INPUT=/path/to/your/samples/directory
 ```
 
+**Note:** When you set `enable_display: true` under the `render_config` section of
+[ds_gdino.yaml](ds_gdino.yaml), you need to have a display on your host and run both commands in this order to give the container access to it. For more information about render configuration options, see the [render configuration section](../README.md#render-configuration).
+
+
+First, set the display environment variable:
+```bash
+export DISPLAY=:0  # or :1 depending on your system
+```
+
+Then, allow X server connections from any host:
+```bash
+xhost +
+```
+
+If the configuration is successful, you will see this message in the log: `access control disabled, clients can connect from any host`.
+
 ### Run with video input
 
 ```bash
@@ -142,7 +158,9 @@ docker run --rm --net=host --gpus all --runtime=nvidia \
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
 # text: the text prompt for object detection (e.g., "car,person").
-# /sample_input/test.jpg is just a placeholder for any image present in $SAMPLE_INPUT directory
+
+# Note: /sample_input/test.jpg is just a placeholder for any image present in $SAMPLE_INPUT directory
+
 docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $SAMPLE_INPUT:/sample_input \
     -v $MODEL_REPO:/workspace/models \
