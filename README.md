@@ -87,7 +87,7 @@ options:
                         Use absolute paths in generated test_cases.yaml
 ```
 
-You can start with the builtin samples under _builder/samples_ folder for generating inference pipeline and server implementation with various inference backends and frameworks.
+You can start with the builtin samples under [builder/samples](./builder/samples/) folder for generating inference pipeline and server implementation with various inference backends and frameworks.
 
 ## Configuration File
 

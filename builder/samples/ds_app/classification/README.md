@@ -168,3 +168,5 @@ docker run --rm --net=host --gpus all --runtime=nvidia \
 ```
 
 For classification samples, the output is a list of labels defined in labels.txt. e.g, for pcbclassification model, the output label will be "missing" if there is a part missing from the input image.
+
+**Note:** You may see `pybind11::handle::dec_ref()` related errors. This is a known issue and will be fixed in the next release.
