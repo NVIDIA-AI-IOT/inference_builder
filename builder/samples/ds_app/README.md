@@ -2,7 +2,9 @@
 
 This directory contains sample configurations demonstrating how to build DeepStream applications using Inference Builder.
 
-While the samples support Thor, Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
+While the samples support Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
+
+**Platform Support:** All ds_app samples are compatible with both x86-64 systems and NVIDIA Jetson Thor device.
 
 ## Models used in the Samples
 
