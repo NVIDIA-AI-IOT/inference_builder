@@ -10,9 +10,10 @@ While Inference Builder works with Ampere, Hopper, and Blackwell architectures, 
 
 Below packages are required to build and run the container images:
 
-- Docker
-- Docker Compose
-- NVIDIA Container Toolkit
+- **Docker**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/)
+- **Docker Compose**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/)
+- **NVIDIA Container Toolkit**: [Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+
 
 Ensure nvidia runtime added to `/etc/docker/daemon.json` to run GPU-enabled containers
 
