@@ -2,7 +2,7 @@
 
 This directory contains sample configurations demonstrating how to build DeepStream applications using Inference Builder.
 
-While the samples support Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
+While the samples support Thor, Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
 
 ## Models used in the Samples
 
