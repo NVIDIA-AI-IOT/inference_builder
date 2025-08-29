@@ -135,7 +135,9 @@ docker run --rm --net=host --gpus all --runtime=nvidia \
 ```bash
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
-# Replace rtsp://<url_path> with your actual RTSP stream URL
+
+# Note: Replace rtsp://<url_path> with your actual RTSP stream URL
+
 docker run --rm --net=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
