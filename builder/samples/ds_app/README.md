@@ -4,6 +4,8 @@ This directory contains sample configurations demonstrating how to build DeepStr
 
 While the samples support Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
 
+**Platform Support:** All ds_app samples are compatible with both x86-64 systems and NVIDIA Jetson Thor device.
+
 ## Models used in the Samples
 
 All the models can be downloaded from NGC and certain models need active subscription.
