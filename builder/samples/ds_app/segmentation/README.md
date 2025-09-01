@@ -5,7 +5,7 @@ This sample demonstrates how to build a deepstream application with Inference Bu
 
 ## Prerequisites
 
-**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands. Also ensure that your virtual environment is activated before running any commands.
+**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
 Model files are loaded from '/workspace/models/{MODEL_NAME}' within the container, thus the volume must be correctly mapped from the host.
 You need to export MODEL_REPO environment variable to the path where you want to store the model files.

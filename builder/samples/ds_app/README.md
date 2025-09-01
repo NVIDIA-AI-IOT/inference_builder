@@ -6,7 +6,7 @@ While the samples support Ampere, Hopper, and Blackwell architectures, the model
 
 **Platform Support:** All ds_app samples are compatible with both x86-64 systems and NVIDIA Jetson Thor device.
 
-## Models used in the Samples
+## Models used in the samples
 
 All the models can be downloaded from NGC and certain models need active subscription.
 
@@ -45,7 +45,7 @@ The provided samples can serve as references for creating inference pipelines ac
 
 Required model files including the onnx, nvinfer configuration, preprocess configuration can be found from NGC model repository or exported through TAO Finetune Microservice.
 
-## Parameters for the Deepstream Backend
+## Configurable Parameters for the DeepStream Backend
 
 You can enable these features under the [`parameters section of the configuration file`](#complete-configuration-example).
 
@@ -173,7 +173,7 @@ parameters:
   batch_timeout: 33000 # Timeout in microseconds for batching
 ```
 
-### Complete Configuration Example {#complete-configuration-example}
+### [Complete Configuration Example](#complete-configuration-example)
 
 Here's a complete example showing all the features enabled:
 

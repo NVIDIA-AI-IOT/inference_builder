@@ -2,11 +2,13 @@
 
 This sample demonstrates how to build the inference pipeline for VILA 1.5 and how to integrate it into a microservice.
 
+**Note:** High-end GPUs are needed for VILA models. Docker build may fail on less powerful hardware.
+
 While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
 
 # Prerequisites
 
-**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands. Also ensure that your virtual environment is activated before running any commands.
+**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
 ## The model repo
 

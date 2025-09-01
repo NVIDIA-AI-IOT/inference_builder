@@ -38,7 +38,7 @@ sudo usermod -aG docker $USER
 
 Some of the models for examples are from the NVIDIA GPU Cloud (NGC) repository, and certain models from NGC require active subscription. Please download and install the NGC CLI from the [NGC page](https://org.ngc.nvidia.com/setup/installers/cli) and follow the [NGC CLI Guide] (https://docs.ngc.nvidia.com/cli/index.html) to set up the tool.
 
-# List of Samples: {#list-of-samples}
+# [List of Samples](#list-of-samples)
 
 ## DeepStream Backend Examples
 

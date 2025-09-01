@@ -10,7 +10,7 @@ You can use the models listed below with your microservices, or use your own che
 
 ## Prerequisites
 
-**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands. Also ensure that your virtual environment is activated before running any commands.
+**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
 ### Models Used in the Samples
 

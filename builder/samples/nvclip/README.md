@@ -6,7 +6,7 @@ We provide a sample Dockerfile for the example, which you can use to build a Doc
 
 # Prerequisites
 
-**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands. Also ensure that your virtual environment is activated before running any commands.
+**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
 The model used in this sample can be found from NGC: https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/nvclip_vit. Make sure you have the proper access right to the models, and download the checkpoints.
 
