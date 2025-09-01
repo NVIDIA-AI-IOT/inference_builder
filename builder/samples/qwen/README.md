@@ -15,6 +15,8 @@ We provide a sample Dockerfile for the example, which you can use to build a Doc
 
 ## Prerequisites
 
+**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands. Also ensure that your virtual environment is activated before running any commands.
+
 Before downloading the model file, you need to set up your model repository:
 
 ```bash
@@ -48,6 +50,8 @@ python builder/main.py builder/samples/qwen/pytorch_qwen.yaml --api-spec builder
 #### Build and Start the Inference Microservice:
 
 The sample folder already contains all the ingredients for building the microservice, all you need is to run the command (before you start, be sure you have enough free GPU memory on your system):
+
+**Note:** Given the model requires high GPU usage, we recommend to test it on an H100 or B200 system. In addition to this, running on less powerful GPUs will result in `cd builder/samples && docker compose up ms-qwen --build` failure.
 
 ```bash
 cd builder/samples && docker compose up ms-qwen --build

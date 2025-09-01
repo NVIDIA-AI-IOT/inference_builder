@@ -10,6 +10,8 @@ You can use the models listed below with your microservices, or use your own che
 
 ## Prerequisites
 
+**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands. Also ensure that your virtual environment is activated before running any commands.
+
 ### Models Used in the Samples
 
 The models used in the example can all be found in NGC and certain models need active subscription.
@@ -81,6 +83,8 @@ And export your GITLAB TOKEN:
 ```bash
 export GITLAB_TOKEN={Your GITLAB token} # replace the placeholder {Your GITLAB token} with your gitlab token
 ```
+
+**Note:** If NGC commands fail, make sure you have access to the models you are trying to download. Some models require an active subscription. Ensure NGC is set up properly, or alternatively try using the NGC web UI to directly download the model from the links provided.
 
 ### Generic TAO CV Inference Microservice
 

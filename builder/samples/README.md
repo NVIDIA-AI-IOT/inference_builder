@@ -2,7 +2,7 @@
 
 The samples in this folder demonstrates how to use Inference Builder to create inference pipelines with various backend, such as Deepstream, TensorRT, Triton, TensorRT-LLM, etc.With the provided Dockerfile, you can package the generated pipeline into a container image and run it as a standalone app or a microservice. Build steps vary by backend. See the README.md in each example folder exact instructions.
 
-For examples that run as microservices, we’ve provided an all-in-one docker-compose.yml to manage them together. You can customize the container behavior by changing the configurations there accordingly.
+For [samples](#list-of-samples) that run as microservices, we've provided an all-in-one [docker-compose.yml](./docker-compose.yml) to manage them together. You can customize the container behavior by changing the configurations there accordingly.
 
 While Inference Builder works with Ampere, Hopper, and Blackwell architectures, the examples’ model and backend choices set the real hardware requirements. For example, Qwen2.5-7B-Instruct model with TensorRT-LLM backend requires very high GPU memory and can only run on H100 and B200.
 
@@ -10,8 +10,8 @@ While Inference Builder works with Ampere, Hopper, and Blackwell architectures, 
 
 Below packages are required to build and run the container images:
 
-- **Docker**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/)
-- **Docker Compose**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/)
+- **Docker**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
+- **Docker Compose**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
 - **NVIDIA Container Toolkit**: [Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 
 
@@ -38,26 +38,30 @@ sudo usermod -aG docker $USER
 
 Some of the models for examples are from the NVIDIA GPU Cloud (NGC) repository, and certain models from NGC require active subscription. Please download and install the NGC CLI from the [NGC page](https://org.ngc.nvidia.com/setup/installers/cli) and follow the [NGC CLI Guide] (https://docs.ngc.nvidia.com/cli/index.html) to set up the tool.
 
-# List of Examples:
+# List of Samples: {#list-of-samples}
 
-## Deepstream Backend
+## DeepStream Backend Examples
 
-- [ds_app](./ds_app/): examples of building standalone deepstream application.
-- [tao](./tao/): examples of building inference microservices using deepstream pipeline and fastapi
+| Name | Description | Models | Backend | Output |
+|------|-------------|---------|---------|---------|
+| [ds_app](./ds_app/) | examples of building standalone deepstream application | TAO Computer Vision models | Deepstream | command line interface application |
+| [tao](./tao/) | examples of building inference microservices using deepstream pipeline and fastapi | TAO Computer Vision models | Deepstream | microservice |
 
-## Triton Backend
+## Triton Backend Examples
 
-- [changenet](./changenet/): example of building inference microservices with triton server
+| Name | Description | Models | Backend | Output |
+|------|-------------|---------|---------|---------|
+| [changenet](./changenet/) | example of building inference microservices with triton server | Visual ChangeNet | Triton/TensorRT | microservice |
 
-## TensorRT Backend
+## TensorRT Backend Examples
 
-- [nvclip](./nvclip/): example of building inference microservices with TensorRT backend
+| Name | Description | Models | Backend | Output |
+|------|-------------|---------|---------|---------|
+| [nvclip](./nvclip/) | example of building inference microservices with TensorRT backend | NVCLIP | TensorRT | microservice |
 
-## TensorRT-LLM Backend
+## TensorRT-LLM Backend Examples
 
-- [qwen](./qwen/): example of building inference microservices with TensorRT-LLM backend for vlm models
-- [vila](./vila/): example of building infernece microservices with TensorRT-LLM using the legacy flow (to be deprecated)
-
-## Dry-run
-
-- [dummy](./dummy/): This is an example of building dry-run inference pipeline to test the data flow.
+| Name | Description | Models | Backend | Output |
+|------|-------------|---------|---------|---------|
+| [qwen](./qwen/) | example of building inference microservices with TensorRT-LLM backend for vlm models | Qwen 2.5 VL models | TensorRT-LLM, Pytorch | microservice |
+| [vila](./vila/) | example of building infernece microservices with TensorRT-LLM using the legacy flow (to be deprecated) | VILA models | TensorRT-LLM | microservice |

@@ -47,7 +47,7 @@ Required model files including the onnx, nvinfer configuration, preprocess confi
 
 ## Parameters for the Deepstream Backend
 
-You can enable these features under the `parameters` section of the configuration file.
+You can enable these features under the [`parameters section of the configuration file`](#complete-configuration-example).
 
 ### Inference Configuration
 
@@ -173,7 +173,7 @@ parameters:
   batch_timeout: 33000 # Timeout in microseconds for batching
 ```
 
-### Complete Configuration Example
+### Complete Configuration Example {#complete-configuration-example}
 
 Here's a complete example showing all the features enabled:
 

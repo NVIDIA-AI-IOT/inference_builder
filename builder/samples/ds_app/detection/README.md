@@ -8,7 +8,7 @@ This sample demonstrates how to build a deepstream application with Inference Bu
 
 ## Prerequisites
 
-**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory.
+**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands. Also ensure that your virtual environment is activated before running any commands.
 
 Model files are loaded from '/workspace/models/{MODEL_NAME}' within the container, thus the volume must be correctly mapped from the host.
 You need to export MODEL_REPO environment variable to the path where you want to store the model files.
@@ -22,6 +22,8 @@ export MODEL_REPO=~/.cache/model-repo
 For example: if you define a model with name "rtdetr", you must put all the model files including nvconfig, onnx, etc. to a single directory and map it to '/workspace/models/rtdetr' for the model to be correctly loaded.
 
 You need first download the model files from the NGC catalog and put them in the $MODEL_REPO/rtdetr/ directory, then copy the other required configurations to the same directory:
+
+**Note:** If NGC commands fail, make sure you have access to the models you are trying to download. Some models require an active subscription. Ensure NGC is set up properly, or alternatively try using the NGC web UI to directly download the model from the links provided [here](../README.md#models-used-in-the-samples)
 
 ### For rtdetr model
 
@@ -90,7 +92,7 @@ python builder/main.py builder/samples/ds_app/detection/ds_detect.yaml \
 
 **Note:** The TensorRT engine is generated during the first time run and it takes several minutes.
 
-**Note:** You can optionally set the `$SAMPLE_INPUT` environment variable to point to your samples directory if you perform inference on media files in your host.
+**Note:** You can optionally set the `$SAMPLE_INPUT` environment variable to point to your input media directory if you want to perform inference on media files stored on your host machine.
 
 **Note:** By default, inference results are printed to the console. To save them instead, append the `-s result.json` option to your `docker run` command.
 
@@ -262,10 +264,14 @@ mosquitto -p 1883
 
 **Generate the deepstream application package and build it into a container image:**
 
-### For x86 Architecture
+You need to export your GITLAB_TOKEN for pulling source dependencies from gitlab
 
 ```bash
 export GITLAB_TOKEN={Your GitLab Token}
+```
+### For x86 Architecture
+
+```bash
 python builder/main.py builder/samples/ds_app/detection/ds_mv3dt.yaml \
     -o builder/samples/ds_app \
     --server-type serverless \
@@ -279,7 +285,6 @@ python builder/main.py builder/samples/ds_app/detection/ds_mv3dt.yaml \
 ### For Tegra Architecture
 
 ```bash
-export GITLAB_TOKEN={Your GitLab Token}
 python builder/main.py builder/samples/ds_app/detection/ds_mv3dt.yaml \
     -o builder/samples/ds_app \
     --server-type serverless \

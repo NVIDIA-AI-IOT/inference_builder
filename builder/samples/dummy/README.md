@@ -2,6 +2,8 @@ This sample demonstrates how to build a inference pipeline with a dummy backend.
 
 The sample configuration supports multiple input types including image data, image assets and video assets in one endpoint
 
+**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands. Also ensure that your virtual environment is activated before running any commands.
+
 Build the dummy inference flow:
 
 ```bash

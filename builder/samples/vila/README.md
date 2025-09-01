@@ -6,6 +6,8 @@ While the sample supports Ampere, Hopper, and Blackwell architectures, the model
 
 # Prerequisites
 
+**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands. Also ensure that your virtual environment is activated before running any commands.
+
 ## The model repo
 
 We need to prepare a folder to accommodate model data, and we use ~/.cache/model-repo for this sample:

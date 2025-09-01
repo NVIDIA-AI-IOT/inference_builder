@@ -41,10 +41,15 @@ git submodule update --init --recursive
 sudo apt update
 sudo apt install protobuf-compiler
 sudo apt install python3.12-venv python3.12-dev
+```
+
+**Note for TEGRA users:** If you're using a TEGRA device, you'll also need to install the Docker buildx plugin:
+
+```bash
 sudo apt install docker-buildx
 ```
 
-Create python virtual env and install dependent packages
+### Create Python virtual environment and install dependencies
 
 ```bash
 python -m venv .venv
@@ -57,7 +62,7 @@ pip3 install -r requirements.txt
 
 ## Usage
 
-Before using the tool, you must prepare a YAML configuration file to define the inference flow. If server integration is required, you also need to provide an OpenAPI specification that defines the server and update the configuration with server templates based on the OpenAPI specification.
+Before using the tool, you must prepare a [YAML configuration file](#configuration-file) to define the inference flow. If server integration is required, you also need to provide an OpenAPI specification that defines the server and update the configuration with server templates based on the OpenAPI specification.
 
 For generating the inference code with the corresponding server implementation, you can run the following command:
 
@@ -89,7 +94,7 @@ options:
 
 You can start with the builtin samples under [builder/samples](./builder/samples/) folder for generating inference pipeline and server implementation with various inference backends and frameworks.
 
-## Configuration File
+## [Configuration File](#configuration-file)
 
 The configuration file is a YAML file that defines the inference flow and server implementation. It contains the following sections:
 
