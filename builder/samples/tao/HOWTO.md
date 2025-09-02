@@ -350,7 +350,7 @@ chmod 666 $MODEL_REPO/$TAO_MODEL_NAME/*
 After completing above steps, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
 
 ```
-experiment.yaml  grounding_dino_swin_tiny_commercial_deployable.onnx  nvdsinfer_config.yaml  nvdspreprocess_config.yaml
+changenet-classify.onnx labels.txt nvdsinfer_config.yaml nvdspreprocess_config_0.yaml nvdspreprocess_config_1.yaml
 ```
 
 3. Build and run the container image
