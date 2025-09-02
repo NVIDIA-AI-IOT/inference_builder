@@ -11,9 +11,13 @@ Three configurations are provided, allowing you to choose based on your specific
 2. trtllm_qwen.yaml: leveraging TensroRT LLM APIs for better performance
 3. trtllm_nvdec_qwen.yaml: leveraging h/w decoder and TensorRT LLM for the best performance
 
-We provide a sample Dockerfile for the example, which you can use to build a Docker image and test the microservice on any x86 system with an NVIDIA Hopper, and Blackwell GPU. Given the model requires high GPU usage, we recommend to test it on on an H100 or B200 system.
+We provide a sample Dockerfile for the example, which you can use to build a Docker image and test the microservice on any x86 system.
+
+**⚠️ System Requirements:** This model requires significant GPU resources and is optimized for high-performance systems. We recommend testing on H100 or B200 GPUs for optimal performance. Docker build may fail on less powerful hardware.
 
 ## Prerequisites
+
+**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
 Before downloading the model file, you need to set up your model repository:
 
@@ -22,7 +26,14 @@ mkdir -p ~/.cache/model-repo && chmod 777 ~/.cache/model-repo
 export MODEL_REPO=~/.cache/model-repo
 ```
 
-The model checkpoints can be downloaded from huggingface (Be sure to have git-lfs installed):
+The model checkpoints can be downloaded from huggingface. First, install git-lfs for large model files:
+
+```bash
+sudo apt install git-lfs
+git lfs install
+```
+
+Then download the model:
 
 ```bash
 git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct  $MODEL_REPO/Qwen2.5-VL-7B-Instruct
@@ -48,6 +59,7 @@ python builder/main.py builder/samples/qwen/pytorch_qwen.yaml --api-spec builder
 #### Build and Start the Inference Microservice:
 
 The sample folder already contains all the ingredients for building the microservice, all you need is to run the command (before you start, be sure you have enough free GPU memory on your system):
+
 
 ```bash
 cd builder/samples && docker compose up ms-qwen --build

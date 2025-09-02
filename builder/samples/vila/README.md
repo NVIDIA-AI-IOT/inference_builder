@@ -4,7 +4,11 @@ This sample demonstrates how to build the inference pipeline for VILA 1.5 and ho
 
 While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
 
+**⚠️ System Requirements:** This model requires significant GPU resources and is optimized for high-performance systems. We recommend testing on H100 GPU for optimal performance. Docker build may fail on less powerful hardware.
+
 # Prerequisites
+
+**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
 ## The model repo
 
@@ -16,7 +20,14 @@ mkdir -p ~/.cache/model-repo
 
 ## The model
 
-VILA 1.5 checkpoints can be downloaded from huggingface using the following command (Be sure to have git-lfs installed):
+VILA 1.5 checkpoints can be downloaded from huggingface. First, install git-lfs for large model files:
+
+```bash
+sudo apt install git-lfs
+git lfs install
+```
+
+Then download the model:
 
 ```bash
 git clone https://huggingface.co/Efficient-Large-Model/VILA1.5-13b ~/.cache/model-repo/vila1.5-13b
