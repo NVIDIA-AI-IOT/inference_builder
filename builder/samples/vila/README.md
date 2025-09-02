@@ -2,9 +2,9 @@
 
 This sample demonstrates how to build the inference pipeline for VILA 1.5 and how to integrate it into a microservice.
 
-**Note:** High-end GPUs like H100 is needed for VILA models. Docker build may fail on less powerful hardware.
-
 While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
+
+**⚠️ System Requirements:** This model requires significant GPU resources and is optimized for high-performance systems. We recommend testing on H100 GPU for optimal performance. Docker build may fail on less powerful hardware.
 
 # Prerequisites
 

@@ -11,7 +11,9 @@ Three configurations are provided, allowing you to choose based on your specific
 2. trtllm_qwen.yaml: leveraging TensroRT LLM APIs for better performance
 3. trtllm_nvdec_qwen.yaml: leveraging h/w decoder and TensorRT LLM for the best performance
 
-We provide a sample Dockerfile for the example, which you can use to build a Docker image and test the microservice on any x86 system with an NVIDIA Hopper, and Blackwell GPU. Given the model requires high GPU usage, we recommend to test it on on an H100 or B200 system.
+We provide a sample Dockerfile for the example, which you can use to build a Docker image and test the microservice on any x86 system.
+
+**⚠️ System Requirements:** This model requires significant GPU resources and is optimized for high-performance systems. We recommend testing on H100 or B200 GPUs for optimal performance. Docker build may fail on less powerful hardware.
 
 ## Prerequisites
 
@@ -58,7 +60,6 @@ python builder/main.py builder/samples/qwen/pytorch_qwen.yaml --api-spec builder
 
 The sample folder already contains all the ingredients for building the microservice, all you need is to run the command (before you start, be sure you have enough free GPU memory on your system):
 
-**⚠️ System Requirements:** This model requires significant GPU resources and is optimized for high-performance systems. We recommend testing on H100 or B200 GPUs for optimal performance. Running on less powerful GPUs may cause the build command `cd builder/samples && docker compose up ms-qwen --build` to fail due to insufficient memory or compute capabilities.
 
 ```bash
 cd builder/samples && docker compose up ms-qwen --build
