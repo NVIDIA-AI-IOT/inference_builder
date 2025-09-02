@@ -24,7 +24,14 @@ mkdir -p ~/.cache/model-repo && chmod 777 ~/.cache/model-repo
 export MODEL_REPO=~/.cache/model-repo
 ```
 
-The model checkpoints can be downloaded from huggingface (Be sure to have git-lfs installed):
+The model checkpoints can be downloaded from huggingface. First, install git-lfs for large model files:
+
+```bash
+sudo apt install git-lfs
+git lfs install
+```
+
+Then download the model:
 
 ```bash
 git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct  $MODEL_REPO/Qwen2.5-VL-7B-Instruct
@@ -51,7 +58,7 @@ python builder/main.py builder/samples/qwen/pytorch_qwen.yaml --api-spec builder
 
 The sample folder already contains all the ingredients for building the microservice, all you need is to run the command (before you start, be sure you have enough free GPU memory on your system):
 
-**Note:** Given the model requires high GPU usage, we recommend to test it on an H100 or B200 system. In addition to this, running on less powerful GPUs will result in `cd builder/samples && docker compose up ms-qwen --build` failure.
+**⚠️ System Requirements:** This model requires significant GPU resources and is optimized for high-performance systems. We recommend testing on H100 or B200 GPUs for optimal performance. Running on less powerful GPUs may cause the build command `cd builder/samples && docker compose up ms-qwen --build` to fail due to insufficient memory or compute capabilities.
 
 ```bash
 cd builder/samples && docker compose up ms-qwen --build

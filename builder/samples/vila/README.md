@@ -2,7 +2,7 @@
 
 This sample demonstrates how to build the inference pipeline for VILA 1.5 and how to integrate it into a microservice.
 
-**Note:** High-end GPUs are needed for VILA models. Docker build may fail on less powerful hardware.
+**Note:** High-end GPUs like H100 is needed for VILA models. Docker build may fail on less powerful hardware.
 
 While the sample supports Ampere, Hopper, and Blackwell architectures, the model and the backend set the real hardware requirements.
 
@@ -20,7 +20,14 @@ mkdir -p ~/.cache/model-repo
 
 ## The model
 
-VILA 1.5 checkpoints can be downloaded from huggingface using the following command (Be sure to have git-lfs installed):
+VILA 1.5 checkpoints can be downloaded from huggingface. First, install git-lfs for large model files:
+
+```bash
+sudo apt install git-lfs
+git lfs install
+```
+
+Then download the model:
 
 ```bash
 git clone https://huggingface.co/Efficient-Large-Model/VILA1.5-13b ~/.cache/model-repo/vila1.5-13b

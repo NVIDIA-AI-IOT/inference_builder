@@ -202,7 +202,7 @@ This section demonstrates how to set up and run the MV3DT specific models for mu
 ### Model Setup
 
 1. **Download Model Files:**
-   Download the model content from [Google Drive](https://drive.google.com/drive/folders/1EiLjPYjGeIF2duElHlH11lu94_fO5WEZ?usp=drive_link) into your `$MODEL_REPO` directory.
+   Download the model content from [Google Drive](https://drive.google.com/drive/folders/1EiLjPYjGeIF2duElHlH11lu94_fO5WEZ?usp=drive_link) to your host and unzip it. After unzipping, you will get a folder named `models` which contains all the models you need. Copy the contents of the `models/` folder to your `$MODEL_REPO` directory.
 
     **Note:** MV3DT-specific model files will be made publicly available in a future release (required for DS-8.0). The download instructions above will be updated once the models are hosted on the official NGC catalog or other public repositories.
 
@@ -237,9 +237,10 @@ This section demonstrates how to set up and run the MV3DT specific models for mu
 ### Sample Data Setup
 
 1. **Download Sample Streams:**
-   Download the sample content from [Google Drive](https://drive.google.com/drive/folders/1elBteIllmbdDSE0EMEiYjG_ZTwKrKXwE?usp=drive_link) into your `$SAMPLE_INPUT` directory.
+   Download the sample input streams content from [Google Drive](https://drive.google.com/drive/folders/1elBteIllmbdDSE0EMEiYjG_ZTwKrKXwE?usp=drive_link) to your host and unzip it. After unzipping, you will get a folder named `MTMC_Warehouse_Synthetic_4cam`. 
 
 2. **Set Environment Variable:**
+   Set the `SAMPLE_INPUT` environment variable to the absolute path of the `MTMC_Warehouse_Synthetic_4cam` directory:
    ```bash
    export SAMPLE_INPUT=/path/to/MTMC_Warehouse_Synthetic_4cam/
    ```

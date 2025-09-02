@@ -17,7 +17,7 @@ mkdir -p ~/.cache/model-repo && chmod 777 ~/.cache/model-repo
 export MODEL_REPO=~/.cache/model-repo
 ```
 
-**Note:** If NGC commands fail, make sure you have access to the models you are trying to download. Some models require an active subscription. Ensure NGC is set up properly, or alternatively try using the NGC web UI to directly download the model from the links provided.
+**Note:** If NGC commands fail, make sure you have access to the models you are trying to download. Some models require an active subscription. Ensure NGC is set up properly, or alternatively try using the NGC web UI to directly download the model from the links provided above within the prerequisites section.
 
 ## Download the model file using NGC CLI:
 

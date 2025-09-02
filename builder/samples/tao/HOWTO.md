@@ -84,7 +84,7 @@ And export your GITLAB TOKEN:
 export GITLAB_TOKEN={Your GITLAB token} # replace the placeholder {Your GITLAB token} with your gitlab token
 ```
 
-**Note:** If NGC commands fail, make sure you have access to the models you are trying to download. Some models require an active subscription. Ensure NGC is set up properly, or alternatively try using the NGC web UI to directly download the model from the links provided.
+**Note:** If NGC commands fail, make sure you have access to the models you are trying to download. Some models require an active subscription. Ensure NGC is set up properly, or alternatively try using the NGC web UI to directly download the model from the links provided above within the prerequisites section.
 
 ### Generic TAO CV Inference Microservice
 
