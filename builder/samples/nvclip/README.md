@@ -17,8 +17,6 @@ mkdir -p ~/.cache/model-repo && chmod 777 ~/.cache/model-repo
 export MODEL_REPO=~/.cache/model-repo
 ```
 
-**Note:** If NGC commands fail, make sure you have access to the models you are trying to download. Some models require an active subscription. Ensure NGC is set up properly, or alternatively try using the NGC web UI to directly download the model from the links provided above within the prerequisites section.
-
 ## Download the model file using NGC CLI:
 
 ```bash
@@ -27,6 +25,8 @@ chmod 666 /tmp/multi_modal_foundation_models_vNVCLIP_224_700M_ViTH14/*
 ```
 
 Run `ls /tmp/multi_modal_foundation_models_vNVCLIP_224_700M_ViTH14 -l` and be sure we have the checkpoint file `nvclip_clipa_vit_h14_700M.ckpt`.
+
+**Note:** If NGC commands fail, make sure you have access to the models you are trying to download. Some models require an active subscription. Ensure NGC is set up properly, or alternatively try using the NGC web UI to directly download the model from the links provided above within the prerequisites section.
 
 ## Create the optimized TensorRT Engine:
 
@@ -41,6 +41,7 @@ docker build -t trt-optimizer builder/samples/nvclip/optimizer
 Then generate the engine files using the trt-optimizer
 
 ```bash
+docker login nvcr.io
 docker run -it --rm --gpus all \
            -v $MODEL_REPO:/workspace/checkpoints/optimized \
            -v /tmp/multi_modal_foundation_models_vNVCLIP_224_700M_ViTH14:/workspace/checkpoints/baseline \
