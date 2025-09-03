@@ -17,10 +17,6 @@ mkdir -p ~/.cache/model-repo && chmod 777 ~/.cache/model-repo
 export MODEL_REPO=~/.cache/model-repo
 ```
 
-**Note:** You need to login to nvcr.io to access NGC models. Use `docker login nvcr.io` and provide your NGC credentials when prompted.
-
-**Note:** If NGC commands fail, make sure you have access to the models you are trying to download. Some models require an active subscription. Ensure NGC is set up properly, or alternatively try using the NGC web UI to directly download the model from the links provided above within the prerequisites section.
-
 ## Download the model file using NGC CLI:
 
 ```bash
@@ -34,9 +30,12 @@ chmod 666 $MODEL_REPO/visual_changenet/* # correct the permissions in case they'
 
 Run `ls $MODEL_REPO/visual_changenet -l`, be sure you have `changenet_768.onnx` in your model folder and the file permissions are correct.
 
+**Note:** If NGC commands fail, make sure you have access to the models you are trying to download. Some models require an active subscription. Ensure NGC is set up properly, or alternatively try using the NGC web UI to directly download the model from the links provided above within the prerequisites section.
+
 ## Create the optimized TensorRT Engine:
 
 ```bash
+docker login nvcr.io
 docker run -it --rm --gpus all \
 -v ~/.cache/model-repo/visual_changenet/:/changenet \
 nvcr.io/nvidia/tensorrt-pb25h1:25.03.02-py3 \
