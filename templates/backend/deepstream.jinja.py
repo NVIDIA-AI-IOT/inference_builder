@@ -567,7 +567,7 @@ class MetadataOutput(BaseTensorOutput):
                         labels.append(classifier.get_n_label(i))
                 metadata.labels.append(labels)
                 metadata.objects.append(object_meta.object_id)
-                if instance_mask:
+                if instance_mask.size > 0:
                     metadata.seg_maps.append(instance_mask.astype(int))
             for user_meta in frame_meta.segmentation_items:
                 seg_meta = user_meta.as_segmentation()
