@@ -42,7 +42,7 @@ ngc registry model download-version "nvidia/tao/mask2former:mask2former_swint_de
 # Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
 mv mask2former_vmask2former_swint_deployable_v1.0 $MODEL_REPO/mask2former
 chmod 777 $MODEL_REPO/mask2former
-cp -r builder/samples/ds_app/segmentation/mask2former/* $MODEL_REPO/mask2former/
+cp -r builder/samples/ds_app/detection/mask2former/* $MODEL_REPO/mask2former/
 ```
 
 By default, rtdetr model is used. If you want to use mask2former, please change the name of the model in ds_detect.yaml from "rtdetr" to "mask2former" before moving to the next step.
