@@ -42,6 +42,7 @@ class RenderConfig:
     enable_stream: bool = False
     rtsp_mount_point: str | None = "/ds-test"
     rtsp_port: int | None = 8554
+    seg_mask_config: dict | None = None
 
     def __bool__(self) -> bool:
         """Check if render configuration is valid."""
@@ -390,7 +391,7 @@ class BulkVideoInputPool(TensorInputPool):
                        sync=False)
 
         flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
-                    enable_osd=self._render_config.enable_osd, sync=False)
+                    enable_osd=self._render_config.enable_osd, seg_mask_config=self._render_config.seg_mask_config, sync=False)
 
         if self._pipeline is not None:
             self._pipeline.wait()
@@ -657,7 +658,8 @@ class DeepstreamBackend(ModelBackend):
                 enable_osd=model_config["parameters"]["render_config"].get("enable_osd", False),
                 enable_stream=model_config["parameters"]["render_config"].get("enable_stream", False),
                 rtsp_mount_point=model_config["parameters"]["render_config"].get("rtsp_mount_point", "/ds-test"),
-                rtsp_port=model_config["parameters"]["render_config"].get("rtsp_port", 8554)
+                rtsp_port=model_config["parameters"]["render_config"].get("rtsp_port", 8554),
+                seg_mask_config=model_config["parameters"]["render_config"].get("seg_mask_visualization", None)
             )
         else:
             render_config = RenderConfig()
