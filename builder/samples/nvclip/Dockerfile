@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.2" AS ds_stage
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.09.1-ma" AS ds_stage
 
 FROM "nvcr.io/nvidia/tritonserver:25.01-py3" AS builder_base
 
@@ -41,7 +41,6 @@ aiofiles==23.2.1 \
 aiohttp==3.11.0 \
 annotated-types==0.7.0 \
 python-magic==0.4.27 \
-tensorrt==10.8.0.43 \
 torch==2.4.0 \
 torchvision==0.19.0 \
 Pillow==11.1.0 \
@@ -51,6 +50,7 @@ omegaconf==2.3.0 \
 transformers==4.48.0 \
 fastapi==0.115.12 \
 uvicorn==0.29.0 \
+tensorrt==10.8.0.43 --extra-index-url https://pypi.nvidia.com \
 polygraphy==0.49.24
 
 ENV TRANSFORMERS_CACHE=/tmp
