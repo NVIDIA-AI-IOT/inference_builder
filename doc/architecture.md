@@ -1,4 +1,6 @@
-## Architecture
+# Inference Builder Architecture
+
+## Overview
 
 Inference Builder generates the Python package that includes both the inference logic and server integration. The package is constructed from a standardized inference flow combined with a variety of well tested source code templates—including server templates and inference templates.
 
@@ -6,16 +8,16 @@ The generated code follows the architecture illustrated in the diagram below.
 
 ![Architecture](assets/architecture.png)
 
-### Inference Flow
+## Inference Flow
 
 The inference flow is standardized by the base class `InferenceBase`, which supports inference through multiple models. Each model is managed by a `ModelOperator` instance, and is connected with one another through data flows. Each data flow is managed by various implementations of `DataFlow`, handling various types of data, such as images, videos, speech, etc.
 The inference flow is standardized by the base class `InferenceBase`, which supports execution of inference across multiple models. Each model is managed by a dedicated `ModelOperator` instance, and models are connected through well-defined data flows. The output data from one model is passed to other models through data flows, using Python dictionaries that map names to tensors. This allows each model to receive its required inputs in a structured and consistent format.
 
-### Inference Backend
+## Inference Backend
 
 The inference backend can vary depending on the model type, user requirements, and hardware platform. To support a wide range of SDKs and frameworks, Inference Builder defines a standard interface: 'ModelBackend'. This interface allows the ModelOperator to interact with models regardless of their underlying implementation.
 
-### API Server
+## API Server
 
 The API server handles incoming requests from end users and returns responses. It supports communication protocols such as HTTP and gRPC, and conforms to standards like OpenAPI specifications or Protocol Buffers (protobuf) definitions.
 
