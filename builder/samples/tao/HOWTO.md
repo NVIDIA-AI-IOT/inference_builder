@@ -1,6 +1,4 @@
-# Metropolis Computer Vision Inference Microservice HOWTO
-
-## Introduction
+# Introduction
 
 This example demonstrates how to build Metropolis Computer Vision Inference Microservices with Inference Builder and use them to perform inference on images and videos.
 
@@ -8,43 +6,24 @@ We provide the Dockerfile which you can use to build a Docker image and deploy t
 
 You can use the models listed below with your microservices, or use your own checkpoints generated from TAO Fine-Tune Microservices. In addition, you can modify the Dockerfile to add or remove dependencies that are specifically required by your model.
 
-## Prerequisites
+# Prerequisites
 
-**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
+### Models
 
-### Models Used in the Samples
+Some of the models used by the examples are from the NVIDIA GPU Cloud (NGC) repository, and certain models from NGC require active subscription. Please download and install the NGC CLI from the [NGC page](https://org.ngc.nvidia.com/setup/installers/cli) and follow the [NGC CLI Guide](https://docs.ngc.nvidia.com/cli/index.html) to set up the tool.
 
-The models used in the example can all be found in NGC and certain models need active subscription.
+| Name of the Model | Runtime Configuration Directory* | Build Configuration** | Type of the Model |
+| :-- | :-- | :-- | :-- |
+| [PCB Classification](https://catalog.ngc.nvidia.com/orgs/nvaie/models/pcbclassification) | builder/samples/ds_app/classification/pcbclassification/ | ds_tao.yaml | classification |
+| [Visual Changenet Classification](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/visual_changenet_classification) | builder/samples/ds_app/classification/changenet-classify/ | ds_changenet.yaml | classification |
+| [CitySemSegFormer](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/citysemsegformer) | builder/samples/ds_app/segmentation/citysemsegformer/ | ds_tao.yaml | segmentation |
+| [Grounding DINO](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/grounding_dino) | builder/samples/ds_app/gdino/gdino/ | ds_gdino.yaml | detection |
+| [Mask Grounding DINO](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask_grounding_dino) | builder/samples/ds_app/gdino/mask_gdino/ | ds_gdino.yaml | segmentation |
+| [Resnet50 RT-DETR](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite) | builder/samples/ds_app/detection/rtdetr/ | ds_tao.yaml | detection |
 
-If you don't have NGC CLI installed, please download and install it from [this page](https://org.ngc.nvidia.com/setup/installers/cli).
+*:  Runtime configuration files are used by Deepstream during runtime and needs to be put to the model directory.
 
-#### Image Classification
-- **PCB Classification**: [PCB Classification Model](https://catalog.ngc.nvidia.com/orgs/nvaie/models/pcbclassification)
-
-#### Visual Change Classification
-- **Visual Changenet Classification**: [Visual Changenet Classification Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/visual_changenet_classification)
-
-#### Semantic Segmentation
-- **CitySemSegFormer**: [CitySemSegFormer Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/citysemsegformer)
-
-#### Grounding Dino
-- **Grounding DINO**: [Grounding DINO Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/grounding_dino)
-- **Mask Grounding DINO**: [Mask Grounding DINO Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask_grounding_dino)
-
-#### Object Detection
-- **Resnet50 RT-DETR**: [TrafficCamNet Lite](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite)
-
-### Runtime Configuration Files
-
-You’ll find the DeepStream runtime configuration files for the above models in the ds_app samples; they must be placed alongside the model files.
-
-- builder/samples/ds_app/classification/changenet-classify/: Visual Changenet classification model with 2 image inputs
-- builder/samples/ds_app/classification/pcbclassification/: PCB classification model
-- builder/samples/ds_app/detection/rtdetr: RT-DETR detection model
-- builder/samples/ds_app/gdino/gdino: Grounding Dino detection model
-- builder/samples/ds_app/gdino/mask_gdino: Mask Grounding Dino detection model
-
-When being used along with the TAO Finetune Microservice, the Inference Microservices can directly use the model files and configs exported from [TAO Deploy](https://docs.nvidia.com/tao/tao-toolkit/text/tao_deploy/tao_deploy_overview.html).
+**: Build configuration file is used to build the inference pipeline
 
 ### Sample Videos
 
@@ -59,9 +38,11 @@ docker rm temp
 
 You'll have a sample traffic street video under `~/Videos`, which you can use for testing in the following steps.
 
-## Build CV Inference Microservices
+# Build and Test CV Inference Microservices
 
-All three CV Inference Microservices in the example are built the same way; the only differences are their configurations and customized processors.
+## General Instructions
+
+There're three CV Inference Microservices in the example and all of them are built the same way; the only differences are their configurations and customized processors.
 
 Using the same steps shown in this example, you can also build the CV inference microservice with fine-tuned models exported from [TAO Deploy](https://docs.nvidia.com/tao/tao-toolkit/text/tao_deploy/tao_deploy_overview.html).
 
@@ -84,20 +65,24 @@ And export your GITLAB TOKEN:
 export GITLAB_TOKEN={Your GITLAB token} # replace the placeholder {Your GITLAB token} with your gitlab token
 ```
 
-**Note:** If NGC commands fail, make sure you have access to the models you are trying to download. Some models require an active subscription. Ensure NGC is set up properly, or alternatively try using the NGC web UI to directly download the model from the links provided above within the prerequisites section.
+## Step-by-step Guide
 
-### Generic TAO CV Inference Microservice
+Make sure you are in the root directory (`path/to/inference-builder`) before you start with any of the microservices. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
+
+### Microservice 1
 
 This microservice supports common CV models including image classification, object detection and segmentation.
 
-1. Generate the inference pipeline using inference builder
+#### 1. Generate the inference pipeline using inference builder
 
 ```bash
 python builder/main.py builder/samples/tao/ds_tao.yaml \
 -a builder/samples/tao/openapi.yaml -o builder/samples/tao -t
 ```
 
-2. Download the model files from NGC and apply the configurations. (here, we use object detection model `trafficcamnet_transformer_lite` as an example)
+#### 2. Download the model files from NGC and apply the configurations.
+
+Here, we use object detection model `trafficcamnet_transformer_lite` as an example.
 
 ```bash
 ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:deployable_v1.0" --dest $MODEL_REPO
@@ -113,7 +98,7 @@ After completing above steps, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the belo
 labels.txt  nvdsinfer_config.yaml  resnet50_trafficamnet_rtdetr.onnx
 ```
 
-3. Build and run the container image
+#### 3. Build and run the container image
 
 Building the Docker image from the provided Dockerfile may take 10–20 minutes, depending on your network bandwidth and the hardware in use.
 
@@ -123,19 +108,18 @@ sed -i "s/TAO_MODEL_NAME: .*/TAO_MODEL_NAME: $TAO_MODEL_NAME/" docker-compose.ym
 docker compose up tao-cv --build
 ```
 
-4. Test the microservice
+#### 4. Test the microservice
 
 The microservice exposes a REST API that accepts inference requests with images and videos over HTTP, and it works with any frontend that is compatible with the OpenAPI spec. Once the server is ready, an OpenAPI compatible interactive documentation endpoint is available on the server for detailed API usage: http://localhost:8800/docs. Considering the compatibility, we test the raw API using curl commands.
 
 Examples to show the basic inference use cases are listed as below:
 
-- Run inference on a single image
+##### Run inference on a single image:
 
-If you don't have any test image in hand, you can use the one under [builder/samples/tao//validation/citysemsegformer/sample_720p.jpg](./validation/citysemsegformer/sample_720p.jpg).
+If you don't have any test image in hand, you can use [this one](./validation/citysemsegformer/sample_720p.jpg).
 
-**⚠️ Important:** **replace the placeholder `<absolute_path_to_your_file.jpg>` in below command with an actual file with absolute path in your system.**
+**Note:** replace the placeholder `<absolute_path_to_your_file.jpg>` in below command with an actual file with absolute path in your system.
 
-**Note:** If the curl command fails, please try using a smaller image in size.
 
 ```bash
 PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "<absolute_path_to_your_file.jpg>"))
@@ -153,11 +137,11 @@ curl -X POST \
   -d @payload.json
 ```
 
-- Run inference on a single video
+##### Run inference on a single video:
 
 First you need to upload a video file to the server (if you don't have a sample video in hand, follow the [prerequisites](#sample-videos) to get one).
 
-**⚠️ Important:** **replace the placeholder `<your_video.mp4>` in below command with an actual file path in your system**.
+**Note:** replace the placeholder `<your_video.mp4>` in below command with an actual file path in your system.
 
 ```bash
 export VIDEO_FILE=<your_video.mp4> # replace the placeholder <your_video.mp4> with an actual file
@@ -182,7 +166,7 @@ The expected response would be like:
 
 Now you can invoke the inference API based on the data object in the above response following the command below.
 
-**⚠️ Important:** **Please replace the `id` and `path` below with the values from your return response and run the curl command**.
+**Note:** Please replace the `id` and `path` below with the values from your return response and run the curl command.
 
 ```base
 curl -X 'POST' \
@@ -204,18 +188,21 @@ curl -X 'POST' \
 The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame. Given the model is trained for traffic scenes, it detects "car", "roadsign", "bicycle", "person" and "background".
 
 
-### TAO CV Inference Microservice for Grounding Dino
+### Microservice 2
 
-This microservice supports Grounding Dino model and Mask Grounding Dino model
+This microservice supports Grounding Dino model and Mask Grounding Dino model.
 
-1. Generate the inference pipeline using inference builder (Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment.)
+#### 1. Generate the inference pipeline using inference builder
+
 
 ```bash
 python builder/main.py builder/samples/tao/ds_gdino.yaml \
 -a builder/samples/tao/openapi.yaml -o builder/samples/tao -c builder/samples/tao/processors.py -t
 ```
 
-2. Download the model files from NGC and apply the configurations. (here, we use Grounding Dino model as an example)
+#### 2. Download the model files from NGC and apply the configurations.
+
+Here, we use Grounding Dino model as an example.
 
 ```bash
 ngc registry model download-version "nvidia/tao/grounding_dino:grounding_dino_swin_tiny_commercial_deployable_v1.0" --dest $MODEL_REPO
@@ -231,7 +218,7 @@ After completing above steps, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the belo
 experiment.yaml  grounding_dino_swin_tiny_commercial_deployable.onnx  nvdsinfer_config.yaml  nvdspreprocess_config.yaml
 ```
 
-3. Build and run the container image
+#### 3. Build and run the container image
 
 Building the Docker image from the provided Dockerfile may take 10–20 minutes, depending on your network bandwidth and the hardware in use.
 
@@ -241,19 +228,17 @@ sed -i "s/TAO_MODEL_NAME: .*/TAO_MODEL_NAME: $TAO_MODEL_NAME/" docker-compose.ym
 docker compose up tao-cv --build
 ```
 
-4. Test  the microservice
+#### 4. Test  the microservice
 
 The microservice exposes a REST API that accepts inference requests with images and videos over HTTP, and it works with any frontend that is compatible with the OpenAPI spec. Once the server is ready, an OpenAPI compatible interactive documentation endpoint is available on the server for detailed API usage: http://localhost:8800/docs. Considering the compatibility, we test the raw API using curl commands.
 
 Examples to show the basic inference use cases are listed as below:
 
-- Run inference on a single image
+##### Run inference on a single image:
 
 If you don't have any test image in hand, you can use the one under [builder/samples/tao//validation/citysemsegformer/sample_720p.jpg](./validation/citysemsegformer/sample_720p.jpg).
 
-**⚠️ Important:** **replace the placeholder `<absolute_path_to_your_file.jpg>` in below command with an actual file with absolute path in your system.**
-
-**Note:** If the curl command fails, please try using a smaller image in size.
+**Note:** replace the placeholder `<absolute_path_to_your_file.jpg>` in below command with an actual file with absolute path in your system.
 
 ```bash
 PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "<absolute_path_to_your_file.jpg>"))
@@ -272,11 +257,11 @@ curl -X POST \
   -d @payload.json
 ```
 
-- Run inference on a single video
+##### Run inference on a single video:
 
 First you need to upload a video file to the server (if you don't have a sample video in hand, follow the [prerequisites](#sample-videos) to get one).
 
-**⚠️ Important:** **replace the placeholder `<your_video.mp4>` in below command with an actual file path in your system**.
+**Note:** replace the placeholder `<your_video.mp4>` in below command with an actual file path in your system.
 
 ```bash
 export VIDEO_FILE=<your_video.mp4> # replace the placeholder <your_video.mp4> with an actual file
@@ -301,7 +286,7 @@ The expected response would be like:
 
 Now you can invoke the inference API based on the data object in the above response following the command below.
 
-**⚠️ Important:** **Please replace the `id` and `path` below with the values from your return response and run the curl command**.
+**Note:** Please replace the `id` and `path` below with the values from your return response and run the curl command.
 
 
 ```base
@@ -326,18 +311,18 @@ curl -X 'POST' \
 
 The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame.
 
-### TAO CV Inference Microservice for Changenet Classification
+### Microservice 3
 
 This microservice supports Visual Changenet Classification model.
 
-1. Generate the inference pipeline using inference builder (Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment.)
+#### 1. Generate the inference pipeline using inference builder.
 
 ```bash
 python builder/main.py builder/samples/tao/ds_changenet.yaml \
 -a builder/samples/tao/openapi.yaml -o builder/samples/tao -t
 ```
 
-2. Download the model files from NGC and apply the configurations.
+#### 2. Download the model files from NGC and apply the configurations.
 
 ```bash
 ngc registry model download-version "nvidia/tao/visual_changenet_classification:visual_changenet_nvpcb_deployable_v1.0" --dest $MODEL_REPO
@@ -353,7 +338,7 @@ After completing above steps, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the belo
 changenet-classify.onnx labels.txt nvdsinfer_config.yaml nvdspreprocess_config_0.yaml nvdspreprocess_config_1.yaml
 ```
 
-3. Build and run the container image
+#### 3. Build and run the container image
 
 Building the Docker image from the provided Dockerfile may take 10–20 minutes, depending on your network bandwidth and the hardware in use.
 
@@ -363,7 +348,7 @@ sed -i "s/TAO_MODEL_NAME: .*/TAO_MODEL_NAME: $TAO_MODEL_NAME/" docker-compose.ym
 docker compose up tao-cv --build
 ```
 
-4. Test the microservice.
+#### 4. Test the microservice.
 
 Changenet Classification model detects if a part is missing by comparing the test image against a golden image.
 

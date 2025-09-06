@@ -4,8 +4,6 @@ The examples in this folder demonstrates how to use Inference Builder to create 
 
 With the provided Dockerfile, you can package the generated pipeline into a container image and run it as a standalone app or a microservice. Build steps vary by backend. Check the corresponding README.md in each example folder for exact instructions. For examples that run as microservices, we've provided an all-in-one [docker-compose.yml](./docker-compose.yml) to manage them together. You can customize the container behavior by changing the configurations there accordingly.
 
-## Docker Setup
-
 Docker environment must be properly set up with below packages for building and running the examples:
 
 - **Docker**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
