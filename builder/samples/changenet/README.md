@@ -99,4 +99,4 @@ source .venv/bin/activate && cd builder/samples/changenet
 python nim_client.py --host 127.0.0.1 --port 8803 --file test_0.jpg golden_0.jpg
 ```
 
-A new window shows the difference between two images.
+If the inference request is successfuly processed, you'll get a HTTP 200 response and a new window shows the difference between two images.

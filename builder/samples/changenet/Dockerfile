@@ -23,8 +23,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     aiohttp==3.11.0 \
     annotated-types==0.7.0 \
     python-magic==0.4.27 \
-    torch==2.4.0 \
-    torchvision==0.19.0 \
+    torch==2.7.0 --extra-index-url https://download.pytorch.org/whl/cu128 \
+    torchvision==0.22.0 \
     Pillow==11.1.0 \
     open_clip_torch==2.30.0 \
     numpy==1.26.4 \
