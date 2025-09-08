@@ -50,7 +50,7 @@ Using the same steps shown in this example, you can also build the CV inference 
 
 Before you begin, create a model repository. Place all model files and runtime configuration files in a single, self-contained folder. The pipeline selects the model based on the TAO_MODEL_NAME environment variable (set in docker-compose.yaml), which must match the model folder name.
 
-For Finetuned models from TAO-Deploy, the output can be directly dropped into the correspoinding folder in the model reposiotry.
+For Finetuned models from TAO-Deploy, the output can be directly dropped into the corresponding folder in the model reposiotry.
 
 ```bash
 mkdir -p ~/.cache/model-repo && chmod 777 ~/.cache/model-repo
