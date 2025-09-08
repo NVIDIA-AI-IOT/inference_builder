@@ -73,7 +73,7 @@ export GITLAB_TOKEN={Your GITLAB token} # replace the placeholder {Your GITLAB t
 
 Make sure you are in the root directory (`path/to/inference-builder`) before you start with any of the microservices. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
-### Microservice 1: for generic detection, classification and segmentation models.
+### Generic CV Microservice for detection, classification and segmentation models.
 
 This microservice supports common CV models including image classification, object detection and segmentation.
 
@@ -190,7 +190,7 @@ curl -X 'POST' \
 The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame. Given the model is trained for traffic scenes, it detects "car", "roadsign", "bicycle", "person" and "background".
 
 
-### Microservice 2: for Grounding Dino and Mask Grounding Dino models.
+### Microservice for Grounding Dino and Mask Grounding Dino models.
 
 This microservice supports Grounding Dino model and Mask Grounding Dino model.
 
@@ -311,7 +311,7 @@ curl -X 'POST' \
 
 The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame.
 
-### Microservice 3: for visual changenet models with two image inputs.
+### Microservice for visual changenet models with two image inputs.
 
 This microservice supports Visual Changenet Classification model.
 
