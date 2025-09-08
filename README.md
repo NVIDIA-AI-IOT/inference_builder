@@ -23,7 +23,7 @@ Visit our [documentation](doc) for more details:
 
 First, be sure your system meets the requirement.
 
-| Operation System   | Python | CPU            |  GPU*                        |
+| Operating System   | Python | CPU            |  GPU*                        |
 |:-------------------|:-------|:---------------|:-----------------------------|
 |Ubuntu 24.04        |3.12    | x86, aarch64   |Nvidia ADA, Hopper, Blackwell |
 
