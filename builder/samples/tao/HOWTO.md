@@ -25,6 +25,8 @@ Some of the models used by the examples are from the NVIDIA GPU Cloud (NGC) repo
 
 **: The build configuration file is used for building the inference pipeline
 
+Apart from the models listed in the above table, the Inference Builder also support building CV microservices for fine-tuned models exported from [TAO Deploy](https://docs.nvidia.com/tao/tao-toolkit/text/tao_deploy/tao_deploy_overview.html).
+
 ### Sample Videos
 
 If you don't have any test video in hand, you can copy it from deepstream-sample container image using following commands:
