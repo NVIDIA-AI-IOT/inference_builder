@@ -125,8 +125,7 @@ If you don't have any test image in hand, you can use [this one](./validation/ci
 PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "<absolute_path_to_your_file.jpg>"))
 cat > payload.json <<EOF
 {
-  "input": [ "$PAYLOAD" ],
-  "model": "nvidia/nvdino-v2"
+  "input": [ "$PAYLOAD" ]
 }
 EOF
 
@@ -180,8 +179,7 @@ curl -X 'POST' \
     "size": 82223,
     "duration": 2000000000,
     "contentType": "video/mp4"
-  } ],
-  "model": "nvidia/nvdino-v2"
+  } ]
 }' -N
 ```
 
@@ -245,8 +243,7 @@ PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "<absolute_path_to_your
 cat > payload.json <<EOF
 {
   "input": [ "$PAYLOAD" ],
-  "text": [ ["car", "people"] ],
-  "model": "nvidia/nvdino-v2"
+  "text": [ ["car", "people"] ]
 }
 EOF
 
@@ -304,8 +301,7 @@ curl -X 'POST' \
   } ],
   "text": [
     ["car", "people"]
-  ],
-  "model": "nvidia/nvdino-v2"
+  ]
 }' -N
 ```
 
