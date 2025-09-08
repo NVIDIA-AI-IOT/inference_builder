@@ -126,7 +126,7 @@ PAYLOAD=$(echo -n "data:image/jpeg;base64,"$(base64 -w 0 "<absolute_path_to_your
 cat > payload.json <<EOF
 {
   "input": [ "$PAYLOAD" ],
-  "model": "nvidia/tao"
+  "model": "nvidia/nvdino-v2"
 }
 EOF
 
@@ -181,7 +181,7 @@ curl -X 'POST' \
     "duration": 2000000000,
     "contentType": "video/mp4"
   } ],
-  "model": "nvidia/tao"
+  "model": "nvidia/nvdino-v2"
 }' -N
 ```
 
@@ -246,7 +246,7 @@ cat > payload.json <<EOF
 {
   "input": [ "$PAYLOAD" ],
   "text": [ ["car", "people"] ],
-  "model": "nvidia/tao"
+  "model": "nvidia/nvdino-v2"
 }
 EOF
 
@@ -305,7 +305,7 @@ curl -X 'POST' \
   "text": [
     ["car", "people"]
   ],
-  "model": "nvidia/tao"
+  "model": "nvidia/nvdino-v2"
 }' -N
 ```
 
@@ -360,7 +360,7 @@ TEST_PAYLOAD=$(echo -n "data:image/png;base64,"$(base64 -w 0 "builder/samples/ta
 cat > payload.json <<EOF
 {
   "input": [ "$GOLDEN_PAYLOAD", "$TEST_PAYLOAD" ],
-  "model": "nvidia/tao"
+  "model": "nvidia/nvdino-v2"
 }
 EOF
 curl -X POST \
