@@ -21,9 +21,9 @@ Some of the models used by the examples are from the NVIDIA GPU Cloud (NGC) repo
 | [Mask Grounding DINO](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask_grounding_dino) | builder/samples/ds_app/gdino/mask_gdino/ | ds_gdino.yaml | segmentation |
 | [Resnet50 RT-DETR](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite) | builder/samples/ds_app/detection/rtdetr/ | ds_tao.yaml | detection |
 
-*:  Runtime configuration files are used by Deepstream during runtime and needs to be put to the model directory.
+*:  Runtime configuration files are used by Deepstream during runtime and need to be put to the model directory.
 
-**: Build configuration file is used to build the inference pipeline
+**: The build configuration file is used for building the inference pipeline
 
 ### Sample Videos
 
