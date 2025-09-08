@@ -50,6 +50,8 @@ Using the same steps shown in this example, you can also build the CV inference 
 
 Before you begin, create a model repository. Place all model files and runtime configuration files in a single, self-contained folder. The pipeline selects the model based on the TAO_MODEL_NAME environment variable (set in docker-compose.yaml), which must match the model folder name.
 
+For Finetuned models from TAO-Deploy, the output can be directly dropped into the correspoinding folder in the model reposiotry.
+
 ```bash
 mkdir -p ~/.cache/model-repo && chmod 777 ~/.cache/model-repo
 export MODEL_REPO=~/.cache/model-repo
@@ -71,7 +73,7 @@ export GITLAB_TOKEN={Your GITLAB token} # replace the placeholder {Your GITLAB t
 
 Make sure you are in the root directory (`path/to/inference-builder`) before you start with any of the microservices. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
-### Microservice 1
+### Microservice 1: for generic detection, classification and segmentation models.
 
 This microservice supports common CV models including image classification, object detection and segmentation.
 
@@ -188,7 +190,7 @@ curl -X 'POST' \
 The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame. Given the model is trained for traffic scenes, it detects "car", "roadsign", "bicycle", "person" and "background".
 
 
-### Microservice 2
+### Microservice 2: for Grounding Dino and Mask Grounding Dino models.
 
 This microservice supports Grounding Dino model and Mask Grounding Dino model.
 
@@ -309,7 +311,7 @@ curl -X 'POST' \
 
 The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame.
 
-### Microservice 3
+### Microservice 3: for visual changenet models with two image inputs.
 
 This microservice supports Visual Changenet Classification model.
 
