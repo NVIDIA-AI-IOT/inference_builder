@@ -269,7 +269,6 @@ components:
       type: object
       required:
         - input
-        - model
       title: InferenceRequest
       description: List of input images for the inference request.
     InferenceResponse:
