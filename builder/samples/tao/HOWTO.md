@@ -355,8 +355,7 @@ GOLDEN_PAYLOAD=$(echo -n "data:image/png;base64,"$(base64 -w 0 "builder/samples/
 TEST_PAYLOAD=$(echo -n "data:image/png;base64,"$(base64 -w 0 "builder/samples/tao/pass_1.png"))
 cat > payload.json <<EOF
 {
-  "input": [ "$GOLDEN_PAYLOAD", "$TEST_PAYLOAD" ],
-  "model": "nvidia/nvdino-v2"
+  "input": [ "$GOLDEN_PAYLOAD", "$TEST_PAYLOAD" ]
 }
 EOF
 curl -X POST \
