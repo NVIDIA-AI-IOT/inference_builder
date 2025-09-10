@@ -15,7 +15,7 @@
 
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.2" AS inference_base
+FROM "nvcr.io/nvidia/deepstream:8.0-triton-multiarch" AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \

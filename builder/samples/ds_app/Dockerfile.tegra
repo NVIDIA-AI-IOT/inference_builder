@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM gitlab-master.nvidia.com:5005/dl/dgx/pytorch:25.08-py3.33012958-base AS pytorch_src
+FROM "nvcr.io/nvidia/pytorch:25.08-py3" AS pytorch_src
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream-l4t:8.0.0-triton-opt-dev74" AS inference_base
+FROM "nvcr.io/nvidia/deepstream:8.0-triton-multiarch" AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -87,8 +87,7 @@ RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/a
 
 # Build DS TAO app post processors
 # need to be after DS SDK installation
-ARG GITLAB_TOKEN
-ENV DS_TAO_APPS_REPO=https://oauth2:${GITLAB_TOKEN}@gitlab-master.nvidia.com/DeepstreamSDK/deepstream_tao_apps.git
+ENV DS_TAO_APPS_REPO=https://github.com/NVIDIA-AI-IOT/deepstream_tao_apps.git
 ENV DS_TAO_APPS_TAG="main"
 ARG CACHE_BUSTER=unique_value_to_bypass_docker_cache
 RUN mkdir ds_tao_apps_src && \

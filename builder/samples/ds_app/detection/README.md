@@ -8,7 +8,7 @@ This sample demonstrates how to build a deepstream application with Inference Bu
 
 ## Prerequisites
 
-**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
+**Note:** Make sure you are in the root directory (`path/to/inference_builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference_builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
 Model files are loaded from '/workspace/models/{MODEL_NAME}' within the container, thus the volume must be correctly mapped from the host.
 You need to export MODEL_REPO environment variable to the path where you want to store the model files.
@@ -49,16 +49,10 @@ By default, rtdetr model is used. If you want to use mask2former, please change 
 
 ## Generate the DeepStream Application Package and Build Container Image
 
-Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference-builder folder, then activate your virtual environment:
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference_builder folder, then activate your virtual environment:
 
 ```bash
 source .venv/bin/activate
-```
-
-You need to export your GITLAB_TOKEN for pulling source dependencies from gitlab
-
-```bash
-export GITLAB_TOKEN={Your GitLab Token}
 ```
 
 ### For x86 Architecture
@@ -68,10 +62,7 @@ python builder/main.py builder/samples/ds_app/detection/ds_detect.yaml \
     -o builder/samples/ds_app \
     --server-type serverless \
     -t \
-&& docker build \
-    --build-arg GITLAB_TOKEN=$GITLAB_TOKEN \
-    -t deepstream-app \
-    builder/samples/ds_app
+&& docker build -t deepstream-app builder/samples/ds_app
 ```
 
 ### For Tegra Architecture
@@ -82,7 +73,6 @@ python builder/main.py builder/samples/ds_app/detection/ds_detect.yaml \
     --server-type serverless \
     -t \
 && docker build \
-    --build-arg GITLAB_TOKEN=$GITLAB_TOKEN \
     -t deepstream-app \
     -f builder/samples/ds_app/Dockerfile.tegra \
     builder/samples/ds_app
@@ -121,7 +111,7 @@ If the configuration is successful, you will see this message in the log: `acces
 ```bash
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
-docker run --rm --net=host --gpus all --runtime=nvidia \
+docker run --rm --network=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
@@ -140,7 +130,7 @@ docker run --rm --net=host --gpus all --runtime=nvidia \
 
 # Note: Replace rtsp://<url_path> with your actual RTSP stream URL
 
-docker run --rm --net=host --gpus all --runtime=nvidia \
+docker run --rm --network=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
@@ -153,7 +143,7 @@ docker run --rm --net=host --gpus all --runtime=nvidia \
 
 ```bash
 # source-config: path to the source configuration file that defines input sources
-docker run --rm --net=host --gpus all --runtime=nvidia \
+docker run --rm --network=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
@@ -168,7 +158,7 @@ docker run --rm --net=host --gpus all --runtime=nvidia \
 
 # Note: /workspace/inputs/source_list_dynamic.yaml is just a placeholder for any config present in $SAMPLE_INPUT directory
 
-docker run --rm --net=host --gpus all --runtime=nvidia \
+docker run --rm --network=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v $SAMPLE_INPUT:/workspace/inputs \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
@@ -185,7 +175,7 @@ docker run --rm --net=host --gpus all --runtime=nvidia \
 
 # Note: /sample_input/test_1.jpg is just a placeholder for any image present in $SAMPLE_INPUT directory
 
-docker run --rm --net=host --gpus all --runtime=nvidia \
+docker run --rm --network=host --gpus all --runtime=nvidia \
     -v $SAMPLE_INPUT:/sample_input \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
@@ -195,138 +185,4 @@ docker run --rm --net=host --gpus all --runtime=nvidia \
     --mime image/jpeg
 ```
 
-## MV3DT (Multi-View 3D Tracking)
-
-This section demonstrates how to set up and run the MV3DT specific models for multi-view 3D tracking.
-
-### Model Setup
-
-1. **Download Model Files:**
-   Download the model content from [Google Drive](https://drive.google.com/drive/folders/1EiLjPYjGeIF2duElHlH11lu94_fO5WEZ?usp=drive_link) to your host and unzip it. After unzipping, you will get a folder named `models` which contains all the models you need. Copy the contents of the `models/` folder to your `$MODEL_REPO` directory.
-
-    **Note:** MV3DT-specific model files will be made publicly available in a future release (required for DS-8.0). The download instructions above will be updated once the models are hosted on the official NGC catalog or other public repositories.
-
-    **Note:** After downloading the models inside $MODEL_REPO, you would have four model directories like this:
-    - PeopleNetTransformer
-    - BodyPose3DNet
-    - ReID-MTMC
-    - PeopleNet2.6.3
-
-2. **Copy Required Files:**
-   ```bash
-   cp -r builder/samples/ds_app/detection/PeopleNetTransformer/* $MODEL_REPO/PeopleNetTransformer/
-   ```
-
-3. **Create Output Directories:**
-   ```bash
-   mkdir -p $MODEL_REPO/PeopleNetTransformer/infer-kitti-dump
-   mkdir -p $MODEL_REPO/PeopleNetTransformer/tracker-kitti-dump
-   mkdir -p $MODEL_REPO/PeopleNetTransformer/trajDumps
-   ```
-
-4. **Clean up existing ModelEngine files (optional):**
-   ```bash
-   # Remove existing TensorRT engine files to force regeneration for your system
-   # This is recommended when switching between different GPU architectures or TensorRT versions
-   rm -f $MODEL_REPO/PeopleNetTransformer/*.engine
-   rm -f $MODEL_REPO/BodyPose3DNet/*.engine
-   rm -f $MODEL_REPO/ReID-MTMC/*.engine
-   rm -f $MODEL_REPO/PeopleNet2.6.3/*.engine
-   ```
-
-### Sample Data Setup
-
-1. **Download Sample Streams:**
-   Download the sample input streams content from [Google Drive](https://drive.google.com/drive/folders/1elBteIllmbdDSE0EMEiYjG_ZTwKrKXwE?usp=drive_link) to your host and unzip it. After unzipping, you will get a folder named `MTMC_Warehouse_Synthetic_4cam`. 
-
-2. **Set Environment Variable:**
-   Set the `SAMPLE_INPUT` environment variable to the absolute path of the `MTMC_Warehouse_Synthetic_4cam` directory:
-   ```bash
-   export SAMPLE_INPUT=/path/to/MTMC_Warehouse_Synthetic_4cam/
-   ```
-
-### MQTT Setup for Tracker
-
-Install the MQTT broker and clients required for the tracker:
-
-```bash
-sudo apt-add-repository ppa:mosquitto-dev/mosquitto-ppa
-sudo apt update
-sudo apt install mosquitto mosquitto-clients
-```
-
-Launch mosquitto broker
-
-```bash
-mosquitto -p 1883
-```
-
-### Build and Run
-
-**Generate the deepstream application package and build it into a container image:**
-
-You need to export your GITLAB_TOKEN for pulling source dependencies from gitlab
-
-```bash
-export GITLAB_TOKEN={Your GitLab Token}
-```
-### For x86 Architecture
-
-```bash
-python builder/main.py builder/samples/ds_app/detection/ds_mv3dt.yaml \
-    -o builder/samples/ds_app \
-    --server-type serverless \
-    -t \
-&& docker build \
-    --build-arg GITLAB_TOKEN=$GITLAB_TOKEN \
-    -t deepstream-app \
-    builder/samples/ds_app
-```
-
-### For Tegra Architecture
-
-```bash
-python builder/main.py builder/samples/ds_app/detection/ds_mv3dt.yaml \
-    -o builder/samples/ds_app \
-    --server-type serverless \
-    -t \
-&& docker build \
-    --build-arg GITLAB_TOKEN=$GITLAB_TOKEN \
-    -t deepstream-app \
-    -f builder/samples/ds_app/Dockerfile.tegra \
-    builder/samples/ds_app
-```
-
-#### Build the custom parser for PeopleNetTransformer model for Tegra 
-```bash
-export CUDA_VER=13.0
-make -C $MODEL_REPO/PeopleNetTransformer/custom_parser clean
-make -C $MODEL_REPO/PeopleNetTransformer/custom_parser all
-```
-
-**Run with multi-camera video input:**
-
-```bash
-# media-url: the path or URL to the input media.
-# mime: the media type (e.g., "video/mp4" or "image/jpeg").
-docker run --rm --net=host --gpus all --runtime=nvidia \
-    -v $MODEL_REPO:/workspace/models \
-    -v $SAMPLE_INPUT:/workspace/inputs \
-    -v /tmp/.X11-unix/:/tmp/.X11-unix \
-    -e DISPLAY=$DISPLAY \
-    deepstream-app \
-    --media-url /workspace/inputs/videos/Warehouse_Synthetic_Cam001.mp4 \
-                /workspace/inputs/videos/Warehouse_Synthetic_Cam002.mp4 \
-                /workspace/inputs/videos/Warehouse_Synthetic_Cam003.mp4 \
-                /workspace/inputs/videos/Warehouse_Synthetic_Cam004.mp4 \
-    --mime video/mp4 video/mp4 video/mp4 video/mp4
-```
-
-### Results
-
-Once the run is complete, the following output data will be populated in the respective directories:
-
-- **`infer-kitti-dump`** - Inference kitti data
-- **`tracker-kitti-dump`** - Tracker Kitti data
-- **`trajDumps`** - Trajectory dump data
 

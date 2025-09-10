@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.09.1-ma" AS ds_stage
+FROM "nvcr.io/nvidia/deepstream:8.0-triton-multiarch" AS ds_stage
 
 FROM "nvcr.io/nvidia/tritonserver:25.01-py3" AS builder_base
 

@@ -59,19 +59,15 @@ Commands:
     help           Show this help message
 
 Options:
-    --gitlab-token TOKEN    GitLab token for private repositories
     --no-cleanup           Don't cleanup Docker images after testing
     --output FILE          Save test report to specified file
     --config FILE          Use custom configuration file (required for custom-test)
     --log-dir DIR          Directory to save container logs (default: logs)
 
 Examples:
-    $0 full-test --gitlab-token "your_token_here"
+    $0 full-test
     $0 custom-test --config my_config.json --output results.json
     $0 full-test --no-cleanup --output full_results.json --log-dir test_logs
-
-Note: GITLAB_TOKEN is required for building images that access private GitLab repositories.
-      You can provide it via --gitlab-token option or set the GITLAB_TOKEN environment variable.
 
 EOF
 }
@@ -106,26 +102,11 @@ check_prerequisites() {
     print_success "Prerequisites check passed"
 }
 
-# Function to check GitLab token
-check_gitlab_token() {
-    if [ -z "$GITLAB_TOKEN" ]; then
-        print_warning "GITLAB_TOKEN not provided"
-        print_warning "Some tests may fail if they require access to private GitLab repositories"
-        print_info "You can provide it via --gitlab-token option or set GITLAB_TOKEN environment variable"
-    else
-        print_info "GITLAB_TOKEN provided"
-    fi
-}
-
 # Function to run full test
 run_full_test() {
     print_info "Running full test suite with all configurations..."
 
     local args=("--dockerfile" "Dockerfile" "--base-dir" "." "--config-file" "test_configs.json" "--log-dir" "$LOG_DIR")
-
-    if [ -n "$GITLAB_TOKEN" ]; then
-        args+=("--gitlab-token" "$GITLAB_TOKEN")
-    fi
 
     if [ "$NO_CLEANUP" = "true" ]; then
         args+=("--no-cleanup")
@@ -154,10 +135,6 @@ run_custom_test() {
 
     local args=("--dockerfile" "Dockerfile" "--base-dir" "." "--config-file" "$CONFIG_FILE" "--log-dir" "$LOG_DIR")
 
-    if [ -n "$GITLAB_TOKEN" ]; then
-        args+=("--gitlab-token" "$GITLAB_TOKEN")
-    fi
-
     if [ "$NO_CLEANUP" = "true" ]; then
         args+=("--no-cleanup")
     fi
@@ -171,7 +148,6 @@ run_custom_test() {
 
 # Parse command line arguments
 COMMAND=""
-GITLAB_TOKEN=""
 NO_CLEANUP="false"
 OUTPUT_FILE=""
 CONFIG_FILE=""
@@ -182,10 +158,6 @@ while [[ $# -gt 0 ]]; do
         full-test|custom-test|help)
             COMMAND="$1"
             shift
-            ;;
-        --gitlab-token)
-            GITLAB_TOKEN="$2"
-            shift 2
             ;;
         --no-cleanup)
             NO_CLEANUP="true"
@@ -229,23 +201,3 @@ cd "$SCRIPT_DIR"
 
 # Check prerequisites
 check_prerequisites
-
-# Check GitLab token
-check_gitlab_token
-
-# Execute command
-case $COMMAND in
-    full-test)
-        run_full_test
-        ;;
-    custom-test)
-        run_custom_test
-        ;;
-    *)
-        print_error "Unknown command: $COMMAND"
-        show_usage
-        exit 1
-        ;;
-esac
-
-print_success "Test execution completed"

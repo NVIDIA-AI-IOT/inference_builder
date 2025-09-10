@@ -53,9 +53,9 @@ def validate_script_command(script_command: str) -> bool:
     """Validate script command using a flexible approach that allows legitimate arguments."""
     if not isinstance(script_command, str) or not script_command.strip():
         return False
-    
+
     script_command = script_command.strip()
-    
+
     # Split command into parts for analysis
     try:
         import shlex
@@ -63,40 +63,40 @@ def validate_script_command(script_command: str) -> bool:
     except ValueError:
         # Invalid shell syntax
         return False
-    
+
     if not parts:
         return False
-    
+
     # Check the main command/script
     main_command = parts[0]
-    
+
     # Allow specific known scripts
     allowed_script_names = [
         "setup_rtsp_server.sh",
         "./setup_rtsp_server.sh"
     ]
-    
+
     allowed_shell_commands = ["bash", "sh"]
-    
+
     # Validate main command
     if main_command not in allowed_script_names and main_command not in allowed_shell_commands:
         return False
-    
+
     # If it's a shell command, check the script being executed
     if main_command in allowed_shell_commands and len(parts) > 1:
         script_name = parts[1]
         if script_name not in allowed_script_names:
             return False
-    
+
     # Validate all arguments
     for arg in parts[1:]:
         if not validate_script_arg(arg):
             return False
-    
+
     # Check for dangerous patterns in the full command
     dangerous_patterns = [
         r'[;&|`]',        # Shell metacharacters (but allow some like spaces)
-        r'\$\(',          # Command substitution  
+        r'\$\(',          # Command substitution
         r'`',             # Backticks
         r'>>?',           # Redirections
         r'\|\|',          # OR operator
@@ -104,11 +104,11 @@ def validate_script_command(script_command: str) -> bool:
         r'<',             # Input redirection
         r'\x00',          # Null bytes
     ]
-    
+
     for pattern in dangerous_patterns:
         if re.search(pattern, script_command):
             return False
-    
+
     return True
 
 
@@ -116,26 +116,26 @@ def validate_script_arg(arg: str) -> bool:
     """Validate individual script argument."""
     if not isinstance(arg, str):
         return False
-    
+
     # Check for null bytes and control characters
     if '\x00' in arg or any(ord(c) < 32 for c in arg if c not in ['\t']):
         return False
-    
+
     # Allow common script arguments
     dangerous_chars = ['`', '$', ';', '|', '>', '<', '(', ')']
     if any(char in arg for char in dangerous_chars):
         return False
-    
+
     # Allow legitimate flags and file arguments
     if arg.startswith('-'):
         # Allow common flag patterns
         if not re.match(r'^-{1,2}[a-zA-Z0-9][a-zA-Z0-9_-]*$', arg):
             return False
-    
+
     # Prevent excessively long arguments
     if len(arg) > 1024:
         return False
-    
+
     return True
 
 
@@ -143,72 +143,72 @@ def validate_safe_path(path: str) -> bool:
     """Validate file path to prevent directory traversal and command injection."""
     if not path or not isinstance(path, str):
         return False
-    
+
     # Check for path traversal attempts
     if '..' in path or '//' in path:
         return False
-    
+
     # Check for absolute paths that could access system directories
     if os.path.isabs(path):
         system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin', '/root']
         for sys_dir in system_dirs:
             if path.startswith(sys_dir):
                 return False
-    
+
     # Check for invalid characters
     invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\\']
     if any(char in path for char in invalid_chars):
         return False
-    
+
     return True
 
 def validate_config_file_path(config_file: str) -> bool:
     """Validate configuration file path for security."""
     if not validate_safe_path(config_file):
         return False
-    
+
     # Ensure it's a JSON file
     if not config_file.lower().endswith('.json'):
         return False
-    
+
     return True
 
 def validate_dockerfile_path(dockerfile: str) -> bool:
     """Validate Dockerfile path for security."""
     if not validate_safe_path(dockerfile):
         return False
-    
+
     # Ensure it's a Dockerfile or has .dockerfile extension
     if not (dockerfile.lower() == 'dockerfile' or dockerfile.lower().endswith('.dockerfile')):
         return False
-    
+
     return True
 
 def validate_log_directory(log_dir: str) -> bool:
     """Validate log directory path for security."""
     if not validate_safe_path(log_dir):
         return False
-    
+
     # Prevent access to system directories
     if log_dir.startswith('/') and not log_dir.startswith('./'):
         return False
-    
+
     return True
 
 def validate_gitlab_token(token: str) -> bool:
     """Validate GitLab token format."""
     if not token:
         return True  # Empty token is allowed
-    
+
     # Basic validation for GitLab token format
     if not isinstance(token, str) or len(token) < 10:
         return False
-    
+
     # Check for suspicious patterns
     suspicious_patterns = ['<script', 'javascript:', 'data:', 'vbscript:']
     if any(pattern in token.lower() for pattern in suspicious_patterns):
         return False
-    
+
     return True
 
 
@@ -216,11 +216,11 @@ def validate_docker_arg(arg: str) -> bool:
     """Validate docker argument to prevent command injection while allowing legitimate flags."""
     if not isinstance(arg, str):
         return False
-    
+
     # Check for null bytes and control characters
     if '\x00' in arg or any(ord(c) < 32 for c in arg if c not in ['\t', '\n', '\r']):
         return False
-        
+
     # Check for dangerous characters and patterns (but allow legitimate usage)
     dangerous_patterns = [
         r'[;|`$()]',      # Shell metacharacters (removed & for now)
@@ -231,11 +231,11 @@ def validate_docker_arg(arg: str) -> bool:
         r'&&',            # AND operator for command chaining
         r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]',  # Control characters
     ]
-    
+
     for pattern in dangerous_patterns:
         if re.search(pattern, arg):
             return False
-    
+
     # Check for dangerous & usage (but allow in URL query parameters)
     if '&' in arg:
         # Allow & in URL-like contexts (after ?)
@@ -245,17 +245,17 @@ def validate_docker_arg(arg: str) -> bool:
         # Check for command chaining patterns even with ?
         if ' &' in arg or '& ' in arg or arg.endswith('&'):
             return False
-    
+
     # Additional dangerous characters for docker contexts (be selective)
     # Note: Removed '?' to allow URL query parameters, '*' and '!' for legitimate use
     dangerous_chars = ['[', ']', '{', '}', '\\']
     if any(char in arg for char in dangerous_chars):
         return False
-    
+
     # Check for wildcard patterns that could be dangerous in specific contexts
     if '*' in arg and any(pattern in arg for pattern in ['*.*', '*.sh', '*.py', '*/', '/*']):
         return False
-    
+
     # Allow legitimate command-line flags but prevent injection attempts
     if arg.strip().startswith('-'):
         # Allow common legitimate patterns
@@ -265,29 +265,29 @@ def validate_docker_arg(arg: str) -> bool:
             r'^-[a-zA-Z0-9]$',                          # -f
             r'^-[a-zA-Z0-9][a-zA-Z0-9]*$',              # -abc
         ]
-        
+
         # Check if it matches any legitimate pattern
         is_legitimate = any(re.match(pattern, arg) for pattern in legitimate_flag_patterns)
-        
+
         if not is_legitimate:
             return False
-        
+
         # Additional checks for flag values (after =)
         if '=' in arg:
             flag_value = arg.split('=', 1)[1]
             # Check flag value for dangerous patterns
             if any(char in flag_value for char in ['`', '$', ';', '&', '|', '(', ')']):
                 return False
-    
+
     # Prevent excessively long arguments (potential DoS)
     if len(arg) > 8192:  # Reasonable limit for docker arguments
         return False
-    
+
     # Check for potential escape sequences in non-flag arguments
     if not arg.startswith('-') and '\\' in arg:
         if any(seq in arg for seq in ['\\n', '\\r', '\\t', '\\x', '\\u']):
             return False
-    
+
     return True
 
 
@@ -295,7 +295,7 @@ def validate_env_var_name(name: str) -> bool:
     """Validate environment variable name."""
     if not isinstance(name, str) or not name:
         return False
-    
+
     # Environment variable names should be alphanumeric + underscore, starting with letter or underscore
     return bool(re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name))
 
@@ -304,16 +304,16 @@ def validate_env_var_value(value: str) -> bool:
     """Validate environment variable value."""
     if not isinstance(value, str):
         return False
-    
+
     # Check for null bytes
     if '\x00' in value:
         return False
-        
+
     # Check for dangerous shell characters
     dangerous_chars = ['`', '$', ';', '&', '|', '(', ')', '>', '<']
     if any(char in value for char in dangerous_chars):
         return False
-    
+
     return True
 
 
@@ -321,11 +321,11 @@ def validate_volume_path(path: str) -> bool:
     """Validate volume mount path to prevent injection attacks."""
     if not isinstance(path, str) or not path:
         return False
-    
+
     # Check for null bytes and control characters
     if '\x00' in path or any(ord(c) < 32 for c in path if c not in ['\t']):
         return False
-    
+
     # Check for path traversal attempts (more comprehensive)
     dangerous_path_patterns = [
         '..',           # Directory traversal
@@ -335,24 +335,24 @@ def validate_volume_path(path: str) -> bool:
         '\\..',         # Windows-style traversal
         '\\\\',         # Windows double backslashes
     ]
-    
+
     for pattern in dangerous_path_patterns:
         if pattern in path:
             return False
-    
+
     # Check for dangerous shell characters and command injection attempts
     dangerous_chars = ['`', '$', ';', '&', '|', '(', ')', '>', '<', '*', '?', '!', '[', ']', '{', '}', '~']
     if any(char in path for char in dangerous_chars):
         return False
-    
+
     # Check for spaces at beginning/end (could be injection attempts)
     if path.startswith(' ') or path.endswith(' '):
         return False
-    
+
     # Check for argument injection (starting with dash)
     if path.startswith('-'):
         return False
-    
+
     # Ensure path doesn't contain colon (except for Windows drive letters or container paths)
     colon_count = path.count(':')
     if colon_count > 1:  # Allow one colon for Windows drive letters or container paths
@@ -361,11 +361,11 @@ def validate_volume_path(path: str) -> bool:
         # Allow Windows drive letters (C:) or absolute container paths (/app:)
         if not (re.match(r'^[A-Za-z]:', path) or ':' in path[1:]):
             return False
-    
+
     # Additional check: ensure reasonable path length to prevent buffer overflow attacks
     if len(path) > 4096:  # Most systems limit paths to 4096 characters
         return False
-    
+
     return True
 
 
@@ -373,11 +373,11 @@ def validate_build_arg_name(name: str) -> bool:
     """Validate Docker build argument name to prevent injection."""
     if not isinstance(name, str) or not name:
         return False
-    
+
     # Build arg names should be alphanumeric + underscore, no dashes at start
     if name.startswith('-'):
         return False
-    
+
     # Allow standard environment variable naming convention
     return bool(re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name))
 
@@ -386,20 +386,20 @@ def validate_build_arg_value(value: str) -> bool:
     """Validate Docker build argument value to prevent injection."""
     if not isinstance(value, str):
         return False
-    
+
     # Check for null bytes
     if '\x00' in value:
         return False
-    
+
     # Check for dangerous shell characters that could cause issues
     dangerous_chars = ['`', '$', ';', '&', '|', '(', ')', '>', '<', '\n', '\r']
     if any(char in value for char in dangerous_chars):
         return False
-    
+
     # Check for argument injection attempts
     if value.strip().startswith('-'):
         return False
-    
+
     return True
 
 
@@ -407,21 +407,21 @@ def validate_image_name(image_name: str) -> bool:
     """Validate Docker image name to prevent injection."""
     if not isinstance(image_name, str) or not image_name:
         return False
-    
+
     # Check for null bytes
     if '\x00' in image_name:
         return False
-    
+
     # Check for dangerous characters
     dangerous_chars = ['`', '$', ';', '&', '|', '(', ')', '>', '<', ' ', '\n', '\r']
     if any(char in image_name for char in dangerous_chars):
         return False
-    
+
     # Basic docker image name validation (simplified)
     # Allow alphanumeric, hyphens, underscores, slashes, colons, dots
     if not re.match(r'^[a-zA-Z0-9._/-]+(?::[a-zA-Z0-9._-]+)?$', image_name):
         return False
-    
+
     return True
 
 
@@ -429,51 +429,51 @@ def validate_test_config(test_config: dict) -> Tuple[bool, str]:
     """Validate test configuration to prevent command injection."""
     if not isinstance(test_config, dict):
         return False, "Test config must be a dictionary"
-    
+
     # Validate environment variables
     if "env" in test_config:
         if not isinstance(test_config["env"], dict):
             return False, "env must be a dictionary"
-        
+
         for key, value in test_config["env"].items():
             if not validate_env_var_name(key):
                 return False, f"Invalid environment variable name: {key}"
             if not validate_env_var_value(str(value)):
                 return False, f"Invalid environment variable value for {key}: {value}"
-    
+
     # Validate volume mounts
     if "volumes" in test_config:
         if not isinstance(test_config["volumes"], dict):
             return False, "volumes must be a dictionary"
-        
+
         for host_path, container_path in test_config["volumes"].items():
             if not validate_volume_path(host_path):
                 return False, f"Invalid host path in volume mount: {host_path}"
             if not validate_volume_path(container_path):
                 return False, f"Invalid container path in volume mount: {container_path}"
-    
+
     # Validate command arguments
     if "cmd" in test_config:
         if not isinstance(test_config["cmd"], list):
             return False, "cmd must be a list"
-        
+
         for arg in test_config["cmd"]:
             if not validate_docker_arg(str(arg)):
                 return False, f"Invalid command argument: {arg}"
-    
+
     # Validate timeout
     if "timeout" in test_config:
         if not isinstance(test_config["timeout"], (int, float)) or test_config["timeout"] <= 0:
             return False, "timeout must be a positive number"
         if test_config["timeout"] > 3600:  # Max 1 hour
             return False, "timeout cannot exceed 3600 seconds"
-    
+
     # Validate prerequisite script
     if "prerequisite_script" in test_config:
         script = test_config["prerequisite_script"]
         if script and not validate_script_command(script):
             return False, f"Invalid prerequisite script: {script}"
-    
+
     return True, ""
 
 
@@ -617,7 +617,7 @@ class DockerBuildTester:
                     # Double-check validation before shell execution
                     if not validate_script_command(script_command):
                         raise ValueError("Command failed security validation")
-                    
+
                     result = subprocess.run(
                         script_command,
                         shell=True,  # Only when necessary and after validation
@@ -754,7 +754,7 @@ class DockerBuildTester:
                         error_msg = f"Invalid volume path: {host_path}:{container_path}"
                         logger.error(f"❌ {error_msg}")
                         return False, error_msg, ""
-                    
+
                     # Convert relative path to absolute path based on current working directory
                     if not os.path.isabs(host_path):
                         abs_host_path = os.path.abspath(host_path)
@@ -1053,12 +1053,9 @@ class DockerBuildTester:
             logger.info(f"{'='*60}")
 
             # Generate unique image name
-            image_name = f"test-inference-builder-{i}-{int(time.time())}"
+            image_name = f"test-inference_builder-{i}-{int(time.time())}"
 
-            # Prepare build arguments with gitlab_token if provided
             build_args = config.get("build_args", {}).copy()
-            if gitlab_token:
-                build_args["GITLAB_TOKEN"] = gitlab_token
 
             # Build image
             build_success, build_output = self.build_image(build_args, image_name)
@@ -1154,7 +1151,6 @@ def main():
     parser.add_argument("--output", help="Output file for test report")
     parser.add_argument("--log-dir", default="logs", help="Directory to save container logs")
     parser.add_argument("--no-cleanup", action="store_true", help="Don't cleanup images after testing")
-    parser.add_argument("--gitlab-token", help="GitLab token for private repos")
 
     # Parse arguments with security validation
     try:
@@ -1165,31 +1161,31 @@ def main():
 
     # Comprehensive security validation
     validation_errors = []
-    
+
     # Validate dockerfile path
     if not validate_dockerfile_path(args.dockerfile):
         validation_errors.append(f"Invalid Dockerfile path: {args.dockerfile}")
-    
+
     # Validate base directory
     if not validate_safe_path(args.base_dir):
         validation_errors.append(f"Invalid base directory path: {args.base_dir}")
-    
+
     # Validate config file
     if not validate_config_file_path(args.config_file):
         validation_errors.append(f"Invalid config file path: {args.config_file}")
-    
+
     # Validate output file if provided
     if args.output and not validate_safe_path(args.output):
         validation_errors.append(f"Invalid output file path: {args.output}")
-    
+
     # Validate log directory
     if not validate_log_directory(args.log_dir):
         validation_errors.append(f"Invalid log directory path: {args.log_dir}")
-    
+
     # Validate GitLab token if provided
     if args.gitlab_token and not validate_gitlab_token(args.gitlab_token):
         validation_errors.append("Invalid GitLab token format")
-    
+
     # Exit if any validation errors
     if validation_errors:
         logger.error("❌ Security validation failed:")
@@ -1238,24 +1234,24 @@ def main():
     try:
         with open(args.config_file, 'r') as f:
             test_configs = json.load(f)
-        
+
         # Validate JSON structure
         if not isinstance(test_configs, list):
             logger.error("❌ Config file must contain a list of test configurations")
             sys.exit(1)
-        
+
         # Validate each test configuration for security
         for i, config in enumerate(test_configs):
             if not isinstance(config, dict):
                 logger.error(f"❌ Test configuration {i+1} must be a dictionary")
                 sys.exit(1)
-            
+
             # Validate build_args if present
             if "build_args" in config:
                 if not isinstance(config["build_args"], dict):
                     logger.error(f"❌ build_args in test configuration {i+1} must be a dictionary")
                     sys.exit(1)
-                
+
                 for key, value in config["build_args"].items():
                     if not validate_build_arg_name(key):
                         logger.error(f"❌ Invalid build arg name in test configuration {i+1}: {key}")
@@ -1263,7 +1259,7 @@ def main():
                     if not isinstance(value, str) or not validate_build_arg_value(value):
                         logger.error(f"❌ Invalid build arg value in test configuration {i+1}: {value}")
                         sys.exit(1)
-            
+
             # Validate test_config if present
             if "test_config" in config:
                 test_config = config["test_config"]
@@ -1271,7 +1267,7 @@ def main():
                 if not config_valid:
                     logger.error(f"❌ Test configuration {i+1} validation failed: {config_error}")
                     sys.exit(1)
-            
+
     except json.JSONDecodeError as e:
         logger.error(f"❌ Invalid JSON in config file: {str(e)}")
         sys.exit(1)
