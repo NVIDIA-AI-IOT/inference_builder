@@ -70,7 +70,7 @@ RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x
 # Build DS TAO app post processors
 # need to be after DS SDK installation
 ENV DS_TAO_APPS_REPO=https://github.com/NVIDIA-AI-IOT/deepstream_tao_apps.git
-ENV DS_TAO_APPS_TAG="main"
+ENV DS_TAO_APPS_TAG="master"
 ARG CACHE_BUSTER=unique_value_to_bypass_docker_cache
 RUN mkdir ds_tao_apps_src && \
    cd ds_tao_apps_src && \
