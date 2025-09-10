@@ -45,13 +45,18 @@ sudo apt install python3.12-venv python3.12-dev
 sudo apt install docker-buildx
 ```
 
-### Clone the repository and set up the virtual environment
+### Clone the repository
 
 ```bash
 git clone https://github.com/NVIDIA-AI-IOT/inference_builder
+```
+
+### set up the virtual environment
+
+```bash
 cd inference_builder
 git submodule update --init --recursive
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip3 install -r requirements.txt
 ```
