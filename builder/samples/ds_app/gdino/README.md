@@ -8,7 +8,7 @@ This sample demonstrates how to build a deepstream application with Inference Bu
 
 ## Prerequisites
 
-**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
+**Note:** Make sure you are in the root directory (`path/to/inference_builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference_builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
 Model files are loaded from '/workspace/models/{MODEL_NAME}' within the container, thus the volume must be correctly mapped from the host.
 You need to export MODEL_REPO environment variable to the path where you want to store the model files.
@@ -49,16 +49,10 @@ cp -r builder/samples/ds_app/gdino/mask_gdino/* $MODEL_REPO/mask_gdino/
 
 ## Generate the deepstream application package and build it into a container image:
 
-Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference-builder folder, then activate your virtual environment:
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference_builder folder, then activate your virtual environment:
 
 ```bash
 source .venv/bin/activate
-```
-
-You need to export your GITLAB_TOKEN for pulling source dependencies from gitlab
-
-```bash
-export GITLAB_TOKEN={Your GitLab Token}
 ```
 
 ### For x86 Architecture
@@ -69,10 +63,7 @@ python builder/main.py builder/samples/ds_app/gdino/ds_gdino.yaml \
     --server-type serverless \
     -c builder/samples/tao/processors.py \
     -t \
-&& docker build \
-    --build-arg GITLAB_TOKEN=$GITLAB_TOKEN \
-    -t deepstream-app \
-    builder/samples/ds_app
+&& docker build -t deepstream-app builder/samples/ds_app
 ```
 
 ### For Tegra Architecture
@@ -84,7 +75,6 @@ python builder/main.py builder/samples/ds_app/gdino/ds_gdino.yaml \
     -c builder/samples/tao/processors.py \
     -t \
 && docker build \
-    --build-arg GITLAB_TOKEN=$GITLAB_TOKEN \
     -t deepstream-app \
     -f builder/samples/ds_app/Dockerfile.tegra \
     builder/samples/ds_app
@@ -125,7 +115,7 @@ If the configuration is successful, you will see this message in the log: `acces
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
 # text: the text prompt for object detection (e.g., "car,person").
-docker run --rm --net=host --gpus all --runtime=nvidia \
+docker run --rm --network=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
@@ -146,7 +136,7 @@ docker run --rm --net=host --gpus all --runtime=nvidia \
 
 # Note: Replace rtsp://<url_path> with your actual RTSP stream URL
 
-docker run --rm --net=host --gpus all --runtime=nvidia \
+docker run --rm --network=host --gpus all --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
@@ -165,7 +155,7 @@ docker run --rm --net=host --gpus all --runtime=nvidia \
 
 # Note: /sample_input/test.jpg is just a placeholder for any image present in $SAMPLE_INPUT directory
 
-docker run --rm --net=host --gpus all --runtime=nvidia \
+docker run --rm --network=host --gpus all --runtime=nvidia \
     -v $SAMPLE_INPUT:/sample_input \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \

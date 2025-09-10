@@ -15,7 +15,7 @@
 
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.2" AS cv_tao_base
+FROM "nvcr.io/nvidia/deepstream:8.0-triton-multiarch" AS cv_tao_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -84,8 +84,7 @@ RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x
 
 # Build DS TAO app post processors
 # need to be after DS SDK installation
-ARG GITLAB_TOKEN
-ENV DS_TAO_APPS_REPO=https://oauth2:${GITLAB_TOKEN}@gitlab-master.nvidia.com/DeepstreamSDK/deepstream_tao_apps.git
+ENV DS_TAO_APPS_REPO=https://github.com/NVIDIA-AI-IOT/deepstream_tao_apps.git
 ENV DS_TAO_APPS_TAG="main"
 ARG CACHE_BUSTER=unique_value_to_bypass_docker_cache
 RUN mkdir ds_tao_apps_src && \

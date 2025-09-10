@@ -6,7 +6,7 @@ We provide a sample Dockerfile for the example, which you can use to build a Doc
 
 # Prerequisites
 
-**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
+**Note:** Make sure you are in the root directory (`path/to/inference_builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference_builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
 The model used in the sample can be found on NGC: https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/visual_changenet_segmentation_landsatscd
 
@@ -46,7 +46,7 @@ Run `ls $MODEL_REPO/visual_changenet -l`, be sure you have `model.plan` generate
 
 # Build the inference flow:
 
-Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment, and you're already in the inference-builder folder.
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment, and you're already in the inference_builder folder.
 
 The following command activates the virtual environment and generates the inference source package in `builder/samples/changenet`
 
@@ -71,7 +71,7 @@ docker compose up --build ms-changenet
 
 # Test the microservice with a client
 
-After the server has started successfully, open a new terminal in the inference-builder folder and launch the client to compare two sample images. A display environment is required for the client to visualize the difference between the two input pictures.
+After the server has started successfully, open a new terminal in the inference_builder folder and launch the client to compare two sample images. A display environment is required for the client to visualize the difference between the two input pictures.
 
 To avoid errors related to display, you need to set the DISPLAY environment variable based on your system:
 
@@ -86,17 +86,11 @@ xhost +
 
 If the configuration is successful, you will see this message in the log: `access control disabled, clients can connect from any host`.
 
-You need to export your GITLAB_TOKEN for pulling source dependencies from gitlab
-
-```bash
-export GITLAB_TOKEN={Your GitLab Token}
-```
-
 Then start the client:
 
 ```bash
 source .venv/bin/activate && cd builder/samples/changenet
-python nim_client.py --host 127.0.0.1 --port 8803 --file test_0.jpg golden_0.jpg
+python ib_client.py --host 127.0.0.1 --port 8803 --file test_0.jpg golden_0.jpg
 ```
 
 If the inference request is successfuly processed, you'll get a HTTP 200 response and a new window shows the difference between two images.

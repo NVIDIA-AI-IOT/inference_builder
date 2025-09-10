@@ -114,7 +114,7 @@ def main() -> None:
             valid_models = ", ".join(target_info.models) if target_info.models else "none"
             parser.error(f"Invalid model for {args.target}. Valid options: {valid_models}")
 
-    # Change to the inference-builder root directory
+    # Change to the inference_builder root directory
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parents[3]
     os.chdir(repo_root)

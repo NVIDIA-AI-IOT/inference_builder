@@ -17,7 +17,7 @@ We provide a sample Dockerfile for the example, which you can use to build a Doc
 
 ## Prerequisites
 
-**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
+**Note:** Make sure you are in the root directory (`path/to/inference_builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference_builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
 Before downloading the model file, you need to set up your model repository:
 
@@ -39,7 +39,7 @@ Then download the model:
 git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct  $MODEL_REPO/Qwen2.5-VL-7B-Instruct
 ```
 
-Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference-builder folder, then activate your virtual environment:
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference_builder folder, then activate your virtual environment:
 
 ```bash
 source .venv/bin/activate
@@ -69,7 +69,7 @@ The build may take a while—images are pulled from NGC and speed depends on you
 
 #### Test the Inference Microservice with a client
 
-Wait for the server to start, then open a new terminal in your inference-builder folder. 
+Wait for the server to start, then open a new terminal in your inference_builder folder. 
 
 The sample includes a test OpenAI client. For image input, run the client with the path to an image file. (You can use your test images or download the demo picture from https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg)
 
@@ -148,7 +148,7 @@ The build may take a while—images are pulled from NGC and speed depends on you
 
 #### Test the Inference Microservice with a client
 
-Wait for the server to start, then open a new terminal in your inference-builder folder. The sample includes a test OpenAI client. For image input, run the client with the path to an image file.
+Wait for the server to start, then open a new terminal in your inference_builder folder. The sample includes a test OpenAI client. For image input, run the client with the path to an image file.
 
 
 ```bash

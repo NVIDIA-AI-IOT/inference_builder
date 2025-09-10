@@ -15,7 +15,7 @@
 
 
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-blos-dev271" AS ds_stage
+FROM "nvcr.io/nvidia/deepstream:8.0-triton-multiarch" AS ds_stage
 
 RUN apt update && apt install -y --no-install-recommends cmake git-lfs
 

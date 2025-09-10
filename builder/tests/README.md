@@ -84,7 +84,6 @@ Each test configuration in `test_configs.json` has the following structure:
 ### Build Arguments
 
 - `TEST_APP_NAME`: Name of the test application
-- `GITLAB_TOKEN`: **Required** - GitLab token for private repositories (use `${GITLAB_TOKEN}` placeholder)
 - `TRT_VERSION_*`: TensorRT version components
 - `CUDA_VERSION_*`: CUDA version components
 - `CUDNN_VERSION`: cuDNN version
@@ -104,47 +103,7 @@ Each test configuration in `test_configs.json` has the following structure:
   - If script fails, the test is marked as failed
   - Automatic cleanup is performed after the test completes
 
-## GITLAB_TOKEN Usage
-
-The `GITLAB_TOKEN` is required for building images that access private GitLab repositories. Here's how to use it:
-
-### In Test Configurations
-
-Use the placeholder `${GITLAB_TOKEN}` in your test configurations:
-
-```json
-{
-  "build_args": {
-    "TEST_APP_NAME": "frame_sampling",
-    "GITLAB_TOKEN": "${GITLAB_TOKEN}",
-    "CACHE_BUSTER": "test1"
-  }
-}
-```
-
-### Providing the Token
-
-**Option 1: Command Line (Recommended)**
-```bash
-./run_tests.sh quick-test --gitlab-token "your_actual_token_here"
-```
-
-**Option 2: Environment Variable**
-```bash
-export GITLAB_TOKEN="your_actual_token_here"
-./run_tests.sh quick-test
-```
-
-**Option 3: Python Script Directly**
-```bash
-python3 test_docker_builds.py --gitlab-token "your_actual_token_here"
-```
-
 ### Token Substitution
-
-The test script automatically substitutes `${GITLAB_TOKEN}` with the actual token value:
-- If token is provided: `${GITLAB_TOKEN}` → `your_actual_token_here`
-- If token is not provided: The build argument is removed and a warning is logged
 
 ## Example Test Configurations
 
@@ -154,7 +113,6 @@ The test script automatically substitutes `${GITLAB_TOKEN}` with the actual toke
   "name": "Basic Test",
   "build_args": {
     "TEST_APP_NAME": "frame_sampling",
-    "GITLAB_TOKEN": "${GITLAB_TOKEN}",
     "CACHE_BUSTER": "default_test"
   },
   "test_config": {
@@ -170,7 +128,6 @@ The test script automatically substitutes `${GITLAB_TOKEN}` with the actual toke
   "name": "Video Stream Test",
   "build_args": {
     "TEST_APP_NAME": "frame_sampling",
-    "GITLAB_TOKEN": "${GITLAB_TOKEN}",
     "CACHE_BUSTER": "stream_test"
   },
   "test_config": {
@@ -191,7 +148,6 @@ The test script automatically substitutes `${GITLAB_TOKEN}` with the actual toke
   "name": "High Performance Mode",
   "build_args": {
     "TEST_APP_NAME": "frame_sampling",
-    "GITLAB_TOKEN": "${GITLAB_TOKEN}",
     "CACHE_BUSTER": "high_perf_test"
   },
   "test_config": {
@@ -220,7 +176,6 @@ The test script automatically substitutes `${GITLAB_TOKEN}` with the actual toke
   "name": "RTSP Stream Test",
   "build_args": {
     "TEST_APP_NAME": "frame_sampling",
-    "GITLAB_TOKEN": "${GITLAB_TOKEN}",
     "CACHE_BUSTER": "rtsp_test"
   },
   "test_config": {
@@ -254,7 +209,6 @@ Options:
   --output PATH         Output file for test report
   --log-dir DIR         Directory to save container logs (default: logs)
   --no-cleanup          Don't cleanup images after testing
-  --gitlab-token TOKEN  GitLab token for private repos
 ```
 
 ### Shell Script (`run_tests.sh`)
@@ -267,7 +221,6 @@ Commands:
   help           Show help message
 
 Options:
-  --gitlab-token TOKEN    GitLab token for private repositories
   --no-cleanup           Don't cleanup Docker images after testing
   --output FILE          Save test report to specified file
   --config FILE          Use custom configuration file (required for custom-test)
@@ -340,7 +293,6 @@ Create your own test configuration file:
     "description": "Testing with custom parameters",
     "build_args": {
       "TEST_APP_NAME": "frame_sampling",
-      "GITLAB_TOKEN": "${GITLAB_TOKEN}",
       "TRT_VERSION_MAJOR": "10",
       "TRT_VERSION_MINOR": "8",
       "CACHE_BUSTER": "my_test"
@@ -375,7 +327,7 @@ cat > my_tests.json << EOF
 EOF
 
 # Run with custom configuration
-./run_tests.sh custom-test --config my_tests.json --gitlab-token "your_token"
+./run_tests.sh custom-test --config my_tests.json
 ```
 
 ### Continuous Integration
@@ -384,7 +336,7 @@ For CI/CD pipelines, you can run tests with specific configurations:
 
 ```bash
 # Run tests and save report
-./run_tests.sh full-test --output test_report.json --gitlab-token "$CI_GITLAB_TOKEN"
+./run_tests.sh full-test --output test_report.json
 
 # Check exit code
 if [ $? -eq 0 ]; then
@@ -399,17 +351,13 @@ fi
 
 ### Common Issues
 
-1. **GITLAB_TOKEN not provided**:
-   - Error: `GITLAB_TOKEN placeholder found but no token provided`
-   - Solution: Provide token via `--gitlab-token` option
+1. **Docker not running**: Ensure Docker daemon is running
 
-2. **Docker not running**: Ensure Docker daemon is running
+2. **Permission issues**: Run with appropriate permissions or use `sudo`
 
-3. **Permission issues**: Run with appropriate permissions or use `sudo`
+3. **Build failures**: Check if GitLab token has proper access to repositories
 
-4. **Build failures**: Check if GitLab token has proper access to repositories
-
-5. **Test timeouts**: Increase timeout in the script if needed
+4. **Test timeouts**: Increase timeout in the script if needed
 
 ### Debug Mode
 
@@ -418,7 +366,7 @@ Run tests with verbose output:
 ```bash
 # Enable debug logging
 export PYTHONPATH=.
-python3 -u test_docker_builds.py --config-file test_configs.json --no-cleanup --gitlab-token "your_token"
+python3 -u test_docker_builds.py --config-file test_configs.json --no-cleanup
 ```
 
 ### Cleanup
@@ -427,10 +375,10 @@ Clean up test images manually if needed:
 
 ```bash
 # List test images
-docker images | grep test-inference-builder
+docker images | grep test-inference_builder
 
 # Remove all test images
-docker images | grep test-inference-builder | awk '{print $3}' | xargs docker rmi
+docker images | grep test-inference_builder | awk '{print $3}' | xargs docker rmi
 ```
 
 ## Security Notes
@@ -445,14 +393,13 @@ docker images | grep test-inference-builder | awk '{print $3}' | xargs docker rm
 To add new test configurations:
 
 1. Add your configuration to `test_configs.json`
-2. Include `"GITLAB_TOKEN": "${GITLAB_TOKEN}"` in build_args
-3. Update this README if needed
-4. Test your configuration locally
-5. Submit a pull request
+2. Update this README if needed
+3. Test your configuration locally
+4. Submit a pull request
 
 ## License
 
-This test suite is part of the inference-builder project and follows the same license terms.
+This test suite is part of the inference_builder project and follows the same license terms.
 
 ## Log Dumping
 
@@ -463,8 +410,8 @@ The test suite automatically captures and saves container logs to files for debu
 Each test run creates a log file with the following structure:
 ```
 === Test Configuration ===
-Image: test-inference-builder-1-1234567890
-Command: docker run --rm -e NVSTREAMMUX_ADAPTIVE_BATCHING=yes test-inference-builder-1-1234567890 --video-streams 34888cef-8d7a-4de9-80f2-7a6a11974d6f?frames=10
+Image: test-inference_builder-1-1234567890
+Command: docker run --rm -e NVSTREAMMUX_ADAPTIVE_BATCHING=yes test-inference_builder-1-1234567890 --video-streams 34888cef-8d7a-4de9-80f2-7a6a11974d6f?frames=10
 Return Code: 0
 Timestamp: 2024-01-15 10:30:45
 
@@ -511,7 +458,7 @@ The test report includes the path to each log file:
   "results": [
     {
       "test_id": 1,
-      "log_file": "logs/test_1_test-inference-builder-1-1234567890.log",
+      "log_file": "logs/test_1_test-inference_builder-1-1234567890.log",
       "status": "PASSED"
     }
   ]

@@ -32,8 +32,8 @@ Apart from the models listed in the above table, the Inference Builder also supp
 If you don't have any test video in hand, you can copy it from deepstream-sample container image using following commands:
 
 ```bash
-docker pull gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.2
-docker create --name temp gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:8.0.0-triton-25.07.2
+docker pull nvcr.io/nvidia/deepstream:8.0-triton-multiarch
+docker create --name temp nvcr.io/nvidia/deepstream:8.0-triton-multiarch
 docker cp temp:/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4 ~/Videos
 docker rm temp
 ```
@@ -57,21 +57,15 @@ mkdir -p ~/.cache/model-repo && chmod 777 ~/.cache/model-repo
 export MODEL_REPO=~/.cache/model-repo
 ```
 
-Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference-builder folder, then activate your virtual environment:
+Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference_builder folder, then activate your virtual environment:
 
 ```bash
 source .venv/bin/activate
 ```
 
-And export your GITLAB TOKEN:
-
-```bash
-export GITLAB_TOKEN={Your GITLAB token} # replace the placeholder {Your GITLAB token} with your gitlab token
-```
-
 ## Step-by-step Guide
 
-Make sure you are in the root directory (`path/to/inference-builder`) before you start with any of the microservices. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
+Make sure you are in the root directory (`path/to/inference_builder`) before you start with any of the microservices. All relative paths and commands assume you are running from the inference_builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
 ### Generic CV Microservice for detection, classification and segmentation models.
 
@@ -352,7 +346,7 @@ docker compose up tao-cv --build
 
 Changenet Classification model detects if a part is missing by comparing the test image against a golden image.
 
-Open the a new terminal and go the inference-builder folder, run the commands from your console:
+Open the a new terminal and go the inference_builder folder, run the commands from your console:
 
 ```bash
 GOLDEN_PAYLOAD=$(echo -n "data:image/png;base64,"$(base64 -w 0 "builder/samples/tao/pass_0.png"))

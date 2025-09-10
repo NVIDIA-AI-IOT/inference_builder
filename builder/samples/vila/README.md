@@ -8,7 +8,7 @@ While the sample supports Ampere, Hopper, and Blackwell architectures, the model
 
 # Prerequisites
 
-**Note:** Make sure you are in the root directory (`path/to/inference-builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference-builder root directory. Also ensure that your virtual environment is activated before running any commands.
+**Note:** Make sure you are in the root directory (`path/to/inference_builder`) to execute the commands in this README. All relative paths and commands assume you are running from the inference_builder root directory. Also ensure that your virtual environment is activated before running any commands.
 
 ## The model repo
 
@@ -83,7 +83,7 @@ docker compose up --build ms-vila
 
 # Test with the client
 
-Wait for the server to start, then open a new terminal in your inference-builder folder and run following command
+Wait for the server to start, then open a new terminal in your inference_builder folder and run following command
 
 ```bash
 cd builder/samples/vila
