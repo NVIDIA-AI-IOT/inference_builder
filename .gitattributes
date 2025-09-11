@@ -1,2 +1,2 @@
 builder/boilerplates/nim/** merge=ours
-templates/api_server/** merge=ours
+templates/api_server/nim/** merge=ours
