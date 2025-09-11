@@ -61,7 +61,7 @@ LICENSE_HEADER = """
 # limitations under the License.
 """
 
-ALLOWED_SERVER = ["triton", "fastapi", "nim", "serverless"]
+ALLOWED_SERVER = ["triton", "fastapi", "serverless"]
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Main")
@@ -344,7 +344,7 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
             responders=responders,
             triton=triton_config
         )
-    elif server_type == "fastapi" or server_type == "nim":
+    elif server_type == "fastapi":
         output = svr_tpl.render(
             service_name=model_name,
             license=LICENSE_HEADER,
