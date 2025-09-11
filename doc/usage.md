@@ -13,7 +13,7 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  --server-type [{triton,fastapi,nim,serverless}]
+  --server-type [{triton,fastapi,serverless}]
                         Choose the server type
   -o [OUTPUT_DIR], --output-dir [OUTPUT_DIR]
                         Output directory
