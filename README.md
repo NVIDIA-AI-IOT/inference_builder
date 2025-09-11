@@ -51,7 +51,7 @@ sudo apt install docker-buildx
 git clone https://github.com/NVIDIA-AI-IOT/inference_builder
 ```
 
-### set up the virtual environment
+### Set up the virtual environment
 
 ```bash
 cd inference_builder
