@@ -16,8 +16,8 @@
 
 openapi: 3.1.0
 info:
-  title: NVIDIA NIM API for nvidia/changenet
-  description: The NVIDIA NIM REST API. Please see https://docs.api.nvidia.com/nim for more details.
+  title: NVIDIA INFERENCE SERVICE API for nvidia/changenet
+  description: NVIDIA INFERENCE SERVICE API
   version: 1.0.0
   termsOfService: https://nvidia.com/legal/terms-of-use
   contact:
