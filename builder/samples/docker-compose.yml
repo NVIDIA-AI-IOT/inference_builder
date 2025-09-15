@@ -113,8 +113,6 @@ services:
       context: dummy
       target: inference_base
       dockerfile: Dockerfile
-      # used for creating NIM
-#      dockerfile: Dockerfile.nim
     image: dry-run
     volumes:
       - '~/.cache:/workspace/.cache'

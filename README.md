@@ -48,7 +48,7 @@ sudo apt install docker-buildx
 ### Clone the repository
 
 ```bash
-git clone https://github.com/NVIDIA-AI-IOT/inference_builder
+git clone ssh://git@gitlab-master.nvidia.com:12051/DeepStreamSDK/inference-builder.git inference_builder
 ```
 
 ### set up the virtual environment
