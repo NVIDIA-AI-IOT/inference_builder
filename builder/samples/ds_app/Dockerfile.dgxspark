@@ -15,7 +15,7 @@
 
 FROM "nvcr.io/nvidia/pytorch:25.08-py3" AS pytorch_src
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream-arm-sbsa:dgx-spark-dev51" AS inference_base
+FROM "nvcr.io/nvidia/deepstream:8.0-triton-dgx-spark" AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
