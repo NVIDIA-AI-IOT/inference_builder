@@ -1,27 +1,12 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 # the name will be used to identify the microservice.
-name: "qwen"
+name: "vllm"
 # the root path to the directory containing the model files (checkpoint, config, etc).
 model_repo: "/workspace/model-repo"
 
 # top level inference input specification
 input:
   # messages from the http request
-  - name: "prompts"
+  - name: "messages"
     data_type: TYPE_STRING
     dims: [ -1 ]
   - name : "videos"
@@ -35,19 +20,7 @@ input:
     optional: true
   - name: "max_tokens"
     data_type: TYPE_INT32
-    dims: [1]
-  - name: "temperature"
-    data_type: TYPE_FP32
-    dims: [1]
-    optional: true
-  - name: "top_p"
-    data_type: TYPE_FP32
-    dims: [1]
-    optional: true
-  - name: "top_k"
-    data_type: TYPE_INT32
-    dims: [1]
-    optional: true
+    dims: [ 1 ]
 output:
   - name: "outputs"
     data_type: TYPE_CUSTOM_OBJECT
@@ -61,9 +34,7 @@ server:
         NIMLLMChatCompletionRequest: >
           {% set contents = request.messages | selectattr("role", "equalto", "user")| map(attribute="content")| sum(start=[]) %}
           {
-            "prompts": [
-                {{ contents | selectattr("type", "equalto", "text") | map(attribute="text") | map("tojson") | join(", ") }}
-            ],
+            "messages": {{ request.messages | tojson }},
             "videos": [
                 {{ contents | selectattr("type", "equalto", "video") | map(attribute="video") | map("tojson") | join(", ") }}
             ],
@@ -73,34 +44,23 @@ server:
             {% if 'max_tokens' in request %}
             , "max_tokens": {{ request.max_tokens }}
             {% endif %}
-            {% if 'temperature' in request %}
-            , "temperature": {{ request.temperature }}
-            {% endif %}
-            {% if 'top_p' in request %}
-            , "top_p": {{ request.top_p }}
-            {% endif %}
-            {% if 'top_k' in request %}
-            , "top_k": {{ request.top_k }}
-            {% endif %}
           }
-
       responses:
         NIMLLMChatCompletionResponse: >
           {
-            {% set result = response.outputs[0] %}
-            "id": "{{ result.request_id }}",
+            "id": "{{ request._id }}",
             "choices":
               [
-                {% for output in result.outputs %}
+                {% for output in response.outputs %}
                 {
                   "index": {{ output.index }},
                   "message": { "role": "assistant", "content": {{ output.text|tojson }} },
-                  "finish_reason": "stop"
+                  "finish_reason": {{ output.finish_reason|tojson }}
                 }
                 {% if not loop.last %}, {% endif %}
                 {% endfor %}
               ],
-            "model": "qwen-vl",
+            "model": "Cosmos-Reason1-7B",
             "usage": {"completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0}
           }
     add_file:
@@ -138,49 +98,35 @@ server:
             ]
           }
 models:
-  - name: "Qwen2.5-VL-7B-Instruct"
-    backend: "tensorrtllm/pytorch"
+  - name: "Cosmos-Reason1-7B"
+    backend: "vllm"
     input:
       - name: "inputs"
         data_type: TYPE_CUSTOM_VLM_INPUT
         dims: [ -1 ]
       - name: "max_tokens"
         data_type: TYPE_INT32
-        dims: [1]
-      - name: "temperature"
-        data_type: TYPE_FP32
-        dims: [1]
-        optional: true
-      - name: "top_p"
-        data_type: TYPE_FP32
-        dims: [1]
-        optional: true
-      - name: "top_k"
-        data_type: TYPE_INT32
-        dims: [1]
-        optional: true
+        dims: [ 1 ]
     output:
       - name: "outputs"
         data_type: TYPE_STRING
         dims: [ -1 ]
     parameters:
       max_num_tokens: 19200
-      kv_cache_config:
-        enable_block_reuse: false
+      async_mode: true
     preprocessors:
       - kind: "custom"
-        name: "qwen-vl-video-processor"
-        input: ["prompts", "videos"]
+        name: "qwen-vl-video-coordinator"
+        input: ["messages", "videos"]
         output: ["inputs"]
       - kind: "custom"
-        name: "qwen-vl-image-processor"
-        input: ["prompts", "images"]
+        name: "qwen-vl-image-coordinator"
+        input: ["messages", "images"]
         output: ["inputs"]
-
 # The explicit routes are used to separate the data flow for video and image,
 # so that they can be processed by different hardware decoders
 routes: {
-  ':["images", "prompts", "max_tokens", "temperature", "top_p", "top_k"]': 'Qwen2.5-VL-7B-Instruct',
-  ':["videos", "prompts", "max_tokens", "temperature", "top_p", "top_k"]': 'Qwen2.5-VL-7B-Instruct',
-  'Qwen2.5-VL-7B-Instruct:["outputs"]': ':'
+  ':["images", "messages", "max_tokens"]': 'Cosmos-Reason1-7B',
+  ':["videos", "messages", "max_tokens"]': 'Cosmos-Reason1-7B',
+  'Cosmos-Reason1-7B:["outputs"]': ':'
 }

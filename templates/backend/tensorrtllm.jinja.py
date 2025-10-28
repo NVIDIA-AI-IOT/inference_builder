@@ -141,9 +141,9 @@ class TensorRTLLMBackend(ModelBackend):
                 **self._params
             )
             self._sample_params_cls = SamplingParams
-            self._trtllm_input_name = next((i["name"] for i in self._inputs if i["data_type"] == "TYPE_CUSTOM_TRTLLM_INPUT"), None)
+            self._trtllm_input_name = next((i["name"] for i in self._inputs if i["data_type"] == "TYPE_CUSTOM_VLM_INPUT"), None)
             if self._trtllm_input_name is None:
-                raise ValueError("TYPE_CUSTOM_TRTLLM_INPUT must be provided for tensorrtllm/pytorch backend")
+                raise ValueError("TYPE_CUSTOM_VLM_INPUT must be provided for tensorrtllm/pytorch backend")
 
             logger.debug(f"TensorRTLLMBackend with pytorch created for {self._model_name} to generate {self._output_names}")
         else:

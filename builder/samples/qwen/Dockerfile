@@ -17,7 +17,7 @@
 
 FROM "nvcr.io/nvidia/deepstream:8.0-triton-multiarch" AS ds_stage
 
-FROM nvcr.io/nvidia/tensorrt-llm/release:1.0.0rc5 AS inference_base
+FROM nvcr.io/nvidia/tensorrt-llm/release:1.0.0 AS inference_base
 
 ENV NVIDIA_DRIVER_CAPABILITIES $NVIDIA_DRIVER_CAPABILITIES,video
 
@@ -43,9 +43,6 @@ RUN --mount=type=cache,target=/root/.cache/pip pip install qwen-vl-utils[decord]
     python-magic==0.4.27 \
     numpy==1.26.4 \
     omegaconf==2.3.0
-
-# Comment out the following lines if using local built trtllm image
-RUN --mount=type=cache,target=/root/.cache/pip pip install git+https://github.com/huggingface/transformers accelerate
 
 WORKDIR /workspace
 ADD qwen.tgz /workspace

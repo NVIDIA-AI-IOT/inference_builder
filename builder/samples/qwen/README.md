@@ -47,81 +47,23 @@ source .venv/bin/activate
 
 ## Build and Test the Qwen2.5-VL-7B-Instruct Inference Microservice
 
-### Using baseline pytorch backend via transformer APIs:
+### Generate the Inference Pipeline
 
-#### Generate the Inference Pipeline
+For Pytorch backend with transformers API, use the command below:
 
 ```bash
 python builder/main.py builder/samples/qwen/pytorch_qwen.yaml --api-spec builder/samples/qwen/openapi.yaml \
 -o builder/samples/qwen/ -c builder/samples/qwen/processors.py -t
 ```
 
-#### Build and Start the Inference Microservice:
-
-The sample folder already contains all the ingredients for building the microservice, all you need is to run the command (before you start, be sure you have enough free GPU memory on your system):
-
-
-```bash
-cd builder/samples && docker compose up ms-qwen --build
-```
-
-The build may take a while—images are pulled from NGC and speed depends on your network. ⌛
-
-#### Test the Inference Microservice with a client
-
-Wait for the server to start, then open a new terminal in your inference_builder folder. 
-
-The sample includes a test OpenAI client. For image input, run the client with the path to an image file. (You can use your test images or download the demo picture from https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg)
-
-```bash
-source .venv/bin/activate && cd builder/samples/qwen
-python client.py --images <your_image.jpg> # replace placeholder <your_image.jpg> with an actual file
-```
-
-For video input, you need to first upload a test video file. (You can use your test videos or download the demo video from https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-VL/space_woaudio.mp4)
-
-**⚠️ Important:** **replace the placeholder <your_video.mp4> in below command with an actual file path in your system**.
-
-```bash
-export VIDEO_FILE=<your_video.mp4> # replace the placeholder <your_video.mp4> with an actual file
-curl -X "POST" \
-  "http://localhost:8800/v1/files" \
-  -H "accept: application/json" \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@$VIDEO_FILE;type=video/mp4"
-```
-
-You'll get a response 200 with a json body which includes the id and path of the uploaded asset like below:
-
-{
-  "data": {
-    "id": "577a9f11-2b24-4db8-82c8-2601e0c2b6e4",
-    "path": "/tmp/assets/577a9f11-2b24-4db8-82c8-2601e0c2b6e4/its_1920_30s.mp4",
-    "size": 3472221,
-    "duration": 30000000000,
-    "contentType": "video/mp4"
-  }
-}
-
-Run the client.py with the video path from your response:
-
-```bash
-# Please use the path from your file upload response
-python client.py --videos /tmp/assets/577a9f11-2b24-4db8-82c8-2601e0c2b6e4/its_1920_30s.mp4
-```
-
-### Using optimized tensorrtllm pytorch backend:
-
-#### Generate the Inference Pipeline
-
-For S/W decoder, use the command below.
+For TensorRT-LLM backend with S/W decoder, use the command below:
 
 ```bash
 python builder/main.py builder/samples/qwen/trtllm_qwen.yaml --api-spec builder/samples/qwen/openapi.yaml \
 -o builder/samples/qwen/ -c builder/samples/qwen/processors.py -t
 ```
 
-If you want to leverage the accelerated Nvidia H/W decoder, please use following command
+If you want to acheive the best performance with Deepstream and TensoRT-LLM, please use following command:
 
 ```bash
 # Enable hardware decoder
@@ -129,16 +71,7 @@ python builder/main.py builder/samples/qwen/trtllm_nvdec_qwen.yaml --api-spec bu
 -o builder/samples/qwen/ -c builder/samples/qwen/processors.py -t
 ```
 
-#### Build and Start the Inference Microservice:
-
-**⚠️ Important:** **Before building the docker image for TensorRT-LLM backend, you must comment out line 48 in `./Dockerfile` as below**.
-
-```
-line47: # Comment out the following lines if using local built trtllm image
-line48: # RUN --mount=type=cache,target=/root/.cache/pip pip install git+https://github.com/huggingface/transformers accelerate
-```
-
-And run the commands:
+### Build and Start the Inference Microservice:
 
 ```bash
 cd builder/samples && docker compose up ms-qwen --build
@@ -146,7 +79,7 @@ cd builder/samples && docker compose up ms-qwen --build
 
 The build may take a while—images are pulled from NGC and speed depends on your network. ⌛
 
-#### Test the Inference Microservice with a client
+### Test the Inference Microservice with a client
 
 Wait for the server to start, then open a new terminal in your inference_builder folder. The sample includes a test OpenAI client. For image input, run the client with the path to an image file.
 
@@ -181,7 +114,7 @@ You'll get a response 200 with a json body which includes the id and path of the
   }
 }
 
-Run the client.py with the video path from your response if the inference pipeline is built from trtllm_qwen.yaml without H/W decoder:
+Run the client.py with the video path from your response if the inference pipeline is built from trtllm_qwen.yaml or pytorch_qwen.yaml without H/W decoder:
 
 ```bash
 # Please use the path from your file upload response

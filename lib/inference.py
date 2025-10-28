@@ -15,19 +15,19 @@
 
 
 import base64
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, Future
 import os
 import types
 import threading
-from queue import Queue, Empty
+from queue import Queue, Empty, Full
 from abc import ABC, abstractmethod
 from config import global_config
-from .utils import get_logger, split_tensor_in_dict
+from .utils import get_logger, split_tensor_in_dict, FutureConsumer, QueueConsumer
 from .codec import ImageDecoder
 import custom
 from omegaconf import OmegaConf
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, Generator
 import numpy as np
 from collections import namedtuple
 import json
@@ -36,6 +36,8 @@ from pyservicemaker.utils import MediaExtractor, MediaChunk
 import torch
 from .asset_manager import AssetManager
 import time
+import asyncio
+import inspect
 
 logger = get_logger(__name__)
 
@@ -139,11 +141,14 @@ class DataFlow:
         self._timeout = timeout
         self._queue = Queue()
         self._optional = False
+        self._stop_event = threading.Event()
         if self._inbound or self._outbound:
             self._optional = all([
                 config["optional"] if "optional" in config else False
                 for config in self._configs
             ])
+        self._future_consumer = None
+        self._queue_consumer = None
 
     def _process_custom_data(self, tensor: np.ndarray, data_type: str):
         processed = tensor
@@ -196,8 +201,9 @@ class DataFlow:
 
     def put(self, item: Union[Dict, Error, Stop]):
         if not item:
-            # pass Error or Stop to the downstream
-            self._queue.put(item, timeout=self._timeout)
+            if self._future_consumer is None and self._queue_consumer is None:
+                # pass Error or Stop to the downstream
+                self._queue.put(item, timeout=self._timeout)
             return
         # check input data integrity
         if self._inbound:
@@ -230,9 +236,15 @@ class DataFlow:
         #  deposit the collected data to the queue
         generators = {}
         values = {}
+        futures = {}
+        results_queues = {}
         for k, v in collected.items():
             if isinstance(v, types.GeneratorType):
                 generators[k] = v
+            elif isinstance(v, Future):
+                futures[k] = v
+            elif isinstance(v, Queue):
+                results_queues[k] = v
             else:
                 values[k] = v
         if generators:
@@ -242,6 +254,41 @@ class DataFlow:
                 result = dict(zip(keys, vs))
                 result.update(values)
                 self._queue.put(result, timeout=self._timeout)
+        elif futures:
+            if len(futures) > 1:
+                error_message = f"Multiple futures are not supported in one dataflow yet, got {len(futures)} futures"
+                logger.error(error_message)
+                self._queue.put(Error(error_message))
+                return
+            # Process futures in a separate thread while maintaining order
+            def on_future_result(result, user_data):
+                result_values = user_data[1]
+                result_values[user_data[0]] = result
+                self._queue.put(result_values, timeout=self._timeout)
+            if self._future_consumer is None:
+                self._future_consumer = FutureConsumer("dataflow_future_consumer", self._stop_event, on_future_result)
+            for k, future in futures.items():
+                collected.pop(k)
+                self._future_consumer.append_future(future, k, collected)
+        elif results_queues:
+            if len(results_queues) > 1:
+                error_message = f"Multiple result queues are not supported in one dataflow yet, got {len(results_queues)} queues"
+                logger.error(error_message)
+                self._queue.put(Error(error_message))
+                return
+            q_key, q = next(iter(results_queues.items()))
+            def on_result_queue_result(item, user_data):
+                if not item:
+                    # end of the inference
+                    self._queue.put(item, timeout=self._timeout)
+                    return
+                result_values = user_data[1]
+                result_values[q_key] = item
+                self._queue.put(result_values, timeout=self._timeout)
+            if self._queue_consumer is None:
+                self._queue_consumer = QueueConsumer("dataflow_queue_consumer", self._stop_event)
+            collected.pop(q_key)
+            self._queue_consumer.append_queue(q, on_result_queue_result, (q_key, collected))
         else:
             self._queue.put(values, timeout=self._timeout)
 
@@ -249,7 +296,11 @@ class DataFlow:
         return self._queue.get(timeout=self._timeout)
 
     def stop(self):
+        self._stop_event.set()
         self._queue.put(Stop("Shutdown"))
+
+    def is_stopped(self):
+        return self._stop_event.is_set()
 
     def parse_asset_string(self, asset: str):
         pieces = asset.split("?")
@@ -262,7 +313,6 @@ class DataFlow:
                 key, value = param.split("=")
                 params[key] = value
         return asset, params
-
 
 class VideoInputDataFlow(DataFlow):
     """A data flow for live stream data"""
@@ -307,18 +357,18 @@ class VideoInputDataFlow(DataFlow):
         with MediaExtractor(media_chunks, n_thread=1) as media_extractor:
             qs = media_extractor()
             for q in qs:
-                tensors = []
+                frames = []
                 while True:
                     try:
                         frame = q.get(timeout=10.0)
                         if frame is None:
                             logger.info("Duration reached")
                             break
-                        tensors.append(frame.tensor)
+                        frames.append(frame)
                     except Empty:
                         logger.info("EOS on live streams")
                         break
-                results.append(tensors)
+                results.append(frames)
                 # TODO WAR on pyservicemaker error
                 time.sleep(0)
         return results
@@ -334,7 +384,8 @@ class VideoFrameSamplingDataFlow(DataFlow):
     """A data flow for video frame sampling"""
     def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=None):
         super().__init__(configs, tensor_names, True, False, timeout)
-        self._media_extractor = MediaExtractor(chunks=[],n_thread=1) # TODO: make it configurable
+        n_codec_instances = int(os.getenv("N_CODEC_INSTANCES", 1))
+        self._media_extractor = MediaExtractor(chunks=[], n_thread=n_codec_instances) # TODO: make it configurable
         self._video_tensor_type = key_tensor_type
         self._video_tensor_names = []
         for tensor_name in tensor_names:
@@ -342,6 +393,7 @@ class VideoFrameSamplingDataFlow(DataFlow):
             if config and config["data_type"] == key_tensor_type:
                 self._video_tensor_names.append(tensor_name[1])
         self._media_extractor()
+        self._frame_collector = ThreadPoolExecutor(max_workers=1)
         logger.info(f"VideoFrameSamplingDataFlow initialized")
 
     def _process_custom_data(self, tensor: np.ndarray, data_type: str):
@@ -351,19 +403,53 @@ class VideoFrameSamplingDataFlow(DataFlow):
         else:
             return super()._process_custom_data(tensor, data_type)
 
+    def _collect_frames_from_queue(self, qs, n_frames, n_chunks, results_queue):
+        """Collect frames from a queue in a separate thread"""
+        for _ in range(n_chunks):
+            total_frames = [[] for _ in qs]
+            for _ in range(n_frames):
+                for i, q in enumerate(qs):
+                    try:
+                        frame = q.get(timeout=10.0)
+                        if frame is None:
+                            logger.info(f"Duration reached")
+                            break
+                        total_frames[i].append(frame)
+                    except Empty:
+                        logger.info(f"Decoder Queue is empty")
+                        break
+            try:
+                results_queue.put(total_frames, timeout=10.0)
+            except Full:
+                logger.warning(f"Results queue is full, dropping the frames")
+                break
+        results_queue.put(Stop("end"))
+        return
+
+
     def _do_video_frame_sampling(self, assets: np.ndarray):
         qs = []
-        expected_frames = []
-        results = []
+        n_frames = None
+        n_chunks = None
         for asset in assets:
             asset_manager = AssetManager()
             asset_id, params = self.parse_asset_string(asset)
             asset = asset_manager.get_asset(asset_id)
             if asset:
-                n_frames = int(params.get("frames", None))
+                n = int(params.get("frames", -1))
+                if n_frames is None:
+                    n_frames = n
+                elif n_frames != n:
+                    logger.warning(f"frames mismatch on multiple assets: {n_frames} != {n}")
+                n = int(params.get("chunks", 1))
+                if n_chunks is None:
+                    n_chunks = n
+                elif n_chunks != n:
+                    logger.warning(f"chunks mismatch on multiple assets: {n_chunks} != {n}")
+
                 start = int(params.get("start", 0))
                 duration = int(params.get("duration", asset.duration))
-                interval = duration / n_frames if n_frames else 0
+                interval = duration / (n_frames * n_chunks) if n_frames > 0  else 0
                 chunk = MediaChunk(
                     asset.path,
                     start_pts=start,
@@ -371,30 +457,13 @@ class VideoFrameSamplingDataFlow(DataFlow):
                     interval=interval
                 )
                 qs.append(self._media_extractor.append(chunk))
-                expected_frames.append(int(n_frames) if n_frames else None)
             else:
                 logger.error(f"Asset not found: {asset_id}")
-                return results
+                return []
 
-        for q, expected in zip(qs, expected_frames):
-            frames = []
-            while True:
-                try:
-                    frame = q.get(timeout=10.0)
-                except Empty:
-                    logger.info(f"Decoder Queue is empty: {assets}")
-                    break
-                if frame is None:
-                    logger.info(f"Duration reached: {assets}")
-                    break
-                frames.append(frame.tensor)
-                if expected is not None and len(frames) == expected:
-                    logger.info(f"Got all {len(frames)} frames, dropping the rest")
-                    break
-            if expected is not None and len(frames) < expected:
-                logger.warning(f"Expected {expected} frames, but got {len(frames)}")
-            results.append(frames)
-        return results
+        results_queue = Queue()
+        self._frame_collector.submit(self._collect_frames_from_queue, qs, n_frames, n_chunks, results_queue)
+        return results_queue
 
     def _is_collected_valid(self, collected: Dict):
         result = super()._is_collected_valid(collected)
@@ -403,9 +472,10 @@ class VideoFrameSamplingDataFlow(DataFlow):
         return all([n in collected for n in self._video_tensor_names])
 
     def stop(self):
+        super().stop()
         self._media_extractor.__del__()
         self._media_extractor = None
-        super().stop()
+        self._frame_collector.shutdown(wait=True)
 
 
 class ImageInputDataFlow(DataFlow):
@@ -697,7 +767,6 @@ class MultiFlowCollector(Collector):
         self._executor.shutdown(wait=True)
         self._queue.put(Stop("Shutdown"))
         logger.info(f"MultiFlowCollector destructed")
-
 class ModelOperator:
     """An model operator runs a single model"""
     def __init__(self, model_config:Dict, model_repo: str):
@@ -712,6 +781,8 @@ class ModelOperator:
         self._backend = None
         self._stop_event = threading.Event()
         self._collector = None
+        self._future_consumer = None
+
 
     @property
     def model_name(self):
@@ -764,7 +835,10 @@ class ModelOperator:
     def import_output(self, output: DataFlow):
         self._out.append(output)
 
-    def run(self, model_backend: ModelBackend):
+    def set_backend(self, backend: ModelBackend):
+        self._backend = backend
+
+    def run(self):
         logger.debug(f"Model operator for {self._model_name} started")
 
         # create preprocessors
@@ -786,17 +860,21 @@ class ModelOperator:
                     else:
                         raise Exception("Invalid Processor")
         # backend loop
-        self._backend = model_backend
         self._collector = self._create_collector()
         while not self._stop_event.is_set():
             try:
                 # collect input data until Stop is received
                 data = self._collector.collect()
                 if isinstance(data, Stop) or isinstance(data, Error):
-                    # pass the error or stop message downstream
-                    for out in self._out:
-                        logger.debug(f"Passing error or stop message to {out.in_names}")
-                        out.put(data)
+                    if self._future_consumer is None:
+                        # pass the error or stop message downstream
+                        for out in self._out:
+                            logger.debug(f"Passing error or stop message to {out.in_names}")
+                            out.put(data)
+                    else:
+                        f = Future()
+                        f.set_result(data)
+                        self._future_consumer.append_future(f)
                     continue
                 logger.info(f"Input collected from {self._collector.__class__.__name__}: {data}")
 
@@ -834,44 +912,33 @@ class ModelOperator:
                     continue
                 # execute inference backend and collect result
                 logger.debug(f"Model {self._model_name} invokes backend {self._backend.__class__.__name__} with {args if args else kwargs}")
-                for r in self._backend(*args, **kwargs):
-                    logger.debug(f"Model {self._model_name} generated result from backend {self._backend.__class__.__name__}: {r}")
-                    if not self._out:
-                        logger.error(f"No output data flow is bound to model {self._model_name}, please check the route configuration")
-                        continue
-                    if isinstance(r, Error):
-                        logger.error(f"Error from model {self._model_name}: {r}")
-                        continue
-                    # iterate the result list and postprocess each of them
+                rs = self._backend(*args, **kwargs)
+                if isinstance(rs, Future):
+                    def on_future_result(result: Dict|Error|Stop, user_data: List):
+                        if isinstance(result, Error) or isinstance(result, Stop):
+                            for out in self._out:
+                                out.put(result)
+                            return
+                        self._on_inference_result(result, user_data[0])
+                    if self._future_consumer is None:
+                        self._future_consumer = FutureConsumer(
+                            name=self._model_name,
+                            stop_event=self._stop_event,
+                            result_callback=on_future_result
+                        )
+                    self._future_consumer.append_future(rs, passthrough_tensors)
+                elif inspect.isgenerator(rs):
+                    self._on_inference_result(rs, passthrough_tensors)
+                elif isinstance(rs, Error) or isinstance(rs, Stop):
                     for out in self._out:
-                        output_data = {n : [] for n in out.in_names}
-                        if isinstance(r, list):
-                            # we get a batch
-                            if len(passthrough_tensors) == 1:
-                                passthrough_tensors = passthrough_tensors*len(r)
-                            for i, result in enumerate(r):
-                                if passthrough_tensors:
-                                    result.update(passthrough_tensors[i])
-                                result = self._postprocess(result)
-                                if not all([n in result for n in out.in_names]):
-                                    logger.error(f"Data received from model {self._model_name} is incomplete, expected: {out.in_names}, received: {result.keys()}. Post-processor missing?")
-                                    continue
-                                # collect the result
-                                for n, v in output_data.items():
-                                    if n in result:
-                                        v.append(result[n])
-                                    else:
-                                        v.append(None)
-                        else:
-                            # implicit batching
-                            if passthrough_tensors:
-                                r.update(passthrough_tensors[0])
-                            output_data = self._postprocess(r)
-                            if not all([n in output_data for n in out.in_names]):
-                                logger.error(f"Data received from model {self._model_name} is incomplete, expected: {out.in_names}, received: {output_data.keys()}. Post-processor missing?")
-                                continue
-                        logger.debug(f"ModelOperator of {self._model_name} deposits result: {output_data}")
-                        out.put(output_data)
+                        out.put(rs)
+                    continue
+                else:
+                    error_msg = (
+                        f"Invalid result from backend {self._backend.__class__.__name__}: {rs}"
+                        " Expected a Future or a generator"
+                    )
+                    raise ValueError(error_msg)
             except Empty:
                 continue
             except Exception as e:
@@ -893,7 +960,62 @@ class ModelOperator:
         self._backend = None
         self._stop_event = None
         self._collector = None
+        self._future_consumer = None
         logger.info(f"Model operator {self._model_name} stopped")
+
+    def _on_inference_result(self, results: Generator, passthrough_tensors: Dict):
+        for r in results:
+            logger.debug(
+                    f"Model {self._model_name} generated result from backend"
+                    f"{self._backend.__class__.__name__}: {r}"
+                )
+            if not self._out:
+                logger.error(
+                    f"No output data flow is bound to model {self._model_name},"
+                    "please check the route configuration"
+                )
+                continue
+            if isinstance(r, Error):
+                logger.error(f"Error from model {self._model_name}: {r}")
+                continue
+            # iterate the result list and postprocess each of them
+            for out in self._out:
+                output_data = {n : [] for n in out.in_names}
+                if isinstance(r, list):
+                    # we get a batch
+                    if len(passthrough_tensors) == 1:
+                        passthrough_tensors = passthrough_tensors*len(r)
+                    for i, result in enumerate(r):
+                        if passthrough_tensors:
+                            result.update(passthrough_tensors[i])
+                        result = self._postprocess(result)
+                        if not all([n in result for n in out.in_names]):
+                            logger.error(
+                                f"Data received from model {self._model_name} is incomplete,"
+                                f"expected: {out.in_names}, received: {result.keys()}."
+                                "Post-processor missing?"
+                            )
+                            continue
+                        # collect the result
+                        for n, v in output_data.items():
+                            if n in result:
+                                v.append(result[n])
+                            else:
+                                v.append(None)
+                else:
+                    # implicit batching
+                    if passthrough_tensors:
+                        r.update(passthrough_tensors[0])
+                    output_data = self._postprocess(r)
+                    if not all([n in output_data for n in out.in_names]):
+                        logger.error(
+                            f"Data received from model {self._model_name} is incomplete,"
+                            f"expected: {out.in_names}, received: {output_data.keys()}."
+                            "Post-processor missing?"
+                        )
+                        continue
+                logger.debug(f"ModelOperator of {self._model_name} deposits result: {output_data}")
+                out.put(output_data)
 
     def _preprocess(self, args: List):
         # go through the preprocess chain
@@ -983,7 +1105,7 @@ class ModelOperator:
 
 class InferenceBase:
     """The base model that drives the inference flow"""
-    def initialize(self, model_repo: str):
+    def initialize(self):
         def parse_route(i1, i2) -> Route:
             m1 = ''
             m2 = ''
@@ -1017,7 +1139,8 @@ class InferenceBase:
         self._outputs: List[DataFlow] = []
         self._input_config = OmegaConf.to_container(global_config.input)
         self._output_config = OmegaConf.to_container(global_config.output)
-        self._model_repo = model_repo
+        self._model_repo = global_config.model_repo
+        self._ready = False
 
         if not os.path.exists(self._model_repo):
             logger.error(f"Model repository {self._model_repo} does not exist")
@@ -1026,6 +1149,16 @@ class InferenceBase:
         # set up the inference flow
         for model_config in global_config.models:
             self._operators.append(ModelOperator(OmegaConf.to_container(model_config), self._model_repo))
+
+        # initialize the operators
+        for operator in self._operators:
+            model_config = next((m for m in global_config.models if m.name == operator.model_name), None)
+            model_home = os.path.join(self._model_repo, operator.model_name)
+            backend_spec = model_config.backend.split('/')
+            backend_instance = self._create_backend(backend_spec, model_config, model_home)
+            if backend_instance is None:
+                raise RuntimeError(f"Unable to create backend {model_config.backend}")
+            operator.set_backend(backend_instance)
 
         if hasattr(global_config, "routes"):
             # go through the routing table
@@ -1141,11 +1274,40 @@ class InferenceBase:
             raise Exception(error)
         self._executor = ThreadPoolExecutor(max_workers=len(self._operators))
         self._future = None
+
         # sanity check on vision pipeline
         try:
             Pipeline("vision")
         except Exception as e:
             logger.exception(e)
+
+        # post processing:
+        self._processors = []
+        if hasattr(global_config, "postprocessors"):
+            configs = OmegaConf.to_container(global_config.postprocessors)
+            for config in configs:
+                if config["kind"] == "custom":
+                    self._processors.append(
+                        CustomProcessor(config, self._model_repo)
+                    )
+
+        # thread executor for async bridge
+        self._async_executor = ThreadPoolExecutor(max_workers=len(self._outputs))
+        # async queues
+        self._async_outputs = [asyncio.Queue() for o in self._outputs]
+        self._stop_event = threading.Event()
+
+        # start the inference flow
+        for operator in self._operators:
+            self._submit(operator)
+
+        self._ready = True
+        logger.info("Inference Engine initialized for %s", global_config.name)
+        logger.info("Inputs: %s", [f.o_names for f in self._inputs])
+        logger.info("Outputs: %s", [f.o_names for f in self._outputs])
+
+    def is_healthy(self):
+        return self._ready
 
     def finalize(self):
         for operator in self._operators:
@@ -1153,5 +1315,8 @@ class InferenceBase:
         self._executor.shutdown()
         logger.info("Inference pipeline is finalized")
 
-    def _submit(self, op: ModelOperator, backend: ModelBackend):
-        self._future = self._executor.submit(lambda: op.run(backend))
+    def _create_backend(self, backend_spec: List[str], model_config: Dict, model_home: str) -> ModelBackend | None:
+        raise NotImplementedError("Subclass must implement this method")
+
+    def _submit(self, op: ModelOperator):
+        self._future = self._executor.submit(lambda: op.run())

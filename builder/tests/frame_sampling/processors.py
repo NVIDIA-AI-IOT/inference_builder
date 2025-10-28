@@ -18,7 +18,7 @@ class FramePickerProcessor:
                 f"{self.num_frames} frames, while got {len(frame_list)}"
             )
         torch_tensors = [
-            torch.utils.dlpack.from_dlpack(frame)
+            torch.utils.dlpack.from_dlpack(frame.tensor)
             for frame in frame_list
         ]
         return torch.stack(torch_tensors)

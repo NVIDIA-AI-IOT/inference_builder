@@ -68,38 +68,10 @@ class TritonPythonModel(InferenceBase):
         logger.info(f"Model configuration completed as {auto_complete_model_config.as_dict()}")
         return auto_complete_model_config
 
-    def initialize(self, args):
-        model_repo = global_config.model_repo
-        logger.info(f"Model Repository: {model_repo}")
-        super().initialize(model_repo)
-        for operator in self._operators:
-            model_config = next((m for m in global_config.models if m.name == operator.model_name), None)
-            backend_spec = model_config.backend.split('/')
-            backend_instance = None
-            if backend_spec[0] == 'triton':
-                backend_instance = TritonBackend(
-                    model_config=OmegaConf.to_container(model_config),
-                    model_home=os.path.join(model_repo, operator.model_name, "1")
-                )
-            if backend_instance is None:
-                raise Exception(f"Unable to create backend {model_config.backend}")
-            self._submit(operator, backend_instance)
-        # post processing:
-        self._processors = []
-        if hasattr(global_config, "postprocessors"):
-            configs = OmegaConf.to_container(global_config.postprocessors)
-            for config in configs:
-                if config["kind"] == "custom":
-                    self._processors.append(
-                        CustomProcessor(config, model_repo)
-                    )
-
-        # thread executor for async bridge
-        self._async_executor = ThreadPoolExecutor(max_workers=len(self._outputs))
-        # async queues
-        self._async_outputs = [asyncio.Queue() for o in self._outputs]
-        logger.info(f"Model {global_config.name} initialized:")
-        logger.info(f"Inputs: {[f.o_names for f in self._inputs]}, Outputs:  {[f.o_names for f in self._outputs]}")
+    def _create_backend(self, backend_spec: List[str], model_config: Dict, model_home: str):
+        if backend_spec[0] == 'triton':
+            return TritonBackend(model_config, model_home)
+        return None
 
     async def execute(self, requests):
         """ execute a list of requests"""

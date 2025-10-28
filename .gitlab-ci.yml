@@ -1,0 +1,206 @@
+stages:
+  - test
+  - report
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""          # simplify DinD setup in CI
+  DOCKER_HOST: tcp://docker:2375  # point CLI to DinD service
+  TEST_LOG_DIR: "test_logs"
+  TEST_REPORT_FILE: "test_report.json"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  key: "${CI_COMMIT_REF_SLUG}"
+  paths:
+    - .cache/pip
+
+# ------------------------------
+# Reusable blocks (anchors)
+# ------------------------------
+.wait_for_dockerd: &wait_for_dockerd
+  - |-
+    echo "Waiting for dockerd at ${DOCKER_HOST:-unix:///var/run/docker.sock} ..."
+    for i in $(seq 1 30); do
+      if docker info >/dev/null 2>&1; then
+        echo "✅ dockerd is ready."
+        break
+      fi
+      sleep 1
+    done
+    docker info >/dev/null 2>&1 || { echo "❌ dockerd not ready after 30s"; exit 1; }
+
+.setup_python: &setup_python
+  - apk add --no-cache python3 python3-dev py3-pip bash gcc g++ make cmake musl-dev linux-headers ffmpeg file net-tools curl vlc
+  - python3 --version
+  - adduser -D -H -s /sbin/nologin vlc || true
+  - export VLC_USER=vlc
+  - export SUDO_UID=$(id -u vlc)
+  - export SUDO_GID=$(id -g vlc)
+  - docker --version
+  - docker info
+  - pip3 install --upgrade pip --break-system-packages || pip3 install --upgrade pip
+  - "if [ -f requirements.txt ]; then pip install -r <(grep -v '^opencv-python' requirements.txt) --break-system-packages || pip install -r requirements.txt; fi"
+
+# ------------------------------
+# Standard Test Suite
+# ------------------------------
+test:standard:
+  stage: test
+  image: docker:24
+  variables:
+    DOCKER_TLS_CERTDIR: ""      # disable TLS inside DinD
+    DOCKER_HOST: unix:///var/run/docker.sock
+  before_script:
+    - *wait_for_dockerd
+    - *setup_python
+  script:
+    - echo "Running standard test suite..."
+    - cd builder/tests
+    - chmod +x run_tests.sh
+    - ./run_tests.sh standard -c "*" --output "$TEST_REPORT_FILE" --log-dir "$TEST_LOG_DIR"
+    - echo "Tests completed"
+  after_script:
+    - echo "Cleaning up Docker images..."
+    - docker images | grep test-inference_builder | awk '{print $3}' | xargs -r docker rmi -f || true
+    - echo "Docker cleanup completed"
+  artifacts:
+    name: "test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - builder/tests/$TEST_LOG_DIR/
+      - builder/tests/$TEST_REPORT_FILE
+    when: always
+    expire_in: 1 week
+  # NOTE: If you truly need JUnit integration, emit XML instead of JSON.
+  # Example: change your test runner to produce builder/tests/junit.xml and use:
+  # reports:
+  #   junit: builder/tests/junit.xml
+  timeout: 2h
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: manual
+    - if: '$CI_COMMIT_TAG'
+      when: manual
+  tags:
+    - os/linux
+    - type/docker
+    - gpu
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  allow_failure: true
+
+# ------------------------------
+# Test Report Generation (JSON consumer)
+# ------------------------------
+test:report:
+  stage: report
+  image: python:3.11-slim
+  needs:
+    - job: test:standard
+      artifacts: true
+      optional: true
+    - job: test:quick
+      artifacts: true
+      optional: true
+
+  script:
+    - echo "Generating test report summary..."
+    - |
+      REPORT_PATH=""
+      if [ -f "builder/tests/$TEST_REPORT_FILE" ]; then
+        REPORT_PATH="builder/tests/$TEST_REPORT_FILE"
+      elif [ -f "builder/tests/quick_test_report.json" ]; then
+        REPORT_PATH="builder/tests/quick_test_report.json"
+      fi
+      if [ -n "$REPORT_PATH" ]; then
+        REPORT_PATH="$REPORT_PATH" python3 - <<'PY'
+      import json, sys, os
+      p = os.environ.get("REPORT_PATH")
+      try:
+          with open(p, "r") as f:
+              report = json.load(f)
+          print("\n" + "="*60)
+          print("TEST SUMMARY")
+          print("="*60)
+          s = report.get("summary", {})
+          print(f"Total Tests:   {s.get('total_tests', 0)}")
+          print(f"Passed:        {s.get('passed', 0)}")
+          print(f"Failed:        {s.get('failed', 0)}")
+          print(f"Success Rate:  {s.get('success_rate', 'N/A')}")
+          print("\n" + "="*60)
+          print("TEST DETAILS")
+          print("="*60)
+          for r in report.get("results", []):
+              icon = "✓" if r.get("status") == "PASSED" else "✗"
+              print(f"\n{icon} {r.get('test_id','N/A')}: {r.get('name','Unknown')}")
+              print(f"  Status: {r.get('status','UNKNOWN')}")
+              if "log_file" in r:
+                  print(f"  Log: {r['log_file']}")
+          print("\n" + "="*60)
+          if s.get("failed", 0) > 0:
+              sys.exit(1)
+      except Exception as e:
+          print(f"Error reading test report: {e}")
+          sys.exit(1)
+      PY
+      else
+        echo "Test report file not found; skipping summary."
+        exit 0
+      fi
+  artifacts:
+    name: "test-summary-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - builder/tests/$TEST_REPORT_FILE
+      - builder/tests/$TEST_LOG_DIR/
+      - builder/tests/quick_test_report.json
+      - builder/tests/quick_logs/
+    when: always
+    expire_in: 1 week
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+
+# ------------------------------
+# Quick test (manual)
+# ------------------------------
+test:quick:
+  stage: test
+  image: docker:24
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: unix:///var/run/docker.sock
+  before_script:
+    - *wait_for_dockerd
+    - *setup_python
+  script:
+    - echo "Running quick test (first test configuration only)..."
+    - cd builder/tests
+    - chmod +x run_tests.sh
+    - ./run_tests.sh standard --output quick_test_report.json --log-dir quick_logs
+    - echo "Quick test completed"
+  after_script:
+    - echo "Cleaning up Docker images..."
+    - docker images | grep test-inference_builder | awk '{print $3}' | xargs -r docker rmi -f || true
+    - echo "Docker cleanup completed"
+  artifacts:
+    name: "quick-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - builder/tests/quick_logs/
+      - builder/tests/quick_test_report.json
+    when: always
+    expire_in: 3 days
+  timeout: 30m
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+  tags:
+    - os/linux
+    - type/docker
+    - gpu
