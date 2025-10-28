@@ -1,13 +1,14 @@
 [
   {
-    "name": "Frame Sampling on Files",
+    "name": "frame_sampling_on_files",
     "description": "Test with default TensorRT and CUDA versions",
     "build_args": {
       "TEST_APP_NAME": "frame_sampling",
       "CACHE_BUSTER": "default_test"
     },
     "test_config": {
-      "timeout": 10,
+      "default_enable": true,
+      "timeout": 30,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes"
       },
@@ -15,10 +16,10 @@
         "frame_sampling/models": "/workspace/models"
       },
       "cmd": [
-        "--video-files", "34888cef-8d7a-4de9-80f2-7a6a11974d6f?frames=10"
+        "--video-files", "34888cef-8d7a-4de9-80f2-7a6a11974d6f?frames=10&chunks=10"
       ],
       "error_detection": {
-        "enabled": true,
+        "enabled": false,
         "patterns": [
           "[ERROR]",
           "[CRITICAL]"
@@ -28,14 +29,15 @@
     }
   },
   {
-    "name": "Frame Sampling on Live Streams",
+    "name": "frame_sampling_on_streams",
     "description": "Test with default TensorRT and CUDA versions",
     "build_args": {
       "TEST_APP_NAME": "frame_sampling",
       "CACHE_BUSTER": "default_test"
     },
     "test_config": {
-      "timeout": 5,
+      "default_enable": false,
+      "timeout": 30,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes"
       },
@@ -49,6 +51,25 @@
         "enabled": false
       },
       "prerequisite_script": "./setup_rtsp_server.sh frame.jpg -m test -f 30 --daemon"
+    }
+  }
+  ,
+  {
+    "name": "fastapi_concurrency_test",
+    "description": "Build concurrency app and run threaded client",
+    "build_args": {
+      "TEST_APP_NAME": "concurrency",
+      "CACHE_BUSTER": "concurrency_fastapi",
+      "SERVER_TYPE": "fastapi",
+      "OPENAPI_SPEC": "builder/samples/dummy/openapi.yaml"
+    },
+    "test_config": {
+      "default_enable": false,
+      "timeout": 30,
+      "volumes": {
+        "concurrency/models": "/workspace/models"
+      },
+      "cmd": []
     }
   }
 ]

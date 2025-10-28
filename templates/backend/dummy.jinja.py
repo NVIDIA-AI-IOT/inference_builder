@@ -24,23 +24,34 @@ class DummyBackend(ModelBackend):
         self._model_name = model_config["name"]
         self._input_config = [i for i in model_config['input']]
         self._output_config = [o for o in model_config['output']]
-
+        self._params = model_config["parameters"] if "parameters" in model_config else {}
+        n_workers = self._params.get("thread_concurrency", 0)
+        # enable thread pool for concurrent inference
+        self._thread_pool = ThreadPoolExecutor(max_workers=n_workers) if n_workers > 0 else None
         logger.info(f"DummyBackend created for {self._model_name} to generate {[o['name'] for o in self._output_config]}")
 
     def __call__(self, *args, **kwargs):
+        def generate_sync(in_data):
+            for _ in in_data:
+                yield self._generate_dummy_data()
+
+        def generate_async(in_data):
+            return [self._generate_dummy_data() for _ in in_data]
+
         in_data = list(args) if args else [kwargs]
-        out_data = []
-        for data in in_data:
-            dummy_data = {}
-            # validate the input data
-            self._valicate_inputs(data)
-            for config in self._output_config:
-                name = config['name']
-                data = np.random.randn(*config['dims'])
-                dummy_data[name] = data
-            out_data.append(dummy_data)
-        # generate a batch of dummy data
-        yield out_data
+        if self._thread_pool is not None:
+            return self._thread_pool.submit(generate_async, in_data)
+        else:
+            return generate_sync(in_data)
+        
+
+    def _generate_dummy_data(self):
+        dummy_data = {}
+        for config in self._output_config:
+            name = config['name']
+            data = np.random.randn(*config['dims'])
+            dummy_data[name] = data
+        return dummy_data
 
     def _valicate_inputs(self, data):
         i_names = [i['name'] for i in self._input_config]

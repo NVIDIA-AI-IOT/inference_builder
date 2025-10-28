@@ -247,7 +247,8 @@ start_rtsp_server() {
 
     # Create cvlc command for video streaming
     # Use loop to continuously stream the video
-    local cvlc_cmd="cvlc --loop \"$video_file\" \":sout=#gather:rtp{sdp=rtsp://:$RTSP_PORT/$RTSP_MOUNT_POINT}\" :network-caching=$CACHE_TIME :sout-all :sout-keep"
+    # Add headless flags for Docker/CI environments
+    local cvlc_cmd="vlc-wrapper -I dummy --no-video-title-show --no-xlib --loop \"$video_file\" \":sout=#gather:rtp{sdp=rtsp://:$RTSP_PORT/$RTSP_MOUNT_POINT}\" :network-caching=$CACHE_TIME :sout-all :sout-keep"
 
     print_info "Starting RTSP server..."
     print_info "Input file: $input_file"
@@ -269,6 +270,10 @@ start_rtsp_server() {
             print_info "PID file: $PID_FILE"
         else
             print_error "Failed to start RTSP server"
+            if [ -f "$LOG_FILE" ]; then
+                print_error "Log file contents:"
+                cat "$LOG_FILE"
+            fi
             exit 1
         fi
     else

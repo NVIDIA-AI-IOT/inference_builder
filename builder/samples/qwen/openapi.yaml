@@ -1039,6 +1039,7 @@ components:
           title: Type
       type: object
       title: NIMVLMChatCompletionContentPartVideo
+      additionalProperties: true
     NIMVLMChatCompletionContentPartVideoStreaming:
       properties:
         video_url:

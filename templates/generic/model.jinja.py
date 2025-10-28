@@ -39,52 +39,24 @@ logger = get_logger(__name__)
 class GenericInference(InferenceBase):
     """The class that drives a generic inference flow"""
 
-
-    def initialize(self, *args):
-        model_repo = global_config.model_repo
-        logger.info(f"Model Repository: {model_repo}")
-        super().initialize(model_repo)
-        for operator in self._operators:
-            model_config = next((m for m in global_config.models if m.name == operator.model_name), None)
-            backend_spec = model_config.backend.split('/')
-            backend_instance = None
-            backend_class = None
-            if backend_spec[0] == 'triton':
-                backend_class = TritonBackend
-            elif backend_spec[0] == 'deepstream':
-                backend_class = DeepstreamBackend
-            elif backend_spec[0] == 'polygraphy':
-                backend_class = PolygraphBackend
-            elif backend_spec[0] == 'tensorrtllm':
-                backend_class = TensorRTLLMBackend
-            elif backend_spec[0] == 'dummy':
-                backend_class = DummyBackend
-            elif backend_spec[0] == 'pytorch':
-                backend_class = PytorchBackend
-            else:
-                raise Exception(f"Backend {model_config.backend} not supported")
-            backend_instance = backend_class(
-                model_config=OmegaConf.to_container(model_config),
-                model_home=os.path.join(model_repo, operator.model_name)
-            )
-            self._submit(operator, backend_instance)
-        # post processing:
-        self._processors = []
-        if hasattr(global_config, "postprocessors"):
-            configs = OmegaConf.to_container(global_config.postprocessors)
-            for config in configs:
-                if config["kind"] == "custom":
-                    self._processors.append(
-                        CustomProcessor(config, model_repo)
-                    )
-
-        # thread executor for async bridge
-        self._async_executor = ThreadPoolExecutor(max_workers=len(self._outputs))
-        # async queues
-        self._async_outputs = [asyncio.Queue() for o in self._outputs]
-        self._stop_event = threading.Event()
-        logger.info(f"GenericInference {global_config.name} initialized:")
-        logger.info(f"Inputs: {[f.o_names for f in self._inputs]}, Outputs:  {[f.o_names for f in self._outputs]}")
+    def _create_backend(self, backend_spec: List[str], model_config: Dict, model_home: str):
+        if backend_spec[0] == 'triton':
+            backend_class = TritonBackend
+        elif backend_spec[0] == 'deepstream':
+            backend_class = DeepstreamBackend
+        elif backend_spec[0] == 'polygraphy':
+            backend_class = PolygraphBackend
+        elif backend_spec[0] == 'tensorrtllm':
+            backend_class = TensorRTLLMBackend
+        elif backend_spec[0] == 'dummy':
+            backend_class = DummyBackend
+        elif backend_spec[0] == 'pytorch':
+            backend_class = PytorchBackend
+        elif backend_spec[0] == 'vllm':
+            backend_class = VLLMBackend
+        else:
+            return None
+        return backend_class(model_config, model_home)
 
     async def execute(self, request):
         """ execute a list of requests"""
@@ -160,7 +132,7 @@ class GenericInference(InferenceBase):
         processed = {k: v for k, v in data.items()}
         for processor in self._processors:
             if not all([i in data for i in processor.input]):
-                logger.warning(f"Input settings invalid for the processor: {processor}")
+                logger.warning(f"Input settings invalid for the processor: {processor.name}")
                 continue
             input = [processed.pop(i) for i in processor.input]
             logger.debug(f"Post-processor invoked with given input {input}")

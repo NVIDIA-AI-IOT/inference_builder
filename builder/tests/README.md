@@ -42,14 +42,14 @@ chmod +x run_tests.sh
 ./run_tests.sh quick-test
 ```
 
-#### Full Test Suite
+#### Standard Test Suite
 ```bash
-./run_tests.sh full-test
+./run_tests.sh standard
 ```
 
 #### Custom Configuration
 ```bash
-./run_tests.sh custom-test --config my_config.json --log-dir custom_logs
+./run_tests.sh custom --config my_config.json --log-dir custom_logs
 ```
 
 ## Test Configuration Structure
@@ -216,14 +216,14 @@ Options:
 ./run_tests.sh [COMMAND] [OPTIONS]
 
 Commands:
-  full-test      Run full test suite with all configurations from test_configs.json
-  custom-test    Run test with custom configuration file
+  standard      Run standard test suite with all configurations from test_configs.json
+  custom    Run test with custom configuration file
   help           Show help message
 
 Options:
   --no-cleanup           Don't cleanup Docker images after testing
   --output FILE          Save test report to specified file
-  --config FILE          Use custom configuration file (required for custom-test)
+  --config FILE          Use custom configuration file (required for custom)
   --log-dir DIR          Directory to save container logs (default: logs)
 ```
 
@@ -327,7 +327,7 @@ cat > my_tests.json << EOF
 EOF
 
 # Run with custom configuration
-./run_tests.sh custom-test --config my_tests.json
+./run_tests.sh custom --config my_tests.json
 ```
 
 ### Continuous Integration
@@ -336,7 +336,7 @@ For CI/CD pipelines, you can run tests with specific configurations:
 
 ```bash
 # Run tests and save report
-./run_tests.sh full-test --output test_report.json
+./run_tests.sh standard --output test_report.json
 
 # Check exit code
 if [ $? -eq 0 ]; then
@@ -440,10 +440,10 @@ Log files are named using the pattern: `test_{test_id}_{image_name}.log`
 
 ```bash
 # Use default log directory
-./run_tests.sh full-test
+./run_tests.sh standard
 
 # Use custom log directory
-./run_tests.sh full-test --log-dir /tmp/test_logs
+./run_tests.sh standard --log-dir /tmp/test_logs
 
 # Python script directly
 python3 test_docker_builds.py --log-dir my_logs --config-file test_configs.json

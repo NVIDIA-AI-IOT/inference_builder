@@ -54,20 +54,24 @@ show_usage() {
 Usage: $0 [COMMAND] [OPTIONS]
 
 Commands:
-    full-test      Run full test suite with all configurations from test_configs.json
-    custom-test    Run test with custom configuration file
+    standard      Run standard test suite with all configurations from test_configs.json
+    custom    Run test with custom configuration file
     help           Show this help message
 
 Options:
     --no-cleanup           Don't cleanup Docker images after testing
     --output FILE          Save test report to specified file
-    --config FILE          Use custom configuration file (required for custom-test)
+    --config FILE          Use custom configuration file (required for custom)
     --log-dir DIR          Directory to save container logs (default: logs)
+    -c, --test-case NAME   Run only test cases matching this name (partial match). Use '*' for all.
 
 Examples:
-    $0 full-test
-    $0 custom-test --config my_config.json --output results.json
-    $0 full-test --no-cleanup --output full_results.json --log-dir test_logs
+    $0 standard
+    $0 custom --config my_config.json --output results.json
+    $0 standard --no-cleanup --output full_results.json --log-dir test_logs
+    $0 standard -c "Frame Sampling"
+    $0 standard -c "*"
+    $0 standard --test-case "FastAPI"
 
 EOF
 }
@@ -102,9 +106,9 @@ check_prerequisites() {
     print_success "Prerequisites check passed"
 }
 
-# Function to run full test
+# Function to run standard test
 run_full_test() {
-    print_info "Running full test suite with all configurations..."
+    print_info "Running standard test suite with all configurations..."
 
     local args=("--dockerfile" "Dockerfile" "--base-dir" "." "--config-file" "test_configs.json" "--log-dir" "$LOG_DIR")
 
@@ -114,6 +118,10 @@ run_full_test() {
 
     if [ -n "$OUTPUT_FILE" ]; then
         args+=("--output" "$OUTPUT_FILE")
+    fi
+
+    if [ -n "$TEST_CASE" ]; then
+        args+=("--test-case" "$TEST_CASE")
     fi
 
     python3 "$TEST_SCRIPT" "${args[@]}"
@@ -143,6 +151,10 @@ run_custom_test() {
         args+=("--output" "$OUTPUT_FILE")
     fi
 
+    if [ -n "$TEST_CASE" ]; then
+        args+=("--test-case" "$TEST_CASE")
+    fi
+
     python3 "$TEST_SCRIPT" "${args[@]}"
 }
 
@@ -152,10 +164,11 @@ NO_CLEANUP="false"
 OUTPUT_FILE=""
 CONFIG_FILE=""
 LOG_DIR="logs"
+TEST_CASE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        full-test|custom-test|help)
+        standard|custom|help)
             COMMAND="$1"
             shift
             ;;
@@ -173,6 +186,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --log-dir)
             LOG_DIR="$2"
+            shift 2
+            ;;
+        -c|--test-case)
+            TEST_CASE="$2"
             shift 2
             ;;
         *)
@@ -201,3 +218,20 @@ cd "$SCRIPT_DIR"
 
 # Check prerequisites
 check_prerequisites
+
+# Execute command
+case $COMMAND in
+    standard)
+        run_full_test
+        ;;
+    custom)
+        run_custom_test
+        ;;
+    *)
+        print_error "Unknown command: $COMMAND"
+        show_usage
+        exit 1
+        ;;
+esac
+
+print_success "Test execution completed"
