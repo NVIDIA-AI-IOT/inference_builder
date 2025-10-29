@@ -79,6 +79,7 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
+      HTTP_PORT: 8003
       DEBUG: 0
   tao-cv:
     user: nvs:1000

@@ -63,5 +63,5 @@ class VilaVisionEncoderProcessor:
         from llava.model.multimodal_encoder.siglip.image_processing_siglip import SiglipImageProcessor
         self._preprocessor = SiglipImageProcessor.from_pretrained(model_home)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         return self._preprocessor(*args)['pixel_values'][0],

@@ -43,13 +43,49 @@ class DummyBackend(ModelBackend):
             return self._thread_pool.submit(generate_async, in_data)
         else:
             return generate_sync(in_data)
-        
+
 
     def _generate_dummy_data(self):
         dummy_data = {}
         for config in self._output_config:
             name = config['name']
-            data = np.random.randn(*config['dims'])
+            dims = config['dims']
+            data_type = config.get('data_type', 'TYPE_FP32')
+
+            # Generate random data based on type with correct numpy dtype
+            if data_type == 'TYPE_BOOL':
+                data = np.random.choice([True, False], size=dims).astype(np.bool_)
+            elif data_type == 'TYPE_INT8':
+                data = np.random.randint(-128, 127, size=dims, dtype=np.int8)
+            elif data_type == 'TYPE_INT16':
+                data = np.random.randint(-32768, 32767, size=dims, dtype=np.int16)
+            elif data_type == 'TYPE_INT32':
+                data = np.random.randint(-100, 100, size=dims, dtype=np.int32)
+            elif data_type == 'TYPE_INT64':
+                data = np.random.randint(-100, 100, size=dims, dtype=np.int64)
+            elif data_type == 'TYPE_UINT8':
+                data = np.random.randint(0, 255, size=dims, dtype=np.uint8)
+            elif data_type == 'TYPE_UINT16':
+                data = np.random.randint(0, 65535, size=dims, dtype=np.uint16)
+            elif data_type == 'TYPE_UINT32':
+                data = np.random.randint(0, 100, size=dims, dtype=np.uint32)
+            elif data_type == 'TYPE_UINT64':
+                data = np.random.randint(0, 100, size=dims, dtype=np.uint64)
+            elif data_type == 'TYPE_FP16':
+                data = np.random.randn(*dims).astype(np.float16)
+            elif data_type == 'TYPE_FP32':
+                data = np.random.randn(*dims).astype(np.float32)
+            elif data_type == 'TYPE_FP64':
+                data = np.random.randn(*dims).astype(np.float64)
+            elif 'TYPE_STRING' in data_type or 'TYPE_BYTES' in data_type:
+                # Generate random strings
+                flat_size = np.prod(dims) if dims else 1
+                data = np.array([''.join(np.random.choice(list('abcdefghijklmnopqrstuvwxyz0123456789'), size=10))
+                                for _ in range(flat_size)]).reshape(dims) if dims else np.array(['random_str'])
+            else:
+                # Default to FP32 for unknown types
+                data = np.random.randn(*dims).astype(np.float32)
+
             dummy_data[name] = data
         return dummy_data
 

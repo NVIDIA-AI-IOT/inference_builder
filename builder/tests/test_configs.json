@@ -52,6 +52,28 @@
       },
       "prerequisite_script": "./setup_rtsp_server.sh frame.jpg -m test -f 30 --daemon"
     }
+  },
+  {
+    "name": "Output Types Compatibility Test",
+    "description": "Test numpy array output type compatibility with simplified dummy backend",
+    "build_args": {
+      "TEST_APP_NAME": "output_types",
+      "CACHE_BUSTER": "output_types_simplified",
+      "SERVER_TYPE": "fastapi",
+      "OPENAPI_SPEC": "builder/samples/dummy/openapi.yaml"
+    },
+
+    "test_config": {
+      "default_enable": true,
+      "timeout": 10,
+      "volumes": {
+        "output_types/models": "/workspace/models"
+      },
+      "env": {
+        "DEBUG": "0"
+      },
+      "cmd": []
+    }
   }
   ,
   {
@@ -64,7 +86,7 @@
       "OPENAPI_SPEC": "builder/samples/dummy/openapi.yaml"
     },
     "test_config": {
-      "default_enable": false,
+      "default_enable": true,
       "timeout": 30,
       "volumes": {
         "concurrency/models": "/workspace/models"
