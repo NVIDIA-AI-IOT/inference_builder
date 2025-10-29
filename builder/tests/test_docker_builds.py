@@ -491,6 +491,47 @@ class DockerBuildTester:
         # Create log directory if it doesn't exist
         self.log_dir.mkdir(exist_ok=True)
 
+    def get_service_host(self) -> str:
+        """
+        Determine the appropriate host to use for connecting to Docker
+        containers. In CI environments (like GitLab CI with
+        Docker-in-Docker), 127.0.0.1 won't work because each container has
+        its own localhost. Use Docker gateway IP instead.
+        """
+        # Check if running in CI environment
+        if os.environ.get('CI') or os.environ.get('GITLAB_CI'):
+            logger.info(
+                "🔍 CI environment detected, using Docker gateway IP "
+                "for service connectivity"
+            )
+            # Try to get docker gateway IP from bridge network
+            try:
+                result = subprocess.run(
+                    [
+                        "docker", "network", "inspect", "bridge", "-f",
+                        "{{range .IPAM.Config}}{{.Gateway}}{{end}}"
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    gateway_ip = result.stdout.strip()
+                    logger.info(f"📡 Using Docker gateway IP: {gateway_ip}")
+                    return gateway_ip
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to get Docker gateway IP: {e}")
+
+            # Fallback to default Docker bridge gateway
+            logger.info(
+                "📡 Using default Docker bridge gateway: 172.17.0.1"
+            )
+            return "172.17.0.1"
+
+        # Local development environment - use localhost
+        logger.info("📡 Using localhost for service connectivity")
+        return "127.0.0.1"
+
     def generate_inference_code(self, build_args: Dict[str, str]) -> Tuple[bool, str]:
         """Generate inference code (codegen) without building or testing Docker images.
 
@@ -523,10 +564,15 @@ class DockerBuildTester:
 
             pre_build_command = [
                 "python", "../main.py", f"{test_app_name}/app.yaml",
-                "-o", test_app_name,
-                "-c", f"{test_app_name}/processors.py",
-                "--server-type", server_type, "-t"
+                "-o", test_app_name
             ]
+
+            # Only add processors.py if it exists
+            processors_path = Path(f"{test_app_name}/processors.py")
+            if processors_path.exists():
+                pre_build_command.extend(["-c", f"{test_app_name}/processors.py"])
+
+            pre_build_command.extend(["--server-type", server_type, "-t"])
 
             if openapi_spec:
                 # Resolve provided spec relative to project root, copy into local app folder to avoid unsafe paths
@@ -636,10 +682,15 @@ class DockerBuildTester:
             # Use safer subprocess call without shell=True
             pre_build_command = [
                 "python", "../main.py", f"{test_app_name}/app.yaml",
-                "-o", test_app_name,
-                "-c", f"{test_app_name}/processors.py",
-                "--server-type", server_type, "-t"
+                "-o", test_app_name
             ]
+
+            # Only add processors.py if it exists
+            processors_path = Path(f"{test_app_name}/processors.py")
+            if processors_path.exists():
+                pre_build_command.extend(["-c", f"{test_app_name}/processors.py"])
+
+            pre_build_command.extend(["--server-type", server_type, "-t"])
 
             if openapi_spec:
                 # Resolve provided spec relative to project root, copy into local app folder to avoid unsafe paths
@@ -1042,7 +1093,8 @@ class DockerBuildTester:
                 # Readiness probe
                 ready = False
                 ready_deadline = time.time() + min(60, max(1, timeout))
-                health_url = f"http://127.0.0.1:8000/v1/health/ready"
+                service_host = self.get_service_host()
+                health_url = f"http://{service_host}:8000/v1/health/ready"
                 logger.info(f"🔎 Probing readiness: {health_url}")
                 while time.time() < ready_deadline:
                     try:
@@ -1098,7 +1150,7 @@ class DockerBuildTester:
                                     "%{http_code}",
                                     "-H", "Content-Type: application/json",
                                     "--data", line,
-                                    f"http://127.0.0.1:8000/v1/inference"
+                                    f"http://{service_host}:8000/v1/inference"
                                 ],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,

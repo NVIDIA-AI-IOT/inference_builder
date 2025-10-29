@@ -94,7 +94,7 @@ class PostprocessorCvcuda:
             color_coded[filtered_indices] = self.color_map[str(idx)]
         return color_coded
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         if not (isinstance(args[0], torch.Tensor) or isinstance(args[0], np.ndarray)):
             raise Exception(f"Unsupported type {type(args[0])}")
         output = args[0] if isinstance(args[0], torch.Tensor) else torch.from_numpy(args[0])

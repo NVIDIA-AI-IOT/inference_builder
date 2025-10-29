@@ -24,7 +24,7 @@ class OpenclipTokenizer:
         open_clip.add_model_config(config["model_home"])
         self._tokenizer = open_clip.get_tokenizer("NVCLIP_224_700M_ViTH14")
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         return self._tokenizer(args[0])
 
 class VisionPreprocessor:
@@ -45,7 +45,7 @@ class VisionPreprocessor:
             ]
         )
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         return self._transform(Image.open(io.BytesIO(args[0])))
 
 class NvClipPostProcessor:
@@ -53,7 +53,7 @@ class NvClipPostProcessor:
     def __init__(self, config):
         self._config = config
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         text = args[0].tolist()
         images = args[1].tolist()
         indices = args[2].tolist()

@@ -1,3 +1,9 @@
+from logging import warn, warning
+from operator import is_
+
+from lib.utils import logger
+
+
 {#
  SPDX-FileCopyrightText: Copyright (c) <year> NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  SPDX-License-Identifier: Apache-2.0
@@ -130,6 +136,7 @@ class GenericInference(InferenceBase):
 
     def _post_process(self, data: Dict):
         processed = {k: v for k, v in data.items()}
+        data_type_names = { i['name']: i['data_type'] for i in self._output_config}
         for processor in self._processors:
             if not all([i in data for i in processor.input]):
                 logger.warning(f"Input settings invalid for the processor: {processor.name}")
@@ -145,11 +152,10 @@ class GenericInference(InferenceBase):
             for key, value in zip(processor.output, output):
                 processed[key] = value
                 # correct data type
-                output_config = next((c for c in self._output_config if c['name'] == key), None)
-                if output_config is None:
+                if key not in data_type_names:
                     logger.warning(f"Invalid output parsed: {key}")
                     continue
-                data_type = output_config["data_type"]
+                data_type =  data_type_names[key]
                 if isinstance(value, np.ndarray):
                     data_type = np_datatype_mapping[data_type]
                     if value.dtype != data_type:
@@ -161,25 +167,34 @@ class GenericInference(InferenceBase):
                 else:
                     processed[key] = value
         # convert numpy and torch tensors to list for server to process
+        def convert_to_list(v, is_string_type):
+            """Convert numpy/torch tensor to list with proper string decoding"""
+            if isinstance(v, np.ndarray):
+                if is_string_type and (np.issubdtype(v.dtype, np.bytes_) or np.issubdtype(v.dtype, np.str_) or v.dtype == np.object_):
+                    # Decode string arrays
+                    flat_list = v.flatten().tolist()
+                    decoded = [i.decode("utf-8", "ignore") if isinstance(i, bytes) else str(i) for i in flat_list]
+                    return np.array(decoded).reshape(v.shape).tolist()
+                else:
+                    return v.tolist()
+            elif isinstance(v, torch.Tensor):
+                if v.dtype == torch.uint8 and is_string_type:
+                    # Decode byte tensors as strings
+                    flat_list = v.flatten().tolist()
+                    decoded = [bytes([i]).decode("utf-8", "ignore") if isinstance(i, int) else str(i) for i in flat_list]
+                    return decoded if v.dim() == 1 else np.array(decoded).reshape(v.shape).tolist()
+                else:
+                    return v.tolist()
+            elif dataclasses.is_dataclass(v):
+                return dataclasses.asdict(v)
+            else:
+                return v
+
         for key, value in processed.items():
+            is_string_type = key in data_type_names and 'TYPE_STRING' in data_type_names[key]
             if isinstance(value, list):
                 # this is a batch of data
-                value_list = []
-                for v in value:
-                    if isinstance(v, np.ndarray):
-                        value_list.append(v.tolist())
-                    elif isinstance(v, torch.Tensor):
-                        value_list.append(v.tolist())
-                    elif dataclasses.is_dataclass(v):
-                        value_list.append(dataclasses.asdict(v))
-                    else:
-                        value_list.append(v)
-                processed[key] = value_list
+                processed[key] = [convert_to_list(v, is_string_type) for v in value]
             else:
-                if isinstance(value, np.ndarray):
-                    processed[key] = value.tolist()
-                elif isinstance(value, torch.Tensor):
-                    processed[key] = value.tolist()
-                elif dataclasses.is_dataclass(value):
-                    processed[key] = dataclasses.asdict(value)
+                processed[key] = convert_to_list(value, is_string_type)
         return processed
