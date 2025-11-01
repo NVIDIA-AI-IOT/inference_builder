@@ -393,7 +393,7 @@ class VideoFrameSamplingDataFlow(DataFlow):
             if config and config["data_type"] == key_tensor_type:
                 self._video_tensor_names.append(tensor_name[1])
         self._media_extractor()
-        self._frame_collector = ThreadPoolExecutor(max_workers=1)
+        self._frame_collector = ThreadPoolExecutor(max_workers=n_codec_instances)
         logger.info(f"VideoFrameSamplingDataFlow initialized")
 
     def _process_custom_data(self, tensor: np.ndarray, data_type: str):
@@ -700,7 +700,7 @@ class AggregationFlowCollector(Collector):
                         continue
             if result:
                 self._queue.put(result)
-            if all([isinstance(c, Stop) for c in completed]):
+            if completed and all([isinstance(c, Stop) for c in completed]):
                 self._queue.put(Stop("All data flows completed"))
             elif any([isinstance(c, Error) for c in completed]):
                 self._queue.put(Error("One or more data flows ended in error"))
@@ -767,6 +767,69 @@ class MultiFlowCollector(Collector):
         self._executor.shutdown(wait=True)
         self._queue.put(Stop("Shutdown"))
         logger.info(f"MultiFlowCollector destructed")
+
+
+class AsyncDispatcher:
+    """AsyncDispatcher is a dispatcher of synchronous data flows to asynchronous queues"""
+    def __init__(self, collector: Collector, loop: asyncio.AbstractEventLoop, n_max_async_queues: int = 100):
+        self._collector = collector
+        self._loop = loop
+        self._consumer_queues = Queue(maxsize=n_max_async_queues)
+        self._stop_event = threading.Event()
+        self._dispatcher_thread = threading.Thread(target=self.run, daemon=True)
+        self._dispatcher_thread.start()
+
+    def append_async_queue(self, async_queue: asyncio.Queue):
+        try:
+            self._consumer_queues.put_nowait(async_queue)
+        except Full:
+            error_message =(f"Comsumer queue reached the maximum size, stop accepting more async queues")
+            raise Exception(error_message)
+
+    def run(self):
+        if self._collector is None:
+            logger.error("AsyncDispatcher failed to start: collector is None")
+            return
+        if self._loop is None:
+            logger.error("AsyncDispatcher failed to start: loop is None")
+            return
+        logger.info("AsyncDispatcher started")
+        while not self._stop_event.is_set():
+            try:
+                async_queue = self._consumer_queues.get(timeout=1.0)
+            except Empty:
+                continue
+            except Exception as e:
+                logger.exception(e)
+                continue
+
+            # For this consumer queue, keep collecting until Stop/Error is received
+            while not self._stop_event.is_set():
+                try:
+                    data = self._collector.collect()
+                except Empty:
+                    continue
+                except Exception as e:
+                    logger.exception(e)
+                    data = Error(str(e))
+                try:
+                    async def _async_put(q, item):
+                        await q.put(item)
+                    asyncio.run_coroutine_threadsafe(_async_put(async_queue, data), self._loop)
+                except Exception as e:
+                    logger.exception(e)
+                    continue
+
+                if isinstance(data, Stop):
+                    logger.info(f"AsyncDispatcher delivered Stop message: {data}")
+                    break
+
+        logger.info("AsyncDispatcher stopped")
+
+    def stop(self):
+        self._stop_event.set()
+        logger.info("AsyncDispatcher stopping")
+
 class ModelOperator:
     """An model operator runs a single model"""
     def __init__(self, model_config:Dict, model_repo: str):
@@ -1291,10 +1354,15 @@ class InferenceBase:
                         CustomProcessor(config, self._model_repo)
                     )
 
-        # thread executor for async bridge
-        self._async_executor = ThreadPoolExecutor(max_workers=len(self._outputs))
-        # async queues
-        self._async_outputs = [asyncio.Queue() for o in self._outputs]
+        # data collector
+        self._collector = (
+            AggregationFlowCollector(self._outputs)
+            if len(self._outputs) > 1
+            else SingleFlowCollector(self._outputs[0])
+        )
+        # async dispatcher
+        self._async_dispatcher = None
+        # stop event for request lifecycle
         self._stop_event = threading.Event()
 
         # start the inference flow
@@ -1310,6 +1378,14 @@ class InferenceBase:
         return self._ready
 
     def finalize(self):
+        if self._stop_event is not None:
+            self._stop_event.set()
+        if self._async_dispatcher is not None:
+            self._async_dispatcher.stop()
+            self._async_dispatcher = None
+        if self._collector is not None:
+            self._collector.stop()
+            self._collector = None
         for operator in self._operators:
             operator.stop()
         self._executor.shutdown()

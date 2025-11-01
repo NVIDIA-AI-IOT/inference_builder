@@ -30,7 +30,6 @@ import json
 import os
 from typing import List, Dict
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import torch
 from pathlib import Path
@@ -66,24 +65,44 @@ class GenericInference(InferenceBase):
 
     async def execute(self, request):
         """ execute a list of requests"""
-        async def async_put(queue, item):
-            await queue.put(item)
-        def thread_to_async_bridge(thread_queue, async_queue, loop):
-            while not self._stop_event.is_set():
-                try:
-                    item = thread_queue.get()
-                    asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
-                except Empty:
-                    continue
-            logger.info(f"thread_to_async_bridge {thread_queue} stopped")
+        if self._async_dispatcher is None:
+            self._async_dispatcher = AsyncDispatcher(self._collector, loop=asyncio.get_running_loop())
+        async_queue = asyncio.Queue()
+        self._async_dispatcher.append_async_queue(async_queue)
 
         logger.debug(f"Received request {request}")
-        matched = [[n for n in input.in_names if n in request] for input in self._inputs]
+        self._inject_tensors(request)
+
+        # Wait for all the results from one inference request
+        while not self._stop_event.is_set():
+            try:
+                logger.debug("Waiting for tensors from async queue")
+                result = await async_queue.get()
+                if isinstance(result, Stop):
+                    logger.info(f"Got Stop: {result.reason}")
+                    return
+                if isinstance(result, Error):
+                    logger.warning(f"Got Error: {result.message}")
+                    continue
+                logger.debug(f"Got result: {result}")
+                # post-process the data
+                result = self._post_process(result)
+                yield result
+            except Exception as e:
+                logger.exception(e)
+
+
+    def finalize(self):
+        self._stop_event.set()
+        super().finalize()
+
+    def _inject_tensors(self, request: Dict):
+        matched = [[n for n in i.in_names if n in request] for i in self._inputs]
         reshuffled = sorted(range(len(matched)), key=lambda x: len(matched[x]), reverse=True)
         for i in reshuffled:
-            input = self._inputs[i]
+            input_flow = self._inputs[i]
             # select the tensors for the input
-            tensors = { n: request[n] for n in input.in_names if n in request and request[n]}
+            tensors = { n: request[n] for n in input_flow.in_names if n in request and request[n]}
 
             # the tensors need to be transformed to generic type
             for name in tensors:
@@ -95,44 +114,8 @@ class GenericInference(InferenceBase):
                 tensors[name] = np.array(tensor)
             if tensors:
                 logger.debug(f"Injecting tensors {tensors}")
-                input.put(tensors)
-                input.put(Stop(reason="end"))
-
-        # start the async bridges to fetch the results and deposit them to the async queues
-        loop = asyncio.get_event_loop()
-        for a_output, output in zip(self._async_outputs, self._outputs):
-            self._async_executor.submit(thread_to_async_bridge, output, a_output, loop)
-
-        # Wait for all the results from one inference request
-        while not self._stop_event.is_set():
-            try:
-                logger.debug("Waiting for tensors from async queue")
-                response_data = dict()
-                results = await asyncio.gather(*(ao.get() for ao in self._async_outputs))
-                error = False
-                for data in results:
-                    logger.debug(f"Got output data: {data}")
-                    if isinstance(data, Error):
-                        logger.warning(f"Got Error: {data.message}")
-                        error = True
-                        break
-                    elif isinstance(data, Stop):
-                        logger.info(f"Got Stop: {data.reason}")
-                        return
-                    # collect the output
-                    for k, v in data.items():
-                        response_data[k] = v
-                if not error:
-                    # post-process the data from all the outputs
-                    response_data = self._post_process(response_data)
-                    yield response_data
-            except Exception as e:
-                logger.exception(e)
-
-
-    def finalize(self):
-        self._stop_event.set()
-        super().finalize()
+                input_flow.put(tensors)
+                input_flow.put(Stop(reason="end"))
 
     def _post_process(self, data: Dict):
         processed = {k: v for k, v in data.items()}
