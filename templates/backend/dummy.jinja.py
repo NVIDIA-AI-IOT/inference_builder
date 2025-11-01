@@ -44,7 +44,6 @@ class DummyBackend(ModelBackend):
         else:
             return generate_sync(in_data)
 
-
     def _generate_dummy_data(self):
         dummy_data = {}
         for config in self._output_config:

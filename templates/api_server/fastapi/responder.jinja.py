@@ -34,7 +34,6 @@ class Responder(ResponderBase):
         super().__init__()
         self._inference = GenericInference()
         self._inference.initialize()
-        self._lock = asyncio.Lock()
 
         # initialize the action map
         {% for responder in responders %}

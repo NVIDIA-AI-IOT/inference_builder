@@ -130,6 +130,8 @@ if __name__ == '__main__':
             print(f"Average inference time: {avg_time:.4f} seconds")
             print(f"Throughput: {args.parallel / overall_time:.2f} requests/second")
 
-            # Print first response as example
-            print(f"\nExample response (Request 0):")
-            print(results[0][2])
+            # Print all responses
+            print(f"\n--- Responses ---")
+            for req_id, _, assistant_message in results:
+                print(f"\nResponse (Request {req_id}):")
+                print(assistant_message)
