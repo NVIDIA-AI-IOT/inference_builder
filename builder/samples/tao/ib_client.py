@@ -438,7 +438,7 @@ def prompt_save_reference():
         bool: True if user wants to save, False otherwise
     """
     try:
-        user_input = input("Use this response to overwrite validation reference? (y/N): ")
+        user_input = input("Use this response to overwrite validation reference? (yes/N): ")
         if user_input is None:
             return False
 

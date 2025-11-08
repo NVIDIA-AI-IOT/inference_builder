@@ -19,7 +19,6 @@
 import argparse
 from config import global_config
 from typing import List, Optional
-import asyncio
 from lib.inference import py_datatype_mapping
 from .model import GenericInference
 import json
@@ -57,8 +56,8 @@ def create_parser(inputs: List) -> argparse.ArgumentParser:
     return parser
 
 
-async def run_inference(args) -> Optional[int]:
-    """Run the inference service asynchronously.
+def run_inference(args) -> Optional[int]:
+    """Run the inference service synchronously.
 
     Args:
         args: Parsed command line arguments
@@ -81,7 +80,7 @@ async def run_inference(args) -> Optional[int]:
 
     service = GenericInference()
     service.initialize()
-    async for result in service.execute(inputs):
+    for result in service.exec_sync(inputs):
         if save_to:
             with open(save_to, "a", encoding='utf-8') as f:
                 json_str = json.dumps(result, indent=4, cls=NumpyFlatEncoder)
@@ -106,7 +105,7 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        return asyncio.run(run_inference(args))
+        return run_inference(args)
     except KeyboardInterrupt:
         print("\nInterrupted by user")
         return 130
