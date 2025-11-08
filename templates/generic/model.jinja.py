@@ -1,9 +1,3 @@
-from logging import warn, warning
-from operator import is_
-
-from lib.utils import logger
-
-
 {#
  SPDX-FileCopyrightText: Copyright (c) <year> NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  SPDX-License-Identifier: Apache-2.0
@@ -91,6 +85,32 @@ class GenericInference(InferenceBase):
             except Exception as e:
                 logger.exception(e)
 
+    def exec_sync(self, request):
+        """ execute a list of requests synchronously"""
+        from queue import Empty
+
+        logger.debug(f"Received request {request}")
+        self._inject_tensors(request)
+
+        # Wait for all the results from one inference request
+        while not self._stop_event.is_set():
+            try:
+                logger.debug("Waiting for tensors from collector")
+                result = self._collector.collect()
+                if isinstance(result, Stop):
+                    logger.info(f"Got Stop: {result.reason}")
+                    return
+                if isinstance(result, Error):
+                    logger.warning(f"Got Error: {result.message}")
+                    continue
+                logger.debug(f"Got result: {result}")
+                # post-process the data
+                result = self._post_process(result)
+                yield result
+            except Empty:
+                continue
+            except Exception as e:
+                logger.exception(e)
 
     def finalize(self):
         self._stop_event.set()

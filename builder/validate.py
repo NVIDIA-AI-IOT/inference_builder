@@ -357,11 +357,15 @@ def get_request_template(client_dir: Path) -> Dict:
             sys.path.insert(0, str(client_dir))
 
         # Import the request model
-        from openapi_client.models.inference_request import InferenceRequest
-        from openapi_client.models.inference_request_input_inner import InferenceRequestInputInner
+        try:
+            from openapi_client.models.input_inner import InputInner
 
-        # Create request using the model class
-        input_data = [InferenceRequestInputInner("<image_placeholder>")]  # Create Input instance first
+            # Create request using the model class
+            input_data = [InputInner("<image_placeholder>")]  # Create Input instance first
+        except ImportError:
+            from openapi_client.models.inference_request_input_inner import InferenceRequestInputInner
+            input_data = [InferenceRequestInputInner("<image_placeholder>")]
+        from openapi_client.models.inference_request import InferenceRequest
         request = InferenceRequest(
             model='nvidia/nvdino-v2',  # First allowed value from model_validate_enum
             input=input_data
@@ -619,17 +623,41 @@ class CvValidator:
             # Sort the outer list only
             sorted1 = sorted(tuples1)
             sorted2 = sorted(tuples2)
-            return all(
-                all(cls.is_float_equal(a, b, tolerance) if isinstance(a, float) else a == b
-                    for a, b in zip(item1, item2))
-                for item1, item2 in zip(sorted1, sorted2)
-            )
+
+            # Use tolerance-aware matching instead of simple pairing
+            # This handles cases where sorting order might differ slightly
+            # due to float precision
+            used = [False] * len(sorted2)
+            for item1 in sorted1:
+                matched = False
+                for i, item2 in enumerate(sorted2):
+                    if used[i]:
+                        continue
+                    # Check if all elements match within tolerance
+                    if len(item1) == len(item2):
+                        all_match = all(
+                            cls.is_float_equal(a, b, tolerance)
+                            if isinstance(a, (float, int)) and
+                            isinstance(b, (float, int))
+                            else a == b
+                            for a, b in zip(item1, item2)
+                        )
+                        if all_match:
+                            used[i] = True
+                            matched = True
+                            break
+                if not matched:
+                    return False
+            return True
 
         # For lists of floats, compare with tolerance
-        if all(isinstance(x, float) for x in list1 + list2):
+        if all(isinstance(x, (float, int)) for x in list1 + list2):
             sorted1 = sorted(list1)
             sorted2 = sorted(list2)
-            return all(cls.is_float_equal(a, b, tolerance) for a, b in zip(sorted1, sorted2))
+            return all(
+                cls.is_float_equal(float(a), float(b), tolerance)
+                for a, b in zip(sorted1, sorted2)
+            )
 
         # For other types, use regular comparison
         return sorted(list1) == sorted(list2)

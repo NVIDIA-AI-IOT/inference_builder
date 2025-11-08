@@ -20,7 +20,7 @@ model_repo: "/workspace/models"
 models:
 - name: rtdetr
   backend: deepstream/nvinfer
-  max_batch_size: 4
+  max_batch_size: "$MAX_BATCH_SIZE|4"
   input:
   - name: media_url
     data_type: TYPE_CUSTOM_BINARY_URLS
@@ -55,7 +55,7 @@ models:
     #   msgbroker_topic: ds_app
     #   msgconv_config_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-test5/configs/dstest5_msgconv_sample_config.txt
     render_config:
-      enable_display: true
+      enable_display: "$ENABLE_DISPLAY|true"
       enable_osd: true
       # enable_stream: true
       # rtsp_mount_point: /ds_app
@@ -66,4 +66,4 @@ models:
     # kitti_output_path:
     #   infer: /workspace/models/resnet/infer-kitti-dump/
     #   tracker: /workspace/models/resnet/tracker-kitti-dump/
-    inference_timeout: 5
+    inference_timeout: "$INFERENCE_TIMEOUT|5"

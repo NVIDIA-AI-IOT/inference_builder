@@ -137,7 +137,7 @@ class TestInference(unittest.TestCase):
                             # validator.compare_responses(actual, expected, self.tolerance)
                             # or make abstract validator class and ask users to implement their own validator
                             validate.CvValidator.compare_responses(actual, expected, self.tolerance),
-                            f"Test {test['name']}: Response doesn't match expected output. "
+                            f"Test {test['name']}: Response doesn't match expected output under tolerance {self.tolerance}. "
                             f"Actual: {actual}, Expected: {expected}"
                         )
                     else:

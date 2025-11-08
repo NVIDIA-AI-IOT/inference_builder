@@ -18,38 +18,36 @@ The test suite allows you to:
 - `test_docker_builds.py` - Main test script
 - `test_configs.json` - Test configuration file
 - `run_tests.sh` - Shell script wrapper for easy usage
-- `setup_test_data.sh` - Script to create test data directories
+- `setup_rtsp_server.sh` - Script to setup RTSP server for stream testing
 - `Dockerfile` - Dockerfile to test
 - `README.md` - This documentation
 - `logs/` - Directory containing container logs (created automatically)
+- `frame_sampling/` - Frame sampling test application directory
+- `output_types/` - Output types compatibility test directory
+- `concurrency/` - Concurrency test application directory
 
 ## Quick Start
 
-### 1. Setup Test Data
-
-First, set up the test data directories:
-
-```bash
-chmod +x setup_test_data.sh
-./setup_test_data.sh
-```
-
-### 2. Run Tests
-
-#### Quick Test (Default Configuration)
-```bash
-chmod +x run_tests.sh
-./run_tests.sh quick-test
-```
+### Run Tests
 
 #### Standard Test Suite
 ```bash
+chmod +x run_tests.sh
 ./run_tests.sh standard
 ```
 
 #### Custom Configuration
 ```bash
 ./run_tests.sh custom --config my_config.json --log-dir custom_logs
+```
+
+#### Run Specific Test Cases
+```bash
+# Run only tests matching a specific name (partial match)
+./run_tests.sh standard --test-case "frame_sampling"
+
+# Run all tests including disabled ones
+./run_tests.sh standard --test-case "*"
 ```
 
 ## Test Configuration Structure
@@ -83,27 +81,40 @@ Each test configuration in `test_configs.json` has the following structure:
 
 ### Build Arguments
 
-- `TEST_APP_NAME`: Name of the test application
+#### Required/Common Arguments
+- `TEST_APP_NAME`: Name of the test application (e.g., frame_sampling, output_types, concurrency)
+- `CACHE_BUSTER`: Unique value to bypass Docker cache
+
+#### Optional Arguments
+- `SERVER_TYPE`: Server type for the application (e.g., fastapi, serverless). Default: serverless
+- `OPENAPI_SPEC`: Path to OpenAPI specification file (for API-based tests)
 - `TRT_VERSION_*`: TensorRT version components
 - `CUDA_VERSION_*`: CUDA version components
 - `CUDNN_VERSION`: cuDNN version
 - `DS_TAO_APPS_TAG`: DS TAO apps git tag
-- `CACHE_BUSTER`: Unique value to bypass Docker cache
+
+#### Advanced Path Configuration
+These arguments allow custom paths for code generation (useful for complex test setups):
+- `APP_YAML_PATH`: Custom path to app.yaml (default: `{TEST_APP_NAME}/app.yaml`)
+- `OUTPUT_DIR`: Custom output directory (default: `{TEST_APP_NAME}`)
+- `PROCESSORS_PATH`: Custom processors.py path (default: auto-detected in output directory)
 
 ### Test Configuration
 
+- `default_enable`: Whether the test is enabled by default (default: true). When false, only code generation runs unless `--test-case` is specified
 - `timeout`: Timeout in seconds for the container test (default: 10 seconds)
 - `env`: Environment variables to set in the container
 - `volumes`: Volume mounts (host_path: container_path)
 - `cmd`: Command line arguments to pass to the application
+- `error_detection`: Configuration for detecting errors in container logs
+  - `enabled`: Whether to check for error patterns (default: true)
+  - `patterns`: List of error patterns to detect (optional, uses defaults if not specified)
 - `prerequisite_script`: Script to run before launching the docker container (optional)
   - Can be any shell command or script path
   - Useful for setting up test environments (e.g., starting RTSP servers)
   - Script logs are saved to `logs/prerequisite_{test_id}.log`
   - If script fails, the test is marked as failed
   - Automatic cleanup is performed after the test completes
-
-### Token Substitution
 
 ## Example Test Configurations
 
@@ -122,22 +133,29 @@ Each test configuration in `test_configs.json` has the following structure:
 }
 ```
 
-### 2. Video Stream Test
+### 2. Video Files Test
 ```json
 {
-  "name": "Video Stream Test",
+  "name": "Video Files Test",
   "build_args": {
     "TEST_APP_NAME": "frame_sampling",
-    "CACHE_BUSTER": "stream_test"
+    "CACHE_BUSTER": "files_test"
   },
   "test_config": {
+    "default_enable": true,
     "timeout": 30,
     "env": {
       "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes"
     },
+    "volumes": {
+      "frame_sampling/models": "/workspace/models"
+    },
     "cmd": [
-      "--video-streams", "34888cef-8d7a-4de9-80f2-7a6a11974d6f?frames=10"
-    ]
+      "--video-files", "34888cef-8d7a-4de9-80f2-7a6a11974d6f?frames=10&chunks=10"
+    ],
+    "error_detection": {
+      "enabled": false
+    }
   }
 }
 ```
@@ -179,6 +197,7 @@ Each test configuration in `test_configs.json` has the following structure:
     "CACHE_BUSTER": "rtsp_test"
   },
   "test_config": {
+    "default_enable": false,
     "timeout": 30,
     "env": {
       "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes"
@@ -187,12 +206,65 @@ Each test configuration in `test_configs.json` has the following structure:
       "frame_sampling/models": "/workspace/models"
     },
     "cmd": [
-      "--video-streams", "rtsp://localhost:8554/file-stream?frames=10"
+      "--video-streams", "fcf490e3-a64b-4dc9-95db-dcdba90032b3?frames=10&duration=1000000000"
     ],
-    "prerequisite_script": "./setup_rtsp_server.sh sample_video.mp4 --daemon"
+    "error_detection": {
+      "enabled": false
+    },
+    "prerequisite_script": "./setup_rtsp_server.sh frame.jpg -m test -f 30 --daemon"
   }
 }
 ```
+
+### 5. FastAPI Server Test
+```json
+{
+  "name": "FastAPI Concurrency Test",
+  "description": "Build concurrency app and run threaded client",
+  "build_args": {
+    "TEST_APP_NAME": "concurrency",
+    "CACHE_BUSTER": "concurrency_fastapi",
+    "SERVER_TYPE": "fastapi",
+    "OPENAPI_SPEC": "builder/samples/dummy/openapi.yaml"
+  },
+  "test_config": {
+    "default_enable": true,
+    "timeout": 30,
+    "volumes": {
+      "concurrency/models": "/workspace/models"
+    },
+    "cmd": []
+  }
+}
+```
+
+## Selective Test Execution
+
+### Using default_enable
+
+Tests can be selectively enabled or disabled using the `default_enable` field in the test configuration:
+
+- **`default_enable: true`** (default): Test runs normally (code generation + Docker build + test)
+- **`default_enable: false`**: Only code generation runs, Docker build and test are skipped
+
+This is useful for:
+- Tests that require special setup or resources (e.g., RTSP servers)
+- Long-running tests that should only run when explicitly requested
+- Tests under development that aren't ready for regular CI runs
+
+### Running Disabled Tests
+
+You can run disabled tests using the `--test-case` argument:
+
+```bash
+# Run a specific disabled test
+./run_tests.sh standard --test-case "RTSP Stream Test"
+
+# Run all tests including disabled ones
+./run_tests.sh standard --test-case "*"
+```
+
+When `--test-case` is specified, it forces the full flow (code generation + Docker build + test) even for tests with `default_enable: false`.
 
 ## Command Line Arguments
 
@@ -209,6 +281,8 @@ Options:
   --output PATH         Output file for test report
   --log-dir DIR         Directory to save container logs (default: logs)
   --no-cleanup          Don't cleanup images after testing
+  --gitlab-token TOKEN  GitLab token for authentication (can also use GITLAB_TOKEN env var)
+  --test-case NAME      Run only test cases matching this name (partial match). Use '*' for all.
 ```
 
 ### Shell Script (`run_tests.sh`)
@@ -216,37 +290,30 @@ Options:
 ./run_tests.sh [COMMAND] [OPTIONS]
 
 Commands:
-  standard      Run standard test suite with all configurations from test_configs.json
-  custom    Run test with custom configuration file
-  help           Show help message
+  standard           Run standard test suite with all configurations from test_configs.json
+  custom             Run test with custom configuration file
+  help               Show help message
 
 Options:
   --no-cleanup           Don't cleanup Docker images after testing
   --output FILE          Save test report to specified file
   --config FILE          Use custom configuration file (required for custom)
   --log-dir DIR          Directory to save container logs (default: logs)
+  -c, --test-case NAME   Run only test cases matching this name (partial match). Use '*' for all.
 ```
 
-## Test Data Setup
+## Test Applications
 
-The `setup_test_data.sh` script creates the following directory structure:
+The test suite includes several test applications:
 
-```
-/tmp/
-├── test_data/
-│   ├── sample_video.mp4
-│   ├── test_video.mp4
-│   ├── multi_camera_feed.mp4
-│   ├── custom_dataset.mp4
-│   ├── rtsp_camera.txt
-│   └── rtsp_output.txt
-├── test_models/
-│   └── ensemble_model.trt
-├── custom_models/
-│   ├── custom_model.trt
-│   └── config.yaml
-└── debug_output/
-```
+### frame_sampling
+Tests frame sampling functionality with video files and streams. Supports both file-based and RTSP stream inputs.
+
+### output_types
+Tests compatibility of different output types with FastAPI backend using a simplified dummy backend.
+
+### concurrency
+Tests concurrent request handling with FastAPI server using a threaded client.
 
 ## Test Reports
 
@@ -298,6 +365,7 @@ Create your own test configuration file:
       "CACHE_BUSTER": "my_test"
     },
     "test_config": {
+      "default_enable": true,
       "timeout": 45,
       "env": {
         "CUSTOM_VAR": "custom_value"
@@ -316,18 +384,24 @@ Create your own test configuration file:
 
 ### Running Specific Tests
 
-To run only specific tests, modify the configuration file or create a subset:
+Use the `--test-case` argument to run specific tests by name (partial matching supported):
 
 ```bash
-# Create a subset configuration
-cat > my_tests.json << EOF
-[
-  $(head -n 20 test_configs.json | tail -n 15)
-]
-EOF
+# Run tests matching "frame_sampling" (partial match)
+./run_tests.sh standard --test-case "frame_sampling"
 
+# Run tests matching "FastAPI"
+./run_tests.sh standard --test-case "FastAPI"
+
+# Run all tests including disabled ones
+./run_tests.sh standard --test-case "*"
+```
+
+Alternatively, create a custom configuration file with a subset of tests:
+
+```bash
 # Run with custom configuration
-./run_tests.sh custom --config my_tests.json
+./run_tests.sh custom --config my_custom_tests.json
 ```
 
 ### Continuous Integration
@@ -411,9 +485,9 @@ Each test run creates a log file with the following structure:
 ```
 === Test Configuration ===
 Image: test-inference_builder-1-1234567890
-Command: docker run --rm -e NVSTREAMMUX_ADAPTIVE_BATCHING=yes test-inference_builder-1-1234567890 --video-streams 34888cef-8d7a-4de9-80f2-7a6a11974d6f?frames=10
+Command: docker run --rm -e NVSTREAMMUX_ADAPTIVE_BATCHING=yes test-inference_builder-1-1234567890 --video-files 34888cef-8d7a-4de9-80f2-7a6a11974d6f?frames=10&chunks=10
 Return Code: 0
-Timestamp: 2024-01-15 10:30:45
+Timestamp: 2025-01-15 10:30:45
 
 === STDOUT ===
 [Application output here]
@@ -469,25 +543,27 @@ The test report includes the path to each log file:
 
 The test script includes built-in error detection that can be configured per test:
 
+### Default Error Patterns
+
+When `error_detection.enabled` is set to `true` (the default), the following patterns are detected:
+
+- `[ERROR]`, `[CRITICAL]`, `[FATAL]`
+- Various error/exception keywords (case-insensitive)
+- Stack traces and tracebacks
+
+You can customize these patterns in your test configuration:
+
 ```json
 {
-  "error_detection": {
-    "enabled": true,
-    "patterns": [
-      "ERROR",
-      "Error",
-      "error",
-      "CRITICAL",
-      "Critical",
-      "critical",
-      "FATAL",
-      "Fatal",
-      "fatal",
-      "Exception:",
-      "exception:",
-      "Traceback",
-      "traceback"
-    ]
+  "test_config": {
+    "error_detection": {
+      "enabled": true,
+      "patterns": [
+        "[ERROR]",
+        "[CRITICAL]",
+        "CustomErrorPattern"
+      ]
+    }
   }
 }
 ```
@@ -510,6 +586,8 @@ Example configuration for real-time output:
     "CACHE_BUSTER": "realtime_test"
   },
   "test_config": {
+    "default_enable": true,
+    "timeout": 30,
     "env": {
       "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes"
     },
@@ -517,7 +595,7 @@ Example configuration for real-time output:
       "frame_sampling/models": "/workspace/models"
     },
     "cmd": [
-      "--video-streams", "b69d7248-b351-4239-9819-4005e5375850?frames=10"
+      "--video-files", "34888cef-8d7a-4de9-80f2-7a6a11974d6f?frames=10&chunks=10"
     ],
     "error_detection": {
       "enabled": false
@@ -557,12 +635,15 @@ This pre-build step is useful for:
 
 **Pre-build Command Behavior:**
 - **Automatic execution**: Runs before every Docker build in the test suite
-- **Dynamic folder**: Uses `TEST_APP_NAME` from build arguments to determine the sample folder
+- **Dynamic folder**: Uses `TEST_APP_NAME` from build arguments to determine the test application folder
+- **OPENAPI_SPEC support**: If `OPENAPI_SPEC` is specified in build args, it is copied to the test app folder
+- **Custom paths**: Supports `APP_YAML_PATH`, `OUTPUT_DIR`, and `PROCESSORS_PATH` for flexible configurations
+- **Auto-detection**: Automatically detects processors.py in the test app folder if not explicitly specified
 - **Execution**: Runs in the current working directory before Docker build
-- **Timeout**: 10-minute timeout (configurable in the script)
+- **Timeout**: 10-minute timeout (600 seconds)
 - **Failure handling**: If pre-build command fails, the test is marked as failed
 - **Output**: Pre-build command output is logged and included in test results
-- **Shell execution**: Commands are executed in a shell environment
+- **Code generation only**: When `default_enable` is false, only code generation runs (skips Docker build/test)
 
 ### Timeout Configuration
 
