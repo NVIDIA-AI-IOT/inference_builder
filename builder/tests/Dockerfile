@@ -28,7 +28,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     numpy==1.26.4 \
     omegaconf==2.3.0 \
     fastapi==0.115.12 \
-    uvicorn==0.29.0
+    uvicorn==0.29.0 \
+    requests==2.32.5
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
@@ -37,7 +38,6 @@ ARG TEST_APP_NAME
 
 WORKDIR /workspace
 ADD ${TEST_APP_NAME}/test-app.tgz /workspace
-COPY ${TEST_APP_NAME}/assets /tmp/assets
 
 ## Set Environment variables
 ENV GST_PLUGIN_PATH=/opt/nvidia/deepstream/deepstream/lib/gst-plugins

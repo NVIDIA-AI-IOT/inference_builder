@@ -500,6 +500,13 @@ def validate_test_config(test_config: dict) -> Tuple[bool, str]:
             return False, "auto_validation must be a string path"
         if not validate_safe_path(test_config["auto_validation"]):
             return False, f"Invalid auto_validation path: {test_config['auto_validation']}"
+    # Validate payloads_path
+    if "payloads_path" in test_config:
+        payloads_path = test_config["payloads_path"]
+        if not isinstance(payloads_path, str):
+            return False, "payloads_path must be a string"
+        if not validate_safe_path(payloads_path):
+            return False, f"Invalid payloads_path: {payloads_path}"
 
     return True, ""
 
@@ -1468,7 +1475,12 @@ class DockerBuildTester:
                     else:
                         logger.info("✅ Server is ready. Launching concurrent curl requests...")
                         # Read a single NDJSON file and launch curl for each line
-                        payloads_path = Path("concurrency/assets/payloads.jsonl")
+                        # Get payloads_path from test_config, with a default fallback based on app name
+                        test_app_name = test_config.get("TEST_APP_NAME") or None
+                        default_payloads_path = f"{test_app_name}/payloads/payloads.jsonl"
+                        payloads_path_str = test_config.get("payloads_path", default_payloads_path)
+                        payloads_path = Path(payloads_path_str)
+
                         if not payloads_path.exists():
                             logger.error(f"❌ Payloads file not found: {payloads_path}")
                         else:
@@ -1881,6 +1893,8 @@ class DockerBuildTester:
                 # Pass config directory for relative path resolution
                 if "_config_dir" in config:
                     test_config["_config_dir"] = config["_config_dir"]
+                if "TEST_APP_NAME" in build_args:
+                    test_config["TEST_APP_NAME"] = build_args["TEST_APP_NAME"]
                 test_success, test_output, log_file = self.test_image(
                     image_name,
                     test_config,
