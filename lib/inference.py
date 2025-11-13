@@ -336,11 +336,14 @@ class VideoInputDataFlow(DataFlow):
         logger.debug(f"LiveStreamDataFlow._process_live_stream: {assets}")
         media_chunks = []
         results = []
-        for asset in assets:
+        asset_list = []
+        for a in assets:
             asset_manager = AssetManager()
-            asset_id, params = self.parse_asset_string(asset)
+            asset_id, params = self.parse_asset_string(a)
             asset = asset_manager.get_asset(asset_id)
             if asset:
+                asset.lock()
+                asset_list.append(asset)
                 n_frames = int(params.get("frames", None))
                 start = int(params.get("start", 0))
                 duration = int(params.get("duration", asset.duration))
@@ -371,6 +374,8 @@ class VideoInputDataFlow(DataFlow):
                 results.append(frames)
                 # TODO WAR on pyservicemaker error
                 time.sleep(0)
+        for asset in asset_list:
+            asset.unlock()
         return results
 
     def _is_collected_valid(self, collected: Dict):
@@ -403,7 +408,7 @@ class VideoFrameSamplingDataFlow(DataFlow):
         else:
             return super()._process_custom_data(tensor, data_type)
 
-    def _collect_frames_from_queue(self, qs, n_frames, n_chunks, results_queue):
+    def _collect_frames_from_queue(self, assets, qs, n_frames, n_chunks, results_queue):
         """Collect frames from a queue in a separate thread"""
         for _ in range(n_chunks):
             total_frames = [[] for _ in qs]
@@ -424,6 +429,8 @@ class VideoFrameSamplingDataFlow(DataFlow):
                 logger.warning(f"Results queue is full, dropping the frames")
                 break
         results_queue.put(Stop("end"))
+        for asset in assets:
+            asset.unlock()
         return
 
 
@@ -431,11 +438,14 @@ class VideoFrameSamplingDataFlow(DataFlow):
         qs = []
         n_frames = None
         n_chunks = None
+        asset_list = []
         for asset in assets:
             asset_manager = AssetManager()
             asset_id, params = self.parse_asset_string(asset)
             asset = asset_manager.get_asset(asset_id)
             if asset:
+                asset.lock()
+                asset_list.append(asset)
                 n = int(params.get("frames", -1))
                 if n_frames is None:
                     n_frames = n
@@ -462,7 +472,9 @@ class VideoFrameSamplingDataFlow(DataFlow):
                 return []
 
         results_queue = Queue()
-        self._frame_collector.submit(self._collect_frames_from_queue, qs, n_frames, n_chunks, results_queue)
+        self._frame_collector.submit(
+            self._collect_frames_from_queue, asset_list, qs, n_frames, n_chunks, results_queue
+        )
         return results_queue
 
     def _is_collected_valid(self, collected: Dict):
@@ -540,6 +552,7 @@ class ImageInputDataFlow(DataFlow):
             if not asset:
                 logger.error(f"Asset not found: {asset}")
                 continue
+            asset.lock()
             format = None
             if asset.mime_type == "image/jpeg" or asset.mime_type == "image/jpg":
                 format = "JPEG"
@@ -552,6 +565,7 @@ class ImageInputDataFlow(DataFlow):
                 data = f.read()
                 tensor = as_tensor(np.frombuffer(data, dtype=np.uint8).copy(), format)
                 result.append(self._image_decoder.decode(tensor, format))
+            asset.unlock()
         return result
 
 inbound_dataflow_mapping = {
