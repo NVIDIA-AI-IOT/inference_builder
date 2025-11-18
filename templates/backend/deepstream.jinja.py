@@ -42,6 +42,7 @@ class RenderConfig:
     enable_stream: bool = False
     rtsp_mount_point: str | None = "/ds-test"
     rtsp_port: int | None = 8554
+    seg_mask_config: dict | None = None
 
     def __bool__(self) -> bool:
         """Check if render configuration is valid."""
@@ -390,7 +391,7 @@ class BulkVideoInputPool(TensorInputPool):
                        sync=False)
 
         flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
-                    enable_osd=self._render_config.enable_osd, sync=False)
+                    enable_osd=self._render_config.enable_osd, seg_mask_config=self._render_config.seg_mask_config, sync=False)
 
         if self._pipeline is not None:
             self._pipeline.wait()
@@ -408,32 +409,36 @@ class BulkVideoInputPool(TensorInputPool):
 class BaseTensorOutput(BatchMetadataOperator):
     def __init__(self, n_outputs, name: str = None):
         super().__init__()
-        self._queue = Queue(maxsize=n_outputs)
-        self._stashed = None
+        self._n_outputs = n_outputs
+        self._queue = Queue()
+        self._stashed = []
         self._name = name
 
     def handle_metadata(self, batch_meta):
         pass
 
     def collect(self, indices: List, timeout=None) -> List | None:
+        def move_data(data: list, collected: list):
+            for i, d in enumerate(data):
+                if d is not None:
+                    if collected[i] is None:
+                        collected[i] = d
+                        data[i] = None
+
         # expected results for a batch
         collected = [None] * (max(indices) + 1)
 
         # first check the for stashed results for the batch
-        if self._stashed is not None:
-            collected[self._stashed[0]] = self._stashed[1]
-            self._stashed = None
-
-        # read from the thread queue
+        while self._stashed:
+            data = self._stashed.pop(0)
+            move_data(data, collected)
+        # read from the thread queue for the remaining results
         while not all(collected[i] is not None for i in indices):
             try:
-                i, data = self._queue.get(timeout=timeout)
-                if collected[i] is None:
-                    collected[i] = data
-                else:
-                    # this is a new batch, stash the results and break
-                    self._stashed = (i, data)
-                    break
+                data = self._queue.get(timeout=timeout)
+                move_data(data, collected)
+                if any(d is not None for d in data):
+                    self._stashed.append(data)
             except Empty:
                 break
         if all(i is None for i in collected):
@@ -447,19 +452,14 @@ class BaseTensorOutput(BatchMetadataOperator):
 
     def reset(self):
         self._queue = Queue(maxsize=self._queue.maxsize)
-        self._stashed = None
+        self._stashed = []
 
-    def _deposit(self, index: int, data: dict):
-        logger.debug(
-            f"DeepstreamBackend: Depositing data to index {index}: {data}"
-        )
+    def _deposit(self, received: list):
+        logger.debug("DeepstreamBackend: Depositing data: %s", received)
         try:
-            self._queue.put((index, data))
+            self._queue.put(received)
         except Full:
-            logger.warning(
-                f"DeepstreamBackend: Queue is full, dropping data from "
-                f"index {index}"
-            )
+            logger.warning(f"DeepstreamBackend: Queue is full, dropping data: {received}")
 
 
 class TensorOutput(BaseTensorOutput):
@@ -468,6 +468,7 @@ class TensorOutput(BaseTensorOutput):
         self._preprocess_config_path = preprocess_config_path
 
     def handle_metadata(self, batch_meta):
+        received = [None] * self._n_outputs
         if self._preprocess_config_path:
             for meta in batch_meta.preprocess_batch_items:
                 preprocess_batch = meta.as_preprocess_batch()
@@ -481,7 +482,8 @@ class TensorOutput(BaseTensorOutput):
                             for n, tensor in tensor_output.get_layers().items():
                                 torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
                                 result[n] = torch_tensor
-                    self._deposit(roi.frame_meta.pad_index, result)
+                    received[roi.frame_meta.pad_index] = result
+            self._deposit(received)
         else:
             for frame_meta in batch_meta.frame_items:
                 result = dict()
@@ -491,7 +493,8 @@ class TensorOutput(BaseTensorOutput):
                         for n, tensor in tensor_output.get_layers().items():
                             torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
                             result[n] = torch_tensor
-                self._deposit(frame_meta.pad_index, result)
+                received[frame_meta.pad_index] = result
+            self._deposit(received)
 
 @dataclass
 class DeepstreamMetadata:
@@ -509,6 +512,7 @@ class PreprocessMetadataOutput(BaseTensorOutput):
         self._shape = dims
 
     def handle_metadata(self, batch_meta):
+        received = [None] * self._n_outputs
         for meta in batch_meta.preprocess_batch_items:
             preprocess_batch = meta.as_preprocess_batch()
             if not preprocess_batch:
@@ -542,7 +546,8 @@ class PreprocessMetadataOutput(BaseTensorOutput):
                         labels.append(classifier.get_n_label(i))
                     metadata.labels.append(labels)
                 metadata.timestamp = roi.frame_meta.buffer_pts
-                self._deposit(roi.frame_meta.pad_index, metadata)
+                received[roi.frame_meta.pad_index] = metadata
+            self._deposit(received)
 
 class MetadataOutput(BaseTensorOutput):
     def __init__(self, n_outputs, output_name, dims):
@@ -550,6 +555,7 @@ class MetadataOutput(BaseTensorOutput):
         self._shape = dims
 
     def handle_metadata(self, batch_meta):
+        received = [None] * self._n_outputs
         for frame_meta in batch_meta.frame_items:
             metadata = DeepstreamMetadata()
             for object_meta in frame_meta.object_items:
@@ -575,7 +581,8 @@ class MetadataOutput(BaseTensorOutput):
                     metadata.shape = [seg_meta.height, seg_meta.width]
                     metadata.seg_maps.append(seg_meta.class_map.copy())
             metadata.timestamp = frame_meta.buffer_pts
-            self._deposit(frame_meta.pad_index, metadata)
+            received[frame_meta.pad_index] = metadata
+        self._deposit(received)
 
 class DeepstreamBackend(ModelBackend):
     """Deepstream backend using pyservicemaker"""
@@ -657,7 +664,8 @@ class DeepstreamBackend(ModelBackend):
                 enable_osd=model_config["parameters"]["render_config"].get("enable_osd", False),
                 enable_stream=model_config["parameters"]["render_config"].get("enable_stream", False),
                 rtsp_mount_point=model_config["parameters"]["render_config"].get("rtsp_mount_point", "/ds-test"),
-                rtsp_port=model_config["parameters"]["render_config"].get("rtsp_port", 8554)
+                rtsp_port=model_config["parameters"]["render_config"].get("rtsp_port", 8554),
+                seg_mask_config=model_config["parameters"]["render_config"].get("seg_mask_visualization", None)
             )
         else:
             render_config = RenderConfig()
@@ -757,7 +765,7 @@ class DeepstreamBackend(ModelBackend):
         self._in_pools = {}
         self._outputs = {}
         self._pipelines = {}
-        if self._image_tensor_name is not None or self._media_url_tensor_name is not None:
+        if self._image_tensor_name is not None:
             # image input support
             media = "image"
             formats = ["JPEG", "PNG"]

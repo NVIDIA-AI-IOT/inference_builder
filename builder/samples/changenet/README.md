@@ -53,7 +53,7 @@ The following command activates the virtual environment and generates the infere
 ```bash
 source .venv/bin/activate
 python builder/main.py \
-  --server-type triton \
+  --server-type fastapi \
   -a builder/samples/changenet/openapi.yaml \
   -c builder/samples/changenet/processors.py \
   -o builder/samples/changenet -t \

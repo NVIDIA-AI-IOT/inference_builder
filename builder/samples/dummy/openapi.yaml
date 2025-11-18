@@ -411,9 +411,6 @@ components:
           description: ID of the CV model.
           example: nvidia/nvdino-v2
       type: object
-      required:
-        - input
-        - model
       title: InferenceRequest
       description: List of input images for the inference request.
     InferenceResponse:
@@ -437,10 +434,6 @@ components:
           examples:
           - num_images: 1
       additionalProperties: false
-      required:
-        - data
-        - usage
-        - model
       title: InferenceResponse
       description: Response schema for the inference request.
     InferenceResult:

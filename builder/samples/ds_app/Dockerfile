@@ -87,6 +87,9 @@ RUN mkdir ds_tao_apps_src && \
 WORKDIR /workspace
 ADD deepstream-app.tgz /workspace
 
+# Copy test data for CI testing
+COPY test_data/* /workspace/test_data/
+
 ## Set Environment variables
 ENV GST_PLUGIN_PATH=/opt/nvidia/deepstream/deepstream/lib/gst-plugins
 ENV LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream/lib:$LD_LIBRARY_PATH

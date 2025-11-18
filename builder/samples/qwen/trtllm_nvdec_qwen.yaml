@@ -142,7 +142,7 @@ models:
     backend: "tensorrtllm/pytorch"
     input:
       - name: "inputs"
-        data_type: TYPE_CUSTOM_TRTLLM_INPUT
+        data_type: TYPE_CUSTOM_VLM_INPUT
         dims: [ -1 ]
       - name: "max_tokens"
         data_type: TYPE_INT32

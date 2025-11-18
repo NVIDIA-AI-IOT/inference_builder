@@ -117,6 +117,8 @@ server:
               } {% if not loop.last %}, {% endif %} {% endfor %}
             ]
           }
+    healthy_ready:
+      operation: health_ready_v1_health_ready_get
 
 models:
 - name: tao

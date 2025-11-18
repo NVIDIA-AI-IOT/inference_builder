@@ -79,6 +79,19 @@ python builder/main.py builder/samples/ds_app/classification/ds_pcb.yaml \
     builder/samples/ds_app
 ```
 
+#### For Dgx Spark
+
+```bash
+python builder/main.py builder/samples/ds_app/classification/ds_pcb.yaml \
+    -o builder/samples/ds_app \
+    --server-type serverless \
+    -t \
+&& docker build \
+    -t deepstream-app \
+    -f builder/samples/ds_app/Dockerfile.dgxspark \
+    builder/samples/ds_app
+```
+
 ### For changenet-classify sample
 
 Please use ds_changenet.yaml as the configuration:
@@ -106,6 +119,18 @@ python builder/main.py builder/samples/ds_app/classification/ds_changenet.yaml \
     builder/samples/ds_app
 ```
 
+#### For Dgx Spark
+
+```bash
+python builder/main.py builder/samples/ds_app/classification/ds_changenet.yaml \
+    -o builder/samples/ds_app \
+    --server-type serverless \
+    -t \
+&& docker build \
+    -t deepstream-app \
+    -f builder/samples/ds_app/Dockerfile.dgxspark \
+    builder/samples/ds_app
+```
 
 ## Run the deepstream app with image inputs:
 
@@ -126,11 +151,12 @@ export SAMPLE_INPUT=/path/to/your/samples/directory
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
 export SAMPLE_INPUT=$(realpath builder/samples/ds_app/classification/sample-inputs/)
-docker run --rm --network=host --gpus all --runtime=nvidia \
+docker run --rm --network=host --gpus all --privileged --runtime=nvidia \
     -v $SAMPLE_INPUT:/sample_input \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
+    -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,graphics \
     deepstream-app \
     --media-url /sample_input/IMG_0002_C71.png \
     --mime image/png
@@ -138,19 +164,35 @@ docker run --rm --network=host --gpus all --runtime=nvidia \
 
 ### For changenet-classify sample
 
-**Note:** For changenet classification model, it requires two images as input. Here we are using the sample images provided in the sample_input directory as a reference.
+**Note:** For changenet classification model, it requires two images as input. Sample test images (`pass_0.png` and `pass_1.png`) are embedded in the Docker image at `/workspace/test_data/` for testing purposes.
+
+**Using embedded test images (recommended for testing):**
+
+```bash
+docker run --rm --network=host --gpus all --privileged --runtime=nvidia \
+    -v $MODEL_REPO:/workspace/models \
+    -v /tmp/.X11-unix/:/tmp/.X11-unix \
+    -e DISPLAY=$DISPLAY \
+    -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,graphics \
+    deepstream-app \
+    --media-url /workspace/test_data/pass_0.png /workspace/test_data/pass_1.png \
+    --mime image/png image/png
+```
+
+**Using your own images from host:**
 
 ```bash
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
-export SAMPLE_INPUT=$(realpath builder/samples/tao/)
-docker run --rm --network=host --gpus all --runtime=nvidia \
+export SAMPLE_INPUT=/path/to/your/images
+docker run --rm --network=host --gpus all --privileged --runtime=nvidia \
     -v $SAMPLE_INPUT:/sample_input \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
+    -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,graphics \
     deepstream-app \
-    --media-url /sample_input/pass_0.png /sample_input/pass_1.png \
+    --media-url /sample_input/<your_image1.png> /sample_input/<your_image2.png> \
     --mime image/png image/png
 ```
 

@@ -79,6 +79,7 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
+      HTTP_PORT: 8003
       DEBUG: 0
   tao-cv:
     user: nvs:1000
@@ -152,3 +153,27 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 0
+  ms-vllm:
+    build:
+      context: vllm
+      target: inference_base
+      dockerfile: Dockerfile
+    image: ms-vllm
+    volumes:
+      - '~/.cache/model-repo:/workspace/model-repo'
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              #count: 1
+              capabilities: [gpu]
+    environment:
+      DEBUG: 0
+      # number of codec instances based on the hardware specification
+      N_CODEC_INSTANCES: 7

@@ -19,7 +19,7 @@ model_repo: "/workspace/models"
 models:
 - name: citysemsegformer
   backend: deepstream/nvinfer
-  max_batch_size: 2
+  max_batch_size: "$MAX_BATCH_SIZE|2"
   input:
   - name: media_url
     data_type: TYPE_CUSTOM_BINARY_URLS
@@ -37,9 +37,13 @@ models:
     infer_config_path:
       - nvdsinfer_config.yaml
     render_config:
-      enable_display: true
-      enable_osd: true
+      enable_display: "$ENABLE_DISPLAY|true"
+      # enable segmentation mask visualization
+      seg_mask_visualization:
+        width: 1820
+        height: 1024
+      # enable_osd: true
       # enable_stream: true
       # rtsp_mount_point: /ds_app
       # rtsp_port: 8554
-    inference_timeout: 5
+    inference_timeout: "$INFERENCE_TIMEOUT|5"

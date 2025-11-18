@@ -24,7 +24,6 @@ import json
 import os
 from typing import List, Dict
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import torch
 from pathlib import Path
@@ -39,73 +38,91 @@ logger = get_logger(__name__)
 class GenericInference(InferenceBase):
     """The class that drives a generic inference flow"""
 
-
-    def initialize(self, *args):
-        model_repo = global_config.model_repo
-        logger.info(f"Model Repository: {model_repo}")
-        super().initialize(model_repo)
-        for operator in self._operators:
-            model_config = next((m for m in global_config.models if m.name == operator.model_name), None)
-            backend_spec = model_config.backend.split('/')
-            backend_instance = None
-            backend_class = None
-            if backend_spec[0] == 'triton':
-                backend_class = TritonBackend
-            elif backend_spec[0] == 'deepstream':
-                backend_class = DeepstreamBackend
-            elif backend_spec[0] == 'polygraphy':
-                backend_class = PolygraphBackend
-            elif backend_spec[0] == 'tensorrtllm':
-                backend_class = TensorRTLLMBackend
-            elif backend_spec[0] == 'dummy':
-                backend_class = DummyBackend
-            elif backend_spec[0] == 'pytorch':
-                backend_class = PytorchBackend
-            else:
-                raise Exception(f"Backend {model_config.backend} not supported")
-            backend_instance = backend_class(
-                model_config=OmegaConf.to_container(model_config),
-                model_home=os.path.join(model_repo, operator.model_name)
-            )
-            self._submit(operator, backend_instance)
-        # post processing:
-        self._processors = []
-        if hasattr(global_config, "postprocessors"):
-            configs = OmegaConf.to_container(global_config.postprocessors)
-            for config in configs:
-                if config["kind"] == "custom":
-                    self._processors.append(
-                        CustomProcessor(config, model_repo)
-                    )
-
-        # thread executor for async bridge
-        self._async_executor = ThreadPoolExecutor(max_workers=len(self._outputs))
-        # async queues
-        self._async_outputs = [asyncio.Queue() for o in self._outputs]
-        self._stop_event = threading.Event()
-        logger.info(f"GenericInference {global_config.name} initialized:")
-        logger.info(f"Inputs: {[f.o_names for f in self._inputs]}, Outputs:  {[f.o_names for f in self._outputs]}")
+    def _create_backend(self, backend_spec: List[str], model_config: Dict, model_home: str):
+        if backend_spec[0] == 'triton':
+            backend_class = TritonBackend
+        elif backend_spec[0] == 'deepstream':
+            backend_class = DeepstreamBackend
+        elif backend_spec[0] == 'polygraphy':
+            backend_class = PolygraphBackend
+        elif backend_spec[0] == 'tensorrtllm':
+            backend_class = TensorRTLLMBackend
+        elif backend_spec[0] == 'dummy':
+            backend_class = DummyBackend
+        elif backend_spec[0] == 'pytorch':
+            backend_class = PytorchBackend
+        elif backend_spec[0] == 'vllm':
+            backend_class = VLLMBackend
+        else:
+            return None
+        return backend_class(model_config, model_home)
 
     async def execute(self, request):
         """ execute a list of requests"""
-        async def async_put(queue, item):
-            await queue.put(item)
-        def thread_to_async_bridge(thread_queue, async_queue, loop):
-            while not self._stop_event.is_set():
-                try:
-                    item = thread_queue.get()
-                    asyncio.run_coroutine_threadsafe(async_put(async_queue, item), loop)
-                except Empty:
-                    continue
-            logger.info(f"thread_to_async_bridge {thread_queue} stopped")
+        if self._async_dispatcher is None:
+            self._async_dispatcher = AsyncDispatcher(self._collector, loop=asyncio.get_running_loop())
+        async_queue = asyncio.Queue()
+        self._async_dispatcher.append_async_queue(async_queue)
 
         logger.debug(f"Received request {request}")
-        matched = [[n for n in input.in_names if n in request] for input in self._inputs]
+        self._inject_tensors(request)
+
+        # Wait for all the results from one inference request
+        while not self._stop_event.is_set():
+            try:
+                logger.debug("Waiting for tensors from async queue")
+                result = await async_queue.get()
+                if isinstance(result, Stop):
+                    logger.info(f"Got Stop: {result.reason}")
+                    return
+                if isinstance(result, Error):
+                    logger.warning(f"Got Error: {result.message}")
+                    continue
+                logger.debug(f"Got result: {result}")
+                # post-process the data
+                result = self._post_process(result)
+                yield result
+            except Exception as e:
+                logger.exception(e)
+
+    def exec_sync(self, request):
+        """ execute a list of requests synchronously"""
+        from queue import Empty
+
+        logger.debug(f"Received request {request}")
+        self._inject_tensors(request)
+
+        # Wait for all the results from one inference request
+        while not self._stop_event.is_set():
+            try:
+                logger.debug("Waiting for tensors from collector")
+                result = self._collector.collect()
+                if isinstance(result, Stop):
+                    logger.info(f"Got Stop: {result.reason}")
+                    return
+                if isinstance(result, Error):
+                    logger.warning(f"Got Error: {result.message}")
+                    continue
+                logger.debug(f"Got result: {result}")
+                # post-process the data
+                result = self._post_process(result)
+                yield result
+            except Empty:
+                continue
+            except Exception as e:
+                logger.exception(e)
+
+    def finalize(self):
+        self._stop_event.set()
+        super().finalize()
+
+    def _inject_tensors(self, request: Dict):
+        matched = [[n for n in i.in_names if n in request] for i in self._inputs]
         reshuffled = sorted(range(len(matched)), key=lambda x: len(matched[x]), reverse=True)
         for i in reshuffled:
-            input = self._inputs[i]
+            input_flow = self._inputs[i]
             # select the tensors for the input
-            tensors = { n: request[n] for n in input.in_names if n in request and request[n]}
+            tensors = { n: request[n] for n in input_flow.in_names if n in request and request[n]}
 
             # the tensors need to be transformed to generic type
             for name in tensors:
@@ -117,50 +134,15 @@ class GenericInference(InferenceBase):
                 tensors[name] = np.array(tensor)
             if tensors:
                 logger.debug(f"Injecting tensors {tensors}")
-                input.put(tensors)
-                input.put(Stop(reason="end"))
-
-        # start the async bridges to fetch the results and deposit them to the async queues
-        loop = asyncio.get_event_loop()
-        for a_output, output in zip(self._async_outputs, self._outputs):
-            self._async_executor.submit(thread_to_async_bridge, output, a_output, loop)
-
-        # Wait for all the results from one inference request
-        while not self._stop_event.is_set():
-            try:
-                logger.debug("Waiting for tensors from async queue")
-                response_data = dict()
-                results = await asyncio.gather(*(ao.get() for ao in self._async_outputs))
-                error = False
-                for data in results:
-                    logger.debug(f"Got output data: {data}")
-                    if isinstance(data, Error):
-                        logger.warning(f"Got Error: {data.message}")
-                        error = True
-                        break
-                    elif isinstance(data, Stop):
-                        logger.info(f"Got Stop: {data.reason}")
-                        return
-                    # collect the output
-                    for k, v in data.items():
-                        response_data[k] = v
-                if not error:
-                    # post-process the data from all the outputs
-                    response_data = self._post_process(response_data)
-                    yield response_data
-            except Exception as e:
-                logger.exception(e)
-
-
-    def finalize(self):
-        self._stop_event.set()
-        super().finalize()
+                input_flow.put(tensors)
+                input_flow.put(Stop(reason="end"))
 
     def _post_process(self, data: Dict):
         processed = {k: v for k, v in data.items()}
+        data_type_names = { i['name']: i['data_type'] for i in self._output_config}
         for processor in self._processors:
             if not all([i in data for i in processor.input]):
-                logger.warning(f"Input settings invalid for the processor: {processor}")
+                logger.warning(f"Input settings invalid for the processor: {processor.name}")
                 continue
             input = [processed.pop(i) for i in processor.input]
             logger.debug(f"Post-processor invoked with given input {input}")
@@ -173,11 +155,10 @@ class GenericInference(InferenceBase):
             for key, value in zip(processor.output, output):
                 processed[key] = value
                 # correct data type
-                output_config = next((c for c in self._output_config if c['name'] == key), None)
-                if output_config is None:
+                if key not in data_type_names:
                     logger.warning(f"Invalid output parsed: {key}")
                     continue
-                data_type = output_config["data_type"]
+                data_type =  data_type_names[key]
                 if isinstance(value, np.ndarray):
                     data_type = np_datatype_mapping[data_type]
                     if value.dtype != data_type:
@@ -189,25 +170,34 @@ class GenericInference(InferenceBase):
                 else:
                     processed[key] = value
         # convert numpy and torch tensors to list for server to process
+        def convert_to_list(v, is_string_type):
+            """Convert numpy/torch tensor to list with proper string decoding"""
+            if isinstance(v, np.ndarray):
+                if is_string_type and (np.issubdtype(v.dtype, np.bytes_) or np.issubdtype(v.dtype, np.str_) or v.dtype == np.object_):
+                    # Decode string arrays
+                    flat_list = v.flatten().tolist()
+                    decoded = [i.decode("utf-8", "ignore") if isinstance(i, bytes) else str(i) for i in flat_list]
+                    return np.array(decoded).reshape(v.shape).tolist()
+                else:
+                    return v.tolist()
+            elif isinstance(v, torch.Tensor):
+                if v.dtype == torch.uint8 and is_string_type:
+                    # Decode byte tensors as strings
+                    flat_list = v.flatten().tolist()
+                    decoded = [bytes([i]).decode("utf-8", "ignore") if isinstance(i, int) else str(i) for i in flat_list]
+                    return decoded if v.dim() == 1 else np.array(decoded).reshape(v.shape).tolist()
+                else:
+                    return v.tolist()
+            elif dataclasses.is_dataclass(v):
+                return dataclasses.asdict(v)
+            else:
+                return v
+
         for key, value in processed.items():
+            is_string_type = key in data_type_names and 'TYPE_STRING' in data_type_names[key]
             if isinstance(value, list):
                 # this is a batch of data
-                value_list = []
-                for v in value:
-                    if isinstance(v, np.ndarray):
-                        value_list.append(v.tolist())
-                    elif isinstance(v, torch.Tensor):
-                        value_list.append(v.tolist())
-                    elif dataclasses.is_dataclass(v):
-                        value_list.append(dataclasses.asdict(v))
-                    else:
-                        value_list.append(v)
-                processed[key] = value_list
+                processed[key] = [convert_to_list(v, is_string_type) for v in value]
             else:
-                if isinstance(value, np.ndarray):
-                    processed[key] = value.tolist()
-                elif isinstance(value, torch.Tensor):
-                    processed[key] = value.tolist()
-                elif dataclasses.is_dataclass(value):
-                    processed[key] = dataclasses.asdict(value)
+                processed[key] = convert_to_list(value, is_string_type)
         return processed

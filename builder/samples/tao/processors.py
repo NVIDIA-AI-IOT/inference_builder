@@ -135,7 +135,7 @@ class GDinoTokenizer:
         self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
         self.max_text_len = 256
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         labels = args[0]
         if isinstance(labels, str):
             labels = labels.split(",")
@@ -205,7 +205,7 @@ class GDinoPostProcessor:
         except Exception as e:
             print(f"Warning: Failed to load config from {self.infer_config_path}: {str(e)}")
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         # TODO: overflow observed
         def sigmoid(x):
             return 1 / (1 + np.exp(-x))

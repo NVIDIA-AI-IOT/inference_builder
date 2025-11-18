@@ -1,0 +1,405 @@
+stages:
+  - test
+  - report
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""          # simplify DinD setup in CI
+  DOCKER_HOST: tcp://docker:2375  # point CLI to DinD service
+  TEST_LOG_DIR: "test_logs"
+  TEST_REPORT_FILE: "test_report.json"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  key: "${CI_COMMIT_REF_SLUG}"
+  paths:
+    - .cache/pip
+
+# ------------------------------
+# Reusable blocks (anchors)
+# ------------------------------
+.wait_for_dockerd: &wait_for_dockerd
+  - |-
+    echo "Waiting for dockerd at ${DOCKER_HOST:-unix:///var/run/docker.sock} ..."
+    for i in $(seq 1 30); do
+      if docker info >/dev/null 2>&1; then
+        echo "✅ dockerd is ready."
+        break
+      fi
+      sleep 1
+    done
+    docker info >/dev/null 2>&1 || { echo "❌ dockerd not ready after 30s"; exit 1; }
+
+.setup_python: &setup_python
+  - apk add --no-cache python3 python3-dev py3-pip bash gcc g++ make cmake musl-dev linux-headers ffmpeg file net-tools curl vlc
+  - python3 --version
+  - adduser -D -H -s /sbin/nologin vlc || true
+  - export VLC_USER=vlc
+  - export SUDO_UID=$(id -u vlc)
+  - export SUDO_GID=$(id -g vlc)
+  - docker --version
+  - docker info
+  - pip3 install --upgrade pip --break-system-packages || pip3 install --upgrade pip
+  - "if [ -f requirements.txt ]; then pip install -r <(grep -v '^opencv-python' requirements.txt) --break-system-packages || pip install -r requirements.txt; fi"
+
+.setup_docker_buildkit: &setup_docker_buildkit
+  - echo "==========================================="
+  - echo "Setting up Docker CLI with BuildKit"
+  - echo "==========================================="
+  - apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-release
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  - apt-get update && apt-get install -y docker-ce-cli docker-buildx-plugin
+  - docker --version
+  - echo "⏳ Waiting for Docker daemon..."
+  - |-
+    for i in $(seq 1 30); do
+      if docker info >/dev/null 2>&1; then
+        echo "✅ Docker daemon is ready"
+        docker info
+        break
+      fi
+      sleep 1
+    done
+
+.setup_ngc_cli: &setup_ngc_cli
+  - echo "==========================================="
+  - echo "Setting up NGC CLI"
+  - echo "==========================================="
+  - apt-get update && apt-get install -y --no-install-recommends wget unzip
+  - echo "📥 Downloading NGC CLI version ${NGC_CLI_VERSION:-3.50.0}..."
+  - wget --quiet --output-document=/tmp/ngccli_linux.zip "https://api.ngc.nvidia.com/v2/resources/nvidia/ngc-apps/ngc_cli/versions/${NGC_CLI_VERSION:-3.50.0}/files/ngccli_linux.zip"
+  - echo "📦 Installing NGC CLI to /opt/ngc-cli..."
+  - unzip -q /tmp/ngccli_linux.zip -d /opt
+  - chmod +x /opt/ngc-cli/ngc
+  - rm /tmp/ngccli_linux.zip
+  - export PATH="/opt/ngc-cli:$PATH"
+  - which ngc
+  - ngc --version
+  - echo "🔧 Configuring NGC (API key from CI variables)..."
+  - |-
+    if [ -n "$NGC_API_KEY" ]; then
+      # Use environment variables for NGC authentication (more secure)
+      export NGC_CLI_API_KEY="$NGC_API_KEY"
+      export NGC_CLI_ORG="${NGC_ORG:-nvidia}"
+      export NGC_CLI_TEAM="${NGC_TEAM:-tao}"
+      echo "✅ NGC configured via environment variables"
+    else
+      echo "⚠️  NGC_API_KEY not set, skipping NGC configuration"
+    fi
+
+
+# ------------------------------
+# Standard Test Suite
+# ------------------------------
+test:standard:
+  stage: test
+  image: docker:24
+  variables:
+    DOCKER_TLS_CERTDIR: ""      # disable TLS inside DinD
+    DOCKER_HOST: unix:///var/run/docker.sock
+  before_script:
+    - *wait_for_dockerd
+    - *setup_python
+  script:
+    - echo "Running standard test suite..."
+    - cd builder/tests
+    - chmod +x run_tests.sh
+    - ./run_tests.sh standard -c "*" --output "$TEST_REPORT_FILE" --log-dir "$TEST_LOG_DIR"
+    - echo "Tests completed"
+  after_script:
+    - echo "Cleaning up Docker images..."
+    - docker images | grep test-inference_builder | awk '{print $3}' | xargs -r docker rmi -f || true
+    - echo "Docker cleanup completed"
+  artifacts:
+    name: "test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - builder/tests/$TEST_LOG_DIR/
+      - builder/tests/$TEST_REPORT_FILE
+    when: always
+    expire_in: 1 week
+  # NOTE: If you truly need JUnit integration, emit XML instead of JSON.
+  # Example: change your test runner to produce builder/tests/junit.xml and use:
+  # reports:
+  #   junit: builder/tests/junit.xml
+  timeout: 2h
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: manual
+    - if: '$CI_COMMIT_TAG'
+      when: manual
+  tags:
+    - os/linux
+    - type/docker
+    - gpu
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  allow_failure: true
+
+# ------------------------------
+# Test Report Generation (JSON consumer)
+# ------------------------------
+test:report:
+  stage: report
+  image: python:3.11-slim
+  needs:
+    - job: test:standard
+      artifacts: true
+      optional: true
+    - job: test:quick
+      artifacts: true
+      optional: true
+    - job: test:ds_app
+      artifacts: true
+      optional: true
+    - job: test:tao_cv
+      artifacts: true
+      optional: true
+
+  script:
+    - echo "Generating test report summary..."
+    - |
+      REPORT_PATH=""
+      if [ -f "builder/tests/$TEST_REPORT_FILE" ]; then
+        REPORT_PATH="builder/tests/$TEST_REPORT_FILE"
+      elif [ -f "builder/tests/ds_app_report.json" ]; then
+        REPORT_PATH="builder/tests/ds_app_report.json"
+      elif [ -f "builder/tests/tao_cv_report.json" ]; then
+        REPORT_PATH="builder/tests/tao_cv_report.json"
+      elif [ -f "builder/tests/quick_test_report.json" ]; then
+        REPORT_PATH="builder/tests/quick_test_report.json"
+      fi
+      if [ -n "$REPORT_PATH" ]; then
+        REPORT_PATH="$REPORT_PATH" python3 - <<'PY'
+      import json, sys, os
+      p = os.environ.get("REPORT_PATH")
+      try:
+          with open(p, "r") as f:
+              report = json.load(f)
+          print("\n" + "="*60)
+          print("TEST SUMMARY")
+          print("="*60)
+          s = report.get("summary", {})
+          print(f"Total Tests:   {s.get('total_tests', 0)}")
+          print(f"Passed:        {s.get('passed', 0)}")
+          print(f"Failed:        {s.get('failed', 0)}")
+          print(f"Success Rate:  {s.get('success_rate', 'N/A')}")
+          print("\n" + "="*60)
+          print("TEST DETAILS")
+          print("="*60)
+          for r in report.get("results", []):
+              icon = "✓" if r.get("status") == "PASSED" else "✗"
+              print(f"\n{icon} {r.get('test_id','N/A')}: {r.get('name','Unknown')}")
+              print(f"  Status: {r.get('status','UNKNOWN')}")
+              if "log_file" in r:
+                  print(f"  Log: {r['log_file']}")
+          print("\n" + "="*60)
+          if s.get("failed", 0) > 0:
+              sys.exit(1)
+      except Exception as e:
+          print(f"Error reading test report: {e}")
+          sys.exit(1)
+      PY
+      else
+        echo "Test report file not found; skipping summary."
+        exit 0
+      fi
+  artifacts:
+    name: "test-summary-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - builder/tests/$TEST_REPORT_FILE
+      - builder/tests/$TEST_LOG_DIR/
+      - builder/tests/quick_test_report.json
+      - builder/tests/quick_logs/
+      - builder/tests/ds_app_report.json
+      - builder/tests/ds_app_logs/
+      - builder/tests/tao_cv_report.json
+      - builder/tests/tao_cv_logs/
+    when: always
+    expire_in: 1 week
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+
+# ------------------------------
+# Quick test (manual)
+# ------------------------------
+test:quick:
+  stage: test
+  image: docker:24
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: unix:///var/run/docker.sock
+  before_script:
+    - *wait_for_dockerd
+    - *setup_python
+  script:
+    - echo "Running quick test (first test configuration only)..."
+    - cd builder/tests
+    - chmod +x run_tests.sh
+    - ./run_tests.sh standard --output quick_test_report.json --log-dir quick_logs
+    - echo "Quick test completed"
+  after_script:
+    - echo "Cleaning up Docker images..."
+    - docker images | grep test-inference_builder | awk '{print $3}' | xargs -r docker rmi -f || true
+    - echo "Docker cleanup completed"
+  artifacts:
+    name: "quick-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - builder/tests/quick_logs/
+      - builder/tests/quick_test_report.json
+    when: always
+    expire_in: 3 days
+  timeout: 30m
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+  tags:
+    - os/linux
+    - type/docker
+    - gpu
+
+# ------------------------------
+# DeepStream App Test (manual)
+# ------------------------------
+test:ds_app:
+  stage: test
+  image: python:3.12-slim
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: unix:///var/run/docker.sock
+    DOCKER_BUILDKIT: "1"
+    NGC_CLI_VERSION: "3.50.0"
+    MODEL_REPO: "/tmp/model-repo"
+  before_script:
+    # Install build dependencies for Python packages
+    - apt-get update && apt-get install -y --no-install-recommends python3-dev python3-pip bash gcc g++ make cmake libssl-dev ffmpeg file net-tools
+    # Setup Docker with BuildKit support
+    - *setup_docker_buildkit
+    # Setup NGC CLI
+    - *setup_ngc_cli
+    # Setup Python dependencies
+    - python3 --version
+    - pip3 install --upgrade pip --break-system-packages || pip3 install --upgrade pip
+    - |-
+      if [ -f requirements.txt ]; then
+        pip install -r <(grep -v '^opencv-python' requirements.txt) --break-system-packages || pip install -r requirements.txt
+      else
+        echo "No requirements.txt found, skipping"
+      fi
+    # Create model repository directory
+    - mkdir -p "$MODEL_REPO"
+  script:
+    - echo "Running DeepStream app tests with automatic model download..."
+    - cd builder/tests
+    - export PATH="/opt/ngc-cli:$PATH"
+    - chmod +x run_tests.sh
+    - ./run_tests.sh custom --config ../samples/ds_app/test_config.json --log-dir ds_app_logs --output ds_app_report.json
+    - echo "DeepStream app tests completed"
+  after_script:
+    - echo "Cleaning up Docker images..."
+    - docker images | grep test-inference_builder | awk '{print $3}' | xargs -r docker rmi -f || true
+    - echo "Cleaning up downloaded models..."
+    - rm -rf /tmp/model-repo || true
+    - echo "Cleanup completed"
+  artifacts:
+    name: "ds-app-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - builder/tests/ds_app_logs/
+      - builder/tests/ds_app_report.json
+    when: always
+    expire_in: 1 week
+  timeout: 3h
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+  tags:
+    - os/linux
+    - type/docker
+    - gpu
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  allow_failure: true
+
+# ------------------------------
+# TAO CV Test (manual)
+# ------------------------------
+test:tao_cv:
+  stage: test
+  image: python:3.12-slim
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: unix:///var/run/docker.sock
+    DOCKER_BUILDKIT: "1"
+    NGC_CLI_VERSION: "3.50.0"
+    MODEL_REPO: "/tmp/model-repo"
+  before_script:
+    # Install build dependencies for Python packages
+    - apt-get update && apt-get install -y --no-install-recommends python3-dev python3-pip bash gcc g++ make cmake libssl-dev ffmpeg file net-tools
+    # Setup Docker with BuildKit support
+    - *setup_docker_buildkit
+    # Setup NGC CLI
+    - *setup_ngc_cli
+    # Install OpenAPI Generator CLI dependencies (Java + Node.js)
+    - apt-get install -y --no-install-recommends default-jre-headless nodejs npm || apt-get install -y --no-install-recommends openjdk-17-jre-headless nodejs npm
+    - java -version
+    - npm install -g @openapitools/openapi-generator-cli
+    # Setup Python dependencies
+    - python3 --version
+    - pip3 install --upgrade pip --break-system-packages || pip3 install --upgrade pip
+    - |-
+      if [ -f requirements.txt ]; then
+        pip install -r <(grep -v '^opencv-python' requirements.txt) --break-system-packages || pip install -r requirements.txt
+      else
+        echo "No requirements.txt found, skipping"
+      fi
+    # Create model repository directory
+    - mkdir -p "$MODEL_REPO"
+  script:
+    - echo "Running TAO CV tests with automatic model download..."
+    - cd builder/tests
+    - export PATH="/opt/ngc-cli:$PATH"
+    - chmod +x run_tests.sh
+    - ./run_tests.sh custom --config ../samples/tao/test_config.json --log-dir tao_cv_logs --output tao_cv_report.json
+    - echo "TAO CV tests completed"
+  after_script:
+    - echo "Cleaning up Docker images..."
+    - docker images | grep test-inference_builder | awk '{print $3}' | xargs -r docker rmi -f || true
+    - echo "Cleaning up downloaded models..."
+    - rm -rf /tmp/model-repo || true
+    - echo "Cleanup completed"
+  artifacts:
+    name: "tao-cv-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - builder/tests/tao_cv_logs/
+      - builder/tests/tao_cv_report.json
+    when: always
+    expire_in: 1 week
+  timeout: 3h
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+  tags:
+    - os/linux
+    - type/docker
+    - gpu
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  allow_failure: true

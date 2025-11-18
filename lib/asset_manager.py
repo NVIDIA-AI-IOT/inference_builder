@@ -16,13 +16,16 @@
 
 from .utils import get_logger
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict
 import json
 import uuid
 from fastapi import UploadFile
 import shutil
 from pyservicemaker.utils import MediaInfo
+import tempfile
+from urllib.parse import urlparse
+import threading
 
 logger = get_logger(__name__)
 
@@ -40,21 +43,40 @@ class Asset:
     description: str
     username: str
     password: str
+    live: bool
+    managed: bool
+    _lock: threading.Lock = field(init=False, repr=False, default=None)
+
+    def __post_init__(self):
+        self._lock = threading.Lock()
 
     def lock(self):
-        self._use_count += 1
+        with self._lock:
+            self.use_count += 1
 
     def unlock(self):
-        self._use_count -= 1
+        with self._lock:
+            if self.use_count <= 0:
+                logger.warning("Attempted to unlock asset %s with use_count %d",
+                               self.id, self.use_count)
+                return
+            self.use_count -= 1
+            if self.use_count == 0:
+                # Safety net: cleanup unmanaged assets when object is destroyed
+                if not self.managed and os.path.exists(self.path):
+                    try:
+                        os.remove(self.path)
+                        logger.info("Removed unmanaged asset %s from %s",
+                                    self.id, self.path)
+                    except OSError as e:
+                        logger.exception(
+                            "Failed to cleanup asset %s: %s", self.id, e)
 
     @classmethod
     def fromdir(cls, asset_dir):
         with open(os.path.join(asset_dir, "info.json")) as f:
             info = json.load(f)
-            try:
-                size = os.path.getsize(os.path.join(asset_dir, info["fileName"]))
-            except:
-                size = 0
+
             return Asset(id=info["assetId"],
                          path=info["path"],
                          file_name=info["fileName"],
@@ -65,7 +87,9 @@ class Asset:
                          description=info["description"],
                          asset_dir=asset_dir,
                          use_count=0,
-                         size=size)
+                         size=info["size"],
+                         live=info["live"],
+                         managed=True)
 
 
 class AssetManager:
@@ -122,6 +146,7 @@ class AssetManager:
                     "password": "",
                     "description": "",
                     "size": size,
+                    "live": False,
                 }, f)
 
         self._asset_map[asset_id] = Asset.fromdir(asset_dir)
@@ -152,7 +177,8 @@ class AssetManager:
                     "username": username,
                     "password": password,
                     "description": description,
-                    "size": 0
+                    "size": 0,
+                    "live": True
                 }, f)
 
         self._asset_map[asset_id] = Asset.fromdir(asset_dir)
@@ -166,9 +192,91 @@ class AssetManager:
         return list(self._asset_map.values())
 
     def get_asset(self, asset_id):
-        if asset_id not in self._asset_map:
-            return None
-        return self._asset_map[asset_id]
+        if asset_id in self._asset_map:
+            return self._asset_map[asset_id]
+        else:
+            # check if the asset is an id or a path
+            # Handle file:// URIs by converting them to paths
+            file_path = asset_id
+            if asset_id.startswith("file://"):
+                parsed = urlparse(asset_id)
+                file_path = parsed.path
+
+            if file_path.startswith("/") and os.path.exists(file_path):
+                # Check if this path already exists in the asset map
+                for existing_asset in self._asset_map.values():
+                    if existing_asset.path == file_path:
+                        return existing_asset
+
+                mediainfo = MediaInfo.discover(file_path)
+                asset = Asset(id=str(uuid.uuid4()),
+                              path=file_path,
+                              file_name=os.path.basename(file_path),
+                              mime_type="",
+                              duration=mediainfo.duration,
+                              username="",
+                              password="",
+                              description="",
+                              asset_dir=file_path,
+                              use_count=0,
+                              size=os.path.getsize(file_path),
+                              live=False,
+                              managed=True)
+                self._asset_map[asset.id] = asset
+                return asset
+            elif (asset_id.startswith("http://") or
+                  asset_id.startswith("https://")):
+                # Download the video from the web
+                try:
+                    # Extract filename from URL
+                    parsed_url = urlparse(asset_id)
+                    file_name = os.path.basename(parsed_url.path)
+                    if not file_name:
+                        file_name = "downloaded_video"
+
+                    # Create a temporary directory
+                    temp_dir = tempfile.mkdtemp(prefix="web_asset_")
+                    temp_file_path = os.path.join(temp_dir, file_name)
+
+                    # Download the file
+                    logger.info(f"Downloading video from {asset_id}")
+                    import requests # lazy import to avoid GIL error
+                    response = requests.get(
+                        asset_id, stream=True, timeout=30)
+                    response.raise_for_status()
+
+                    with open(temp_file_path, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+
+                    # Get media info
+                    mediainfo = MediaInfo.discover(temp_file_path)
+                    file_size = os.path.getsize(temp_file_path)
+
+                    logger.info(f"Downloaded video to {temp_file_path}")
+
+                    return Asset(id=str(uuid.uuid4()),
+                                 path=temp_file_path,
+                                 file_name=file_name,
+                                 mime_type="",
+                                 duration=mediainfo.duration,
+                                 username="",
+                                 password="",
+                                 description=f"Downloaded from {asset_id}",
+                                 asset_dir=temp_dir,
+                                 use_count=0,
+                                 size=file_size,
+                                 live=False,
+                                 managed=False)
+                except Exception as e:
+                    logger.exception(
+                        "Failed to download video from %s: %s", asset_id, e)
+                    return None
+            elif asset_id.startswith("rtsp://"):
+                return self.add_live_stream(asset_id)
+            else:
+                logger.error(f"Invalid asset ID: {asset_id}")
+                return None
 
     def delete_asset(self, asset_id):
         if asset_id not in self._asset_map:
