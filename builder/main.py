@@ -61,7 +61,51 @@ LICENSE_HEADER = """
 # limitations under the License.
 """
 
-ALLOWED_SERVER = ["triton", "fastapi", "nim", "serverless"]
+
+def load_allowed_servers(file_path: str = None) -> List[str]:
+    """Load allowed server types from a text file.
+
+    Args:
+        file_path: Path to the text file containing allowed server types.
+                  If None, uses the default 'allowed_servers.txt'
+                  in the builder directory.
+
+    Returns:
+        List of allowed server type strings.
+
+    Raises:
+        FileNotFoundError: If the configuration file is not found.
+        ValueError: If the file is empty or contains invalid entries.
+    """
+    if file_path is None:
+        # Use default file in the same directory as this script
+        script_dir = Path(__file__).parent
+        file_path = script_dir / "allowed_servers.txt"
+    else:
+        file_path = Path(file_path)
+
+    if not file_path.exists():
+        raise FileNotFoundError(
+            f"Allowed servers configuration file not found: {file_path}"
+        )
+
+    allowed_servers = []
+    with open(file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            # Strip whitespace and ignore empty lines and comments
+            line = line.strip()
+            if line and not line.startswith('#'):
+                allowed_servers.append(line)
+
+    if not allowed_servers:
+        raise ValueError(f"No valid server types found in {file_path}")
+
+    return allowed_servers
+
+
+# Load allowed server types from configuration file
+ALLOWED_SERVER = load_allowed_servers()
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Main")
