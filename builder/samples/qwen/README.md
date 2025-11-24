@@ -36,7 +36,7 @@ git lfs install
 Then download the model:
 
 ```bash
-git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct  $MODEL_REPO/Qwen2.5-VL-7B-Instruct
+git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct  $MODEL_REPO/Qwen2.5-VL
 ```
 
 Assume you've followed the [top level instructions](../../../README.md#getting-started) to set up the environment and be sure you're in the inference_builder folder, then activate your virtual environment:

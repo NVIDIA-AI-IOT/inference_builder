@@ -500,13 +500,28 @@ def validate_test_config(test_config: dict) -> Tuple[bool, str]:
             return False, "auto_validation must be a string path"
         if not validate_safe_path(test_config["auto_validation"]):
             return False, f"Invalid auto_validation path: {test_config['auto_validation']}"
-    # Validate payloads_path
+    # Validate payloads_path (must be a list of strings)
     if "payloads_path" in test_config:
         payloads_path = test_config["payloads_path"]
-        if not isinstance(payloads_path, str):
-            return False, "payloads_path must be a string"
-        if not validate_safe_path(payloads_path):
-            return False, f"Invalid payloads_path: {payloads_path}"
+        if not isinstance(payloads_path, list):
+            return False, "payloads_path must be a list of strings"
+        for path in payloads_path:
+            if not isinstance(path, str):
+                return False, "All items in payloads_path list must be strings"
+            if not validate_safe_path(path):
+                return False, f"Invalid payloads_path: {path}"
+
+    # Validate endpoint
+    if "endpoint" in test_config:
+        endpoint = test_config["endpoint"]
+        if not isinstance(endpoint, str):
+            return False, "endpoint must be a string"
+        # Basic validation for endpoint path format
+        if not endpoint.startswith("/"):
+            return False, "endpoint must start with /"
+        # Check for dangerous characters
+        if any(char in endpoint for char in ['<', '>', '"', '{', '}', '|', '\\', '^', '`', ' ']):
+            return False, f"Invalid characters in endpoint: {endpoint}"
 
     return True, ""
 
@@ -537,10 +552,70 @@ class DockerBuildTester:
         for model_name, model_info in models_config.items():
             try:
                 source = model_info.get("source", "NGC")
+
+                if source == "HF":
+                    # Handle Hugging Face model download
+                    target_dir = Path(model_info["target"]).expanduser()
+                    model_path = model_info["path"]  # e.g., "Qwen/Qwen2.5-VL-3B-Instruct"
+
+                    # Final destination
+                    final_model_dir = target_dir / model_name
+
+                    # Check if model already exists
+                    if final_model_dir.exists():
+                        logger.info(f"✅ Model '{model_name}' already exists at {final_model_dir}, skipping download")
+                        continue
+
+                    logger.info(f"📥 Downloading model '{model_name}' from Hugging Face...")
+                    logger.info(f"   HF path: {model_path}")
+                    logger.info(f"   Target: {final_model_dir}")
+
+                    # Create target directory
+                    target_dir.mkdir(parents=True, exist_ok=True)
+
+                    # Ensure git-lfs is installed
+                    logger.info("   Setting up git-lfs...")
+                    lfs_result = subprocess.run(
+                        ["git", "lfs", "install"],
+                        capture_output=True,
+                        text=True,
+                        timeout=30
+                    )
+                    if lfs_result.returncode != 0:
+                        logger.warning(f"⚠️  git-lfs install warning: {lfs_result.stderr}")
+
+                    # Clone from Hugging Face
+                    hf_url = f"https://huggingface.co/{model_path}"
+                    clone_cmd = ["git", "clone", hf_url, str(final_model_dir)]
+                    logger.info(f"   Running: {' '.join(clone_cmd)}")
+
+                    result = subprocess.run(
+                        clone_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=1800  # 30 minute timeout for large model download
+                    )
+
+                    if result.returncode != 0:
+                        error_msg = f"Failed to download model '{model_name}' from HF: {result.stderr}"
+                        logger.error(f"❌ {error_msg}")
+                        return False, error_msg
+
+                    # Set permissions
+                    try:
+                        os.chmod(final_model_dir, 0o777)
+                        logger.info(f"   Set permissions: chmod 777 {final_model_dir}")
+                    except Exception as e:
+                        logger.warning(f"⚠️  Failed to set permissions on {final_model_dir}: {e}")
+
+                    logger.info(f"✅ Successfully downloaded model '{model_name}' from Hugging Face")
+                    continue
+
                 if source != "NGC":
                     logger.warning(f"⚠️  Unsupported model source '{source}' for {model_name}, skipping")
                     continue
 
+                # NGC model download logic
                 target_dir = Path(model_info["target"]).expanduser()
                 model_path = model_info["path"]
                 version = model_info["version"]
@@ -1152,8 +1227,15 @@ class DockerBuildTester:
 
             return False, error_msg
 
-    def test_image(self, image_name: str, test_config: Dict, test_id: int) -> Tuple[bool, str, str]:
-        """Test the built image by running it and capture logs."""
+    def test_image(self, image_name: str, test_config: Dict, test_id: int, gpus: str = "all") -> Tuple[bool, str, str]:
+        """Test the built image by running it and capture logs.
+
+        Args:
+            image_name: Name of the Docker image to test
+            test_config: Test configuration dictionary
+            test_id: Unique test identifier
+            gpus: GPU devices to use (default: 'all')
+        """
         log_file = self.log_dir / f"test_{test_id}_{image_name.replace(':', '_')}.log"
 
         # Validate image name to prevent command injection
@@ -1197,7 +1279,7 @@ class DockerBuildTester:
 
             # Run the container with test configuration
             # Use host network for serverless; use port mapping for non-serverless to avoid port conflicts
-            cmd = ["docker", "run", "--gpus", "all"]
+            cmd = ["docker", "run", "--gpus", gpus]
 
             # Add environment variables if specified
             if "env" in test_config:
@@ -1358,6 +1440,7 @@ class DockerBuildTester:
 
                 # Readiness probe
                 ready = False
+                http_error_status = None  # Track if we got an HTTP error
                 ready_deadline = time.time() + max(1, timeout)
                 service_host = self.get_service_host()
                 health_url = f"http://{service_host}:8000/v1/health/ready"
@@ -1371,7 +1454,9 @@ class DockerBuildTester:
                             else:
                                 logger.info(f"Health probe returned non-200 status: {resp.status}")
                     except urllib.error.HTTPError as e:
-                        logger.warning(f"Health probe HTTPError: status={e.code}")
+                        http_error_status = e.code
+                        logger.error(f"❌ Health probe HTTPError: status={e.code} - server returned error, stopping retry")
+                        break  # No retry on HTTP errors - server is responding but not healthy
                     except urllib.error.URLError as e:
                         if isinstance(e.reason, socket.timeout):
                             logger.warning("Health probe request timed out")
@@ -1384,7 +1469,10 @@ class DockerBuildTester:
                 client_rc = 1
 
                 if not ready:
-                    logger.error("❌ Server did not become ready within timeout")
+                    if http_error_status:
+                        logger.error(f"❌ Server health check failed with HTTP error {http_error_status}")
+                    else:
+                        logger.error("❌ Server did not become ready within timeout")
                     # Collect logs to see what went wrong during initialization
                     logger.info("📋 Collecting container logs for failed readiness...")
                     logs_proc = subprocess.run(["docker", "logs", container_id], capture_output=True, text=True)
@@ -1474,67 +1562,96 @@ class DockerBuildTester:
                             client_stderr = str(e)
                     else:
                         logger.info("✅ Server is ready. Launching concurrent curl requests...")
-                        # Read a single NDJSON file and launch curl for each line
+                        # Read NDJSON files and launch curl for each line
                         # Get payloads_path from test_config, with a default fallback based on app name
                         test_app_name = test_config.get("TEST_APP_NAME") or None
-                        default_payloads_path = f"{test_app_name}/payloads/payloads.jsonl"
-                        payloads_path_str = test_config.get("payloads_path", default_payloads_path)
-                        payloads_path = Path(payloads_path_str)
+                        default_payloads_paths = [f"{test_app_name}/payloads/payloads.jsonl"]
+                        payloads_path_list = test_config.get("payloads_path", default_payloads_paths)
 
-                        if not payloads_path.exists():
-                            logger.error(f"❌ Payloads file not found: {payloads_path}")
+                        # Ensure payloads_path is a list
+                        if not isinstance(payloads_path_list, list):
+                            logger.error(f"❌ payloads_path must be a list, got: {type(payloads_path_list)}")
+                            client_rc = 1
+                            client_stdout = ""
+                            client_stderr = "payloads_path must be a list"
                         else:
-                            with payloads_path.open("r") as f:
-                                payload_lines = [line.strip() for line in f if line.strip()]
+                            # Resolve payloads_path relative to config directory
+                            config_dir = Path(test_config.get("_config_dir", ".")).resolve()
 
-                            procs: List[subprocess.Popen] = []
-                            for line in payload_lines:
-                                procs.append(subprocess.Popen(
-                                    [
-                                        "curl", "-sS", "-X", "POST", "-w",
-                                        "%{http_code}",
-                                        "-H", "Content-Type: application/json",
-                                        "--data", line,
-                                        f"http://{service_host}:8000/v1/inference"
-                                    ],
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE,
-                                    text=True
-                                ))
+                            # Get endpoint from test_config, default to /v1/inference
+                            endpoint = test_config.get("endpoint", "/v1/inference")
+                            logger.info(f"🎯 Using endpoint: {endpoint}")
 
-                            outs: List[str] = []
-                            errs: List[str] = []
-                            client_rc = 0
-                            http_status_errors = []
-                            for i, p in enumerate(procs):
-                                out, err = p.communicate(timeout=max(5, timeout))
-                                outs.append(out or "")
-                                errs.append(err or "")
-                                if p.returncode != 0:
-                                    client_rc = p.returncode
+                            # Collect all payload lines from all files
+                            all_payload_lines = []
+                            for payloads_path_str in payloads_path_list:
+                                payloads_path = (config_dir / payloads_path_str).resolve()
+                                logger.info(f"📄 Resolved payloads path: {payloads_path_str} -> {payloads_path}")
+
+                                if not payloads_path.exists():
+                                    logger.error(f"❌ Payloads file not found: {payloads_path}")
                                 else:
-                                    # For non-serverless, check HTTP status is 200
-                                    # curl -w "%{http_code}" appends status to stdout
-                                    if out and len(out) >= 3:
-                                        # Extract last 3 chars as HTTP status code
-                                        http_status = out[-3:]
-                                        if http_status != "200":
-                                            http_status_errors.append(
-                                                f"Request {i+1}: HTTP {http_status}"
-                                            )
-                                            client_rc = 1  # Mark as failed
+                                    with payloads_path.open("r") as f:
+                                        payload_lines = [line.strip() for line in f if line.strip()]
+                                        all_payload_lines.extend(payload_lines)
+                                        logger.info(f"📋 Loaded {len(payload_lines)} payloads from {payloads_path.name}")
 
-                            client_stdout = "\n".join(outs)
-                            client_stderr = "\n".join(errs)
+                            if not all_payload_lines:
+                                logger.error(f"❌ No payloads found in any file")
+                                client_rc = 1
+                                client_stdout = ""
+                                client_stderr = "No payloads found"
+                            else:
+                                logger.info(f"📋 Total payloads to process: {len(all_payload_lines)}")
 
-                            # Log HTTP status errors for non-serverless
-                            if http_status_errors:
-                                error_msg = (
-                                    f"Non-serverless server returned non-200 status "
-                                    f"codes: {'; '.join(http_status_errors)}"
-                                )
-                                logger.error("❌ %s", error_msg)
-                                client_stderr += f"\n{error_msg}"
+                                procs: List[subprocess.Popen] = []
+                                for line in all_payload_lines:
+                                    procs.append(subprocess.Popen(
+                                        [
+                                            "curl", "-sS", "-X", "POST", "-w",
+                                            "%{http_code}",
+                                            "-H", "Content-Type: application/json",
+                                            "--data", line,
+                                            f"http://{service_host}:8000{endpoint}"
+                                        ],
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE,
+                                        text=True
+                                    ))
+
+                                outs: List[str] = []
+                                errs: List[str] = []
+                                client_rc = 0
+                                http_status_errors = []
+                                for i, p in enumerate(procs):
+                                    out, err = p.communicate(timeout=max(5, timeout))
+                                    outs.append(out or "")
+                                    errs.append(err or "")
+                                    if p.returncode != 0:
+                                        client_rc = p.returncode
+                                    else:
+                                        # For non-serverless, check HTTP status is 200
+                                        # curl -w "%{http_code}" appends status to stdout
+                                        if out and len(out) >= 3:
+                                            # Extract last 3 chars as HTTP status code
+                                            http_status = out[-3:]
+                                            if http_status != "200":
+                                                http_status_errors.append(
+                                                    f"Request {i+1}: HTTP {http_status}"
+                                                )
+                                                client_rc = 1  # Mark as failed
+
+                                client_stdout = "\n".join(outs)
+                                client_stderr = "\n".join(errs)
+
+                                # Log HTTP status errors for non-serverless
+                                if http_status_errors:
+                                    error_msg = (
+                                        f"Non-serverless server returned non-200 status "
+                                        f"codes: {'; '.join(http_status_errors)}"
+                                    )
+                                    logger.error("❌ %s", error_msg)
+                                    client_stderr += f"\n{error_msg}"
 
                 # Always attempt to stop and collect logs
                 logger.info("🛑 Stopping server container")
@@ -1806,8 +1923,16 @@ class DockerBuildTester:
             logger.warning(f"⚠️  Exception during cleanup: {str(e)}")
             return False
 
-    def run_test_suite(self, test_configs: List[Dict], cleanup: bool = True, gitlab_token: Optional[str] = None, force_full_flow: bool = False) -> Dict:
-        """Run a suite of tests with different configurations."""
+    def run_test_suite(self, test_configs: List[Dict], cleanup: bool = True, gitlab_token: Optional[str] = None, force_full_flow: bool = False, gpus: str = "all") -> Dict:
+        """Run a suite of tests with different configurations.
+
+        Args:
+            test_configs: List of test configurations
+            cleanup: Whether to cleanup Docker images after testing
+            gitlab_token: GitLab token for authentication
+            force_full_flow: Force full build+test flow even for disabled tests
+            gpus: GPU devices to use (default: 'all')
+        """
         results = {
             "total_tests": len(test_configs),
             "passed": 0,
@@ -1833,10 +1958,37 @@ class DockerBuildTester:
             # Note: auto_validation is passed directly to build_image via test_config
             # No need to add it to build_args
 
-            # Download models if specified in test config
+            # Debug logging for flow decision
+            default_enable = test_cfg.get("default_enable", True)
+            logger.info(f"🔍 Test flow decision: default_enable={default_enable}, force_full_flow={force_full_flow}")
+
+            # If default_enable is False, skip Docker build/test but run codegen,
+            # unless full flow is forced by selection (e.g., --test-case provided)
+            if not default_enable and not force_full_flow:
+                logger.info("⚙️  Test disabled via default_enable=false. Running code generation only (skipping model download)...")
+                codegen_success, codegen_output = self.generate_inference_code(build_args, test_cfg)
+
+                status = "SKIPPED"
+                test_result = {
+                    "test_id": i,
+                    "config": config,
+                    "status": status,
+                    "build_success": False,
+                    "test_success": False,
+                    "build_output": codegen_output,
+                    "test_output": "",
+                    "log_file": "",
+                    "image_name": image_name
+                }
+                results["results"].append(test_result)
+                logger.info(f"Test {i} result: {status} (codegen_only)")
+                # Do not increment passed/failed counters for skipped tests
+                continue
+
+            # Download models if specified in test config (only for full build+test flow)
             models_config = test_cfg.get("models", {})
             if models_config:
-                logger.info(f"📦 Checking and downloading models...")
+                logger.info(f"📦 Checking and downloading models (full build+test flow)...")
                 config_dir = Path(config.get("_config_dir", "."))
                 download_success, download_msg = self.download_models(models_config, config_dir)
                 if not download_success:
@@ -1857,29 +2009,6 @@ class DockerBuildTester:
                     logger.info(f"Test {i} result: FAILED (model download)")
                     continue
 
-            # If default_enable is False, skip Docker build/test but run codegen,
-            # unless full flow is forced by selection (e.g., --test-case provided)
-            if not test_cfg.get("default_enable", True) and not force_full_flow:
-                logger.info("⚙️  Test disabled via default_enable=false. Running code generation only...")
-                codegen_success, codegen_output = self.generate_inference_code(build_args, test_cfg)
-
-                status = "SKIPPED"
-                test_result = {
-                    "test_id": i,
-                    "config": config,
-                    "status": status,
-                    "build_success": False,
-                    "test_success": False,
-                    "build_output": codegen_output,
-                    "test_output": "",
-                    "log_file": "",
-                    "image_name": image_name
-                }
-                results["results"].append(test_result)
-                logger.info(f"Test {i} result: {status} (codegen_only)")
-                # Do not increment passed/failed counters for skipped tests
-                continue
-
             # Build image with resolved dockerfile and base_dir
             dockerfile_to_use = config.get("_resolved_dockerfile")
             base_dir_to_use = config.get("_resolved_base_dir")
@@ -1898,7 +2027,8 @@ class DockerBuildTester:
                 test_success, test_output, log_file = self.test_image(
                     image_name,
                     test_config,
-                    i
+                    i,
+                    gpus=gpus
                 )
 
                 if test_success:
@@ -1986,6 +2116,7 @@ def main():
     parser.add_argument("--no-cleanup", action="store_true", help="Don't cleanup images after testing")
     parser.add_argument("--gitlab-token", help="GitLab token for authentication")
     parser.add_argument("--test-case", help="Run only the test case with this name (partial match supported). Supplying this forces full flow (build+test) even if disabled.")
+    parser.add_argument("--gpus", default="all", help="GPU devices to use for Docker containers (default: 'all'). Examples: 'all', 'device=0', 'device=0,1', '\"device=0,1\"'")
 
     # Parse arguments with security validation
     try:
@@ -2193,9 +2324,11 @@ def main():
     try:
         logger.info(f"Starting test suite with {len(test_configs)} configurations")
         logger.info(f"Logs will be saved to: {args.log_dir}")
+        logger.info(f"Using GPU devices: {args.gpus}")
         # Force full flow if --test-case provided (including "*")
         force_full_flow = args.test_case is not None and len(args.test_case) > 0
-        results = tester.run_test_suite(test_configs, cleanup=not args.no_cleanup, gitlab_token=args.gitlab_token, force_full_flow=force_full_flow)
+        logger.info(f"🔍 Test suite settings: test_case={args.test_case}, force_full_flow={force_full_flow}")
+        results = tester.run_test_suite(test_configs, cleanup=not args.no_cleanup, gitlab_token=args.gitlab_token, force_full_flow=force_full_flow, gpus=args.gpus)
     except Exception as e:
         logger.error(f"❌ Test suite execution failed: {str(e)}")
         sys.exit(1)

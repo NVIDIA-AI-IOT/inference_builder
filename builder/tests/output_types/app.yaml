@@ -44,8 +44,7 @@ models:
   - name: output_types_dummy
     backend: "dummy"
     max_batch_size: 1
-    parameters:
-      FORCE_CPU_ONLY_INPUT_TENSORS: "no"
+    parameters: {}
     input:
       - name: text
         data_type: TYPE_STRING

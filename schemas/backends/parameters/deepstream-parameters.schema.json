@@ -1,0 +1,159 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/NVIDIA-AI-IOT/inference_builder/main/schemas/backends/parameters/deepstream-parameters.schema.json",
+  "title": "DeepStream Backend Parameters",
+  "description": "Parameter schema for DeepStream backend",
+  "type": "object",
+  "required": ["infer_config_path"],
+  "properties": {
+    "infer_config_path": {
+      "type": "array",
+      "description": "Paths to nvinfer configuration files, refer to https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvinfer.html#gst-nvinfer-file-configuration-specifications for more details",
+      "items": {
+        "type": "string"
+      }
+    },
+    "preprocess_config_path": {
+      "type": "array",
+      "description": "Paths to nvdspreprocess configuration files for preprocessing operations before inference, refer to https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvdspreprocess.html for more details",
+      "items": {
+        "type": "string"
+      }
+    },
+    "batch_timeout": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Timeout in microseconds for batching multiple inputs"
+    },
+    "inference_timeout": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Inference timeout in seconds"
+    },
+    "tracker_config": {
+      "type": "object",
+      "description": "Configuration for object tracking, absence of this field means no tracking is required",
+      "required": ["ll_lib_file", "ll_config_file"],
+      "properties": {
+        "ll_lib_file": {
+          "type": "string",
+          "description": "Path to the low-level tracker library file"
+        },
+        "ll_config_file": {
+          "type": "string",
+          "description": "Path to the low-level tracker configuration file"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Width of the tracker processing frame",
+          "default": 1920
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Height of the tracker processing frame",
+          "default": 1088
+        },
+        "display_tracking_id": {
+          "type": "boolean",
+          "description": "Whether to display tracking IDs in the output",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "msgbroker_config": {
+      "type": "object",
+      "description": "Configuration for message broker integration, absence of this field means no message broker is required",
+      "required": ["msgbroker_proto_lib_path", "msgbroker_conn_str", "msgbroker_topic", "msgconv_config_path"],
+      "properties": {
+        "msgbroker_proto_lib_path": {
+          "type": "string",
+          "description": "Path to the message broker protocol library"
+        },
+        "msgbroker_conn_str": {
+          "type": "string",
+          "description": "Connection string for the message broker (e.g., 'localhost;9092' for Kafka)"
+        },
+        "msgbroker_topic": {
+          "type": "string",
+          "description": "Topic name for publishing messages"
+        },
+        "msgconv_config_path": {
+          "type": "string",
+          "description": "Path to the message conversion configuration file, refer to https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvmsgconv.html for more details"
+        }
+      },
+      "additionalProperties": true
+    },
+    "render_config": {
+      "type": "object",
+      "description": "Configuration for rendering and display",
+      "properties": {
+        "enable_display": {
+          "type": "boolean",
+          "description": "Enable on-screen display",
+          "default": false
+        },
+        "enable_osd": {
+          "type": "boolean",
+          "description": "Enable on-screen display overlays (bounding boxes, labels, etc.)",
+          "default": false
+        },
+        "enable_stream": {
+          "type": "boolean",
+          "description": "Enable RTSP streaming output",
+          "default": false
+        },
+        "rtsp_mount_point": {
+          "type": "string",
+          "description": "RTSP mount point path (e.g., '/ds_app'), not required if enable_stream is false",
+          "default": "/ds-test"
+        },
+        "rtsp_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "RTSP server port number, not required if enable_stream is false",
+          "default": 8554
+        }
+      },
+      "additionalProperties": false
+    },
+    "perf_config": {
+      "type": "object",
+      "description": "Performance monitoring configuration",
+      "properties": {
+        "enable_fps_logs": {
+          "type": "boolean",
+          "description": "Enable FPS (frames per second) logging",
+          "default": false
+        },
+        "enable_latency_logs": {
+          "type": "boolean",
+          "description": "Enable latency logging",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "kitti_output_path": {
+      "type": "object",
+      "description": "Paths for KITTI format output dumps",
+      "properties": {
+        "infer": {
+          "type": "string",
+          "description": "Path for inference KITTI output"
+        },
+        "tracker": {
+          "type": "string",
+          "description": "Path for tracker KITTI output"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+

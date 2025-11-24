@@ -38,16 +38,28 @@ chmod +x run_tests.sh
 
 #### Custom Configuration
 ```bash
-./run_tests.sh custom --config my_config.json --log-dir custom_logs
+./run_tests.sh custom -c my_config.json --log-dir custom_logs
 ```
 
 #### Run Specific Test Cases
 ```bash
 # Run only tests matching a specific name (partial match)
-./run_tests.sh standard --test-case "frame_sampling"
+./run_tests.sh standard -t "frame_sampling"
 
 # Run all tests including disabled ones
-./run_tests.sh standard --test-case "*"
+./run_tests.sh standard -t "*"
+```
+
+#### GPU Device Selection
+```bash
+# Use specific GPU device (device 0)
+./run_tests.sh standard --gpus "device=0"
+
+# Use multiple GPU devices
+./run_tests.sh standard --gpus "device=0,1"
+
+# Use all available GPUs (default)
+./run_tests.sh standard --gpus "all"
 ```
 
 ## Test Configuration Structure
@@ -254,17 +266,37 @@ This is useful for:
 
 ### Running Disabled Tests
 
-You can run disabled tests using the `--test-case` argument:
+You can run disabled tests using the `-t` or `--test-case` argument:
 
 ```bash
 # Run a specific disabled test
-./run_tests.sh standard --test-case "RTSP Stream Test"
+./run_tests.sh standard -t "RTSP Stream Test"
 
 # Run all tests including disabled ones
-./run_tests.sh standard --test-case "*"
+./run_tests.sh standard -t "*"
 ```
 
-When `--test-case` is specified, it forces the full flow (code generation + Docker build + test) even for tests with `default_enable: false`.
+When `-t` or `--test-case` is specified, it forces the full flow (code generation + Docker build + test) even for tests with `default_enable: false`.
+
+## GPU Device Selection
+
+By default, all tests run with `--gpus all`, which makes all GPUs available to the Docker containers. You can override this to run tests on specific GPU devices:
+
+```bash
+# Run on GPU device 0 only
+./run_tests.sh standard --gpus "device=0"
+
+# Run on GPU devices 0 and 1
+./run_tests.sh standard --gpus "device=0,1"
+
+# Run with all GPUs (default)
+./run_tests.sh standard --gpus "all"
+
+# Python script directly
+python3 test_docker_builds.py --config-file test_configs.json --gpus "device=0"
+```
+
+**Note**: The GPU device string is passed directly to Docker's `--gpus` flag. Refer to [Docker's GPU documentation](https://docs.docker.com/config/containers/resource_constraints/#gpu) for more advanced options.
 
 ## Command Line Arguments
 
@@ -283,6 +315,7 @@ Options:
   --no-cleanup          Don't cleanup images after testing
   --gitlab-token TOKEN  GitLab token for authentication (can also use GITLAB_TOKEN env var)
   --test-case NAME      Run only test cases matching this name (partial match). Use '*' for all.
+  --gpus DEVICES        GPU devices to use (default: 'all'). Examples: 'all', 'device=0', 'device=0,1'
 ```
 
 ### Shell Script (`run_tests.sh`)
@@ -297,9 +330,10 @@ Commands:
 Options:
   --no-cleanup           Don't cleanup Docker images after testing
   --output FILE          Save test report to specified file
-  --config FILE          Use custom configuration file (required for custom)
+  -c, --config FILE      Use custom configuration file (required for custom)
   --log-dir DIR          Directory to save container logs (default: logs)
-  -c, --test-case NAME   Run only test cases matching this name (partial match). Use '*' for all.
+  -t, --test-case NAME   Run only test cases matching this name (partial match). Use '*' for all.
+  --gpus DEVICES         GPU devices to use (default: 'all'). Examples: 'all', 'device=0', 'device=0,1'
 ```
 
 ## Test Applications
@@ -384,24 +418,24 @@ Create your own test configuration file:
 
 ### Running Specific Tests
 
-Use the `--test-case` argument to run specific tests by name (partial matching supported):
+Use the `-t` or `--test-case` argument to run specific tests by name (partial matching supported):
 
 ```bash
 # Run tests matching "frame_sampling" (partial match)
-./run_tests.sh standard --test-case "frame_sampling"
+./run_tests.sh standard -t "frame_sampling"
 
 # Run tests matching "FastAPI"
-./run_tests.sh standard --test-case "FastAPI"
+./run_tests.sh standard -t "FastAPI"
 
 # Run all tests including disabled ones
-./run_tests.sh standard --test-case "*"
+./run_tests.sh standard -t "*"
 ```
 
 Alternatively, create a custom configuration file with a subset of tests:
 
 ```bash
 # Run with custom configuration
-./run_tests.sh custom --config my_custom_tests.json
+./run_tests.sh custom -c my_custom_tests.json
 ```
 
 ### Continuous Integration
@@ -411,6 +445,9 @@ For CI/CD pipelines, you can run tests with specific configurations:
 ```bash
 # Run tests and save report
 ./run_tests.sh standard --output test_report.json
+
+# Run tests on specific GPU device
+./run_tests.sh standard --gpus "device=0" --output test_report.json
 
 # Check exit code
 if [ $? -eq 0 ]; then

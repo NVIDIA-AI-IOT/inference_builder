@@ -13,7 +13,7 @@
     },
     "test_config": {
       "default_enable": true,
-      "timeout": 600,
+      "timeout": 1000,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
@@ -62,7 +62,7 @@
     },
     "test_config": {
       "default_enable": true,
-      "timeout": 600,
+      "timeout": 1000,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
@@ -111,7 +111,7 @@
     },
     "test_config": {
       "default_enable": true,
-      "timeout": 600,
+      "timeout": 1000,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",

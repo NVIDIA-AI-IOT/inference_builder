@@ -1,0 +1,283 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/NVIDIA-AI-IOT/inference_builder/main/schemas/config.schema.json",
+  "title": "Inference Builder Configuration",
+  "description": "Schema for NVIDIA Inference Builder configuration files",
+  "type": "object",
+  "required": ["name", "model_repo", "models"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Unique project name. Used as the directory name for generated code and as the package name when bundling artifacts.",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+    },
+    "model_repo": {
+      "type": "string",
+      "description": "Root path to the directory containing the model files"
+    },
+    "input": {
+      "type": "array",
+      "description": "Top level inference input specification. Required when pipeline includes multiple models or when inputs use custom types requiring preprocessing.",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/tensorSpec"
+      }
+    },
+    "output": {
+      "type": "array",
+      "description": "Top level inference output specification. Required when pipeline includes multiple models or when outputs use custom types requiring postprocessing.",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/tensorSpec"
+      }
+    },
+    "server": {
+      "$ref": "#/definitions/serverConfig",
+      "description": "Server configuration mapping endpoints to their implementation templates."
+    },
+    "models": {
+      "type": "array",
+      "description": "List of model specifications for inference",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/modelSpec"
+      }
+    },
+    "routes": {
+      "type": "object",
+      "description": "Data-flow map between top-level inputs, models, and top-level outputs.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "postprocessors": {
+      "type": "array",
+      "description": "Top-level postprocessors. Required when pipeline includes multiple models and outputs need to be consolidated.",
+      "items": {
+        "$ref": "#/definitions/processor"
+      }
+    }
+  },
+  "definitions": {
+    "tensorSpec": {
+      "type": "object",
+      "required": ["name", "data_type", "dims"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the tensor"
+        },
+        "data_type": {
+          "type": "string",
+          "description": "Data type of the tensor",
+          "enum": [
+            "TYPE_BOOL",
+            "TYPE_UINT8",
+            "TYPE_UINT16",
+            "TYPE_UINT32",
+            "TYPE_UINT64",
+            "TYPE_INT8",
+            "TYPE_INT16",
+            "TYPE_INT32",
+            "TYPE_INT64",
+            "TYPE_FP16",
+            "TYPE_FP32",
+            "TYPE_FP64",
+            "TYPE_STRING",
+            "TYPE_CUSTOM_IMAGE_BASE64",
+            "TYPE_CUSTOM_IMAGE_ASSETS",
+            "TYPE_CUSTOM_VIDEO_ASSETS",
+            "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS",
+            "TYPE_CUSTOM_BINARY_BASE64",
+            "TYPE_CUSTOM_BINARY_URLS",
+            "TYPE_CUSTOM_VLM_INPUT",
+            "TYPE_CUSTOM_OBJECT",
+            "TYPE_CUSTOM_DS_IMAGE",
+            "TYPE_CUSTOM_DS_METADATA",
+            "TYPE_CUSTOM_DS_MIME",
+            "TYPE_CUSTOM_DS_SOURCE_CONFIG"
+          ]
+        },
+        "dims": {
+          "type": "array",
+          "description": "Dimensions of the tensor (-1 for dynamic dimensions)",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1
+        },
+        "optional": {
+          "type": "boolean",
+          "description": "Whether this tensor is optional",
+          "default": false
+        }
+      }
+    },
+    "serverConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "responders": {
+          "type": "object",
+          "description": "Map of responder configurations. Keys must match available responder templates.",
+          "propertyNames": {
+            "enum": [
+              "infer",
+              "add_file",
+              "del_file",
+              "list_files",
+              "add_live_stream",
+              "del_live_stream",
+              "list_live_streams",
+              "healthy_ready"
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/responder"
+          }
+        }
+      }
+    },
+    "responder": {
+      "type": "object",
+      "required": ["operation"],
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "type": "string",
+          "description": "Name of the operation this responder handles, which is defined in the openapi specification."
+        },
+        "requests": {
+          "type": "object",
+          "description": "Request templates (Jinja2 templates) to map http request body to top-level inputs",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "responses": {
+          "type": "object",
+          "description": "Response templates (Jinja2 templates) to map top-level outputs to http response body",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "modelSpec": {
+      "type": "object",
+      "required": ["name", "backend", "input", "output"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Model name identifier for locating the model in the model repository. Must be unique within the project."
+        },
+        "backend": {
+          "type": "string",
+          "description": "Backend type for the model",
+          "enum": [
+            "dummy",
+            "vllm",
+            "triton/python",
+            "triton/tensorrt",
+            "triton/onnx",
+            "triton/pytorch",
+            "triton/tensorflow",
+            "tensorrtllm",
+            "tensorrtllm/pytorch",
+            "deepstream/nvinfer",
+            "deepstream/nvinferserver",
+            "polygraphy",
+            "pytorch"
+          ]
+        },
+        "max_batch_size": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "string",
+              "pattern": "^\\$[A-Z_]+\\|[0-9]+$",
+              "description": "Environment variable with default value (e.g., $MAX_BATCH_SIZE|1)"
+            }
+          ],
+          "description": "Maximum batch size for the model",
+          "default": 1
+        },
+        "input": {
+          "type": "array",
+          "description": "Model input specification",
+          "items": {
+            "$ref": "#/definitions/tensorSpec"
+          }
+        },
+        "output": {
+          "type": "array",
+          "description": "Model output specification",
+          "items": {
+            "$ref": "#/definitions/tensorSpec"
+          }
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Backend-specific parameters",
+          "additionalProperties": true
+        },
+        "preprocessors": {
+          "type": "array",
+          "description": "Preprocessors for this model",
+          "items": {
+            "$ref": "#/definitions/processor"
+          }
+        },
+        "postprocessors": {
+          "type": "array",
+          "description": "Postprocessors for this model",
+          "items": {
+            "$ref": "#/definitions/processor"
+          }
+        }
+      }
+    },
+    "processor": {
+      "type": "object",
+      "required": ["kind", "name", "input", "output"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Type of processor",
+          "enum": ["custom", "auto"]
+        },
+        "name": {
+          "type": "string",
+          "description": "Name/identifier of the processor"
+        },
+        "input": {
+          "type": "array",
+          "description": "Input tensor names",
+          "items": {
+            "type": "string"
+          }
+        },
+        "output": {
+          "type": "array",
+          "description": "Output tensor names",
+          "items": {
+            "type": "string"
+          }
+        },
+        "config": {
+          "type": "object",
+          "description": "Processor-specific configuration",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}
+

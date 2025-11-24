@@ -61,17 +61,20 @@ Commands:
 Options:
     --no-cleanup           Don't cleanup Docker images after testing
     --output FILE          Save test report to specified file
-    --config FILE          Use custom configuration file (required for custom)
+    -c, --config FILE      Use custom configuration file (required for custom)
     --log-dir DIR          Directory to save container logs (default: logs)
-    -c, --test-case NAME   Run only test cases matching this name (partial match). Use '*' for all.
+    -t, --test-case NAME   Run only test cases matching this name (partial match). Use '*' for all.
+    --gpus DEVICES         GPU devices to use (default: 'all'). Examples: 'all', 'device=0', 'device=0,1'
 
 Examples:
     $0 standard
-    $0 custom --config my_config.json --output results.json
+    $0 custom -c my_config.json --output results.json
     $0 standard --no-cleanup --output full_results.json --log-dir test_logs
-    $0 standard -c "Frame Sampling"
-    $0 standard -c "*"
+    $0 standard -t "Frame Sampling"
+    $0 standard -t "*"
     $0 standard --test-case "FastAPI"
+    $0 standard --gpus "device=0"
+    $0 standard --gpus "device=0,1" -t "*"
 
 EOF
 }
@@ -124,6 +127,10 @@ run_full_test() {
         args+=("--test-case" "$TEST_CASE")
     fi
 
+    if [ -n "$GPUS" ]; then
+        args+=("--gpus" "$GPUS")
+    fi
+
     python3 "$TEST_SCRIPT" "${args[@]}"
 }
 
@@ -155,6 +162,10 @@ run_custom_test() {
         args+=("--test-case" "$TEST_CASE")
     fi
 
+    if [ -n "$GPUS" ]; then
+        args+=("--gpus" "$GPUS")
+    fi
+
     python3 "$TEST_SCRIPT" "${args[@]}"
 }
 
@@ -165,6 +176,7 @@ OUTPUT_FILE=""
 CONFIG_FILE=""
 LOG_DIR="logs"
 TEST_CASE=""
+GPUS="all"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -180,7 +192,7 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_FILE="$2"
             shift 2
             ;;
-        --config)
+        -c|--config)
             CONFIG_FILE="$2"
             shift 2
             ;;
@@ -188,8 +200,12 @@ while [[ $# -gt 0 ]]; do
             LOG_DIR="$2"
             shift 2
             ;;
-        -c|--test-case)
+        -t|--test-case)
             TEST_CASE="$2"
+            shift 2
+            ;;
+        --gpus)
+            GPUS="$2"
             shift 2
             ;;
         *)

@@ -1,0 +1,192 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/NVIDIA-AI-IOT/inference_builder/main/schemas/common/preprocessors.schema.json",
+  "title": "Preprocessor Configurations",
+  "description": "Schema for various preprocessor configurations",
+  "type": "object",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/imagePreprocessor"
+    },
+    {
+      "$ref": "#/definitions/tokenizerPreprocessor"
+    },
+    {
+      "$ref": "#/definitions/vlmLoaderPreprocessor"
+    },
+    {
+      "$ref": "#/definitions/customPreprocessor"
+    }
+  ],
+  "definitions": {
+    "basePreprocessor": {
+      "type": "object",
+      "required": ["kind", "name", "input", "output"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["custom", "builtin"]
+        },
+        "name": {
+          "type": "string"
+        },
+        "input": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "output": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "imagePreprocessor": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/basePreprocessor"
+        },
+        {
+          "properties": {
+            "name": {
+              "enum": [
+                "changenet-normalizer",
+                "nvclip-vision-preprocessor",
+                "dummy-preprocessor"
+              ]
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "network_size": {
+                  "type": "array",
+                  "description": "Network input size [height, width] or [channels, height, width]",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "minItems": 2,
+                  "maxItems": 3
+                },
+                "mean": {
+                  "type": "array",
+                  "description": "Mean values for normalization",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                "std": {
+                  "type": "array",
+                  "description": "Standard deviation values for normalization",
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tokenizerPreprocessor": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/basePreprocessor"
+        },
+        {
+          "properties": {
+            "name": {
+              "enum": [
+                "openclip-tokenizer",
+                "dummy-tokenizer"
+              ]
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "max_length": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Maximum token length"
+                },
+                "truncation": {
+                  "type": "boolean",
+                  "description": "Enable truncation"
+                },
+                "padding": {
+                  "type": "boolean",
+                  "description": "Enable padding"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "vlmLoaderPreprocessor": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/basePreprocessor"
+        },
+        {
+          "properties": {
+            "name": {
+              "enum": [
+                "qwen-vl-loader",
+                "qwen-vl-image-loader",
+                "qwen-vl-video-loader"
+              ]
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "num_frames": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Number of frames to extract from video (for video loader)"
+                },
+                "fps": {
+                  "type": "number",
+                  "minimum": 1,
+                  "description": "Frames per second for video extraction"
+                },
+                "max_pixels": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Maximum number of pixels"
+                },
+                "min_pixels": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Minimum number of pixels"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "customPreprocessor": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/basePreprocessor"
+        },
+        {
+          "properties": {
+            "config": {
+              "type": "object",
+              "description": "Custom configuration for the preprocessor",
+              "additionalProperties": true
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
