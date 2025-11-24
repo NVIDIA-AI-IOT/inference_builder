@@ -31,6 +31,7 @@ COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.txt /opt/nvidia/dee
 COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/README* /opt/nvidia/deepstream/deepstream-8.0/
 COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.pdf /opt/nvidia/deepstream/deepstream-8.0/
 COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/service-maker /opt/nvidia/deepstream/deepstream-8.0/service-maker
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/samples/streams/* /opt/nvidia/deepstream/deepstream-8.0/samples/streams/
 
 RUN /opt/nvidia/deepstream/deepstream-8.0/install.sh
 RUN ln -sf deepstream-8.0 /opt/nvidia/deepstream/deepstream || true

@@ -75,6 +75,7 @@ models:
       - nvdsinfer_config.yaml
     preprocess_config_path:
       - nvdspreprocess_config.yaml
+    inference_timeout: "$INFERENCE_TIMEOUT|5"
   preprocessors:
     - kind: "custom"
       name: "gdino-tokenizer"
@@ -87,6 +88,6 @@ models:
       output: ["output"]
       config:
         infer_config_path: /workspace/models/gdino/nvdsinfer_config.yaml
-  inference_timeout: "$INFERENCE_TIMEOUT|5"
+
 
 

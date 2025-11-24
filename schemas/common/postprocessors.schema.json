@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/NVIDIA-AI-IOT/inference_builder/main/schemas/common/postprocessors.schema.json",
+  "title": "Postprocessor Configurations",
+  "description": "Schema for various postprocessor configurations",
+  "type": "object",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/maskingPostprocessor"
+    },
+    {
+      "$ref": "#/definitions/embeddingPostprocessor"
+    },
+    {
+      "$ref": "#/definitions/customPostprocessor"
+    }
+  ],
+  "definitions": {
+    "basePostprocessor": {
+      "type": "object",
+      "required": ["kind", "name", "input", "output"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["custom", "builtin"]
+        },
+        "name": {
+          "type": "string"
+        },
+        "input": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "output": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "maskingPostprocessor": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/basePostprocessor"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "changenet-masking"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "network_size": {
+                  "type": "array",
+                  "description": "Network output size [height, width]",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "n_class": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Number of classes"
+                },
+                "threshold": {
+                  "type": "number",
+                  "minimum": 0.0,
+                  "maximum": 1.0,
+                  "description": "Confidence threshold"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "embeddingPostprocessor": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/basePostprocessor"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "nvclip-postprocessor"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "normalize": {
+                  "type": "boolean",
+                  "description": "Normalize embeddings"
+                },
+                "embedding_dim": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Embedding dimension"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "customPostprocessor": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/basePostprocessor"
+        },
+        {
+          "properties": {
+            "config": {
+              "type": "object",
+              "description": "Custom configuration for the postprocessor",
+              "additionalProperties": true
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+

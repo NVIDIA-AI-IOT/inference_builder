@@ -107,7 +107,7 @@ test:standard:
     - echo "Running standard test suite..."
     - cd builder/tests
     - chmod +x run_tests.sh
-    - ./run_tests.sh standard -c "*" --output "$TEST_REPORT_FILE" --log-dir "$TEST_LOG_DIR"
+    - ./run_tests.sh standard -t "*" --output "$TEST_REPORT_FILE" --log-dir "$TEST_LOG_DIR"
     - echo "Tests completed"
   after_script:
     - echo "Cleaning up Docker images..."
@@ -159,6 +159,12 @@ test:report:
     - job: test:ds_app
       artifacts: true
       optional: true
+    - job: test:vllm
+      artifacts: true
+      optional: true
+    - job: test:qwen
+      artifacts: true
+      optional: true
     - job: test:tao_cv
       artifacts: true
       optional: true
@@ -171,6 +177,10 @@ test:report:
         REPORT_PATH="builder/tests/$TEST_REPORT_FILE"
       elif [ -f "builder/tests/ds_app_report.json" ]; then
         REPORT_PATH="builder/tests/ds_app_report.json"
+      elif [ -f "builder/tests/vllm_report.json" ]; then
+        REPORT_PATH="builder/tests/vllm_report.json"
+      elif [ -f "builder/tests/qwen_report.json" ]; then
+        REPORT_PATH="builder/tests/qwen_report.json"
       elif [ -f "builder/tests/tao_cv_report.json" ]; then
         REPORT_PATH="builder/tests/tao_cv_report.json"
       elif [ -f "builder/tests/quick_test_report.json" ]; then
@@ -220,6 +230,10 @@ test:report:
       - builder/tests/quick_logs/
       - builder/tests/ds_app_report.json
       - builder/tests/ds_app_logs/
+      - builder/tests/vllm_report.json
+      - builder/tests/vllm_logs/
+      - builder/tests/qwen_report.json
+      - builder/tests/qwen_logs/
       - builder/tests/tao_cv_report.json
       - builder/tests/tao_cv_logs/
     when: always
@@ -316,6 +330,142 @@ test:ds_app:
     paths:
       - builder/tests/ds_app_logs/
       - builder/tests/ds_app_report.json
+    when: always
+    expire_in: 1 week
+  timeout: 3h
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+  tags:
+    - os/linux
+    - type/docker
+    - gpu
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  allow_failure: true
+
+# ------------------------------
+# vLLM Test (automatic)
+# ------------------------------
+test:vllm:
+  stage: test
+  image: python:3.12-slim
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: unix:///var/run/docker.sock
+    DOCKER_BUILDKIT: "1"
+    NGC_CLI_VERSION: "3.50.0"
+    MODEL_REPO: "/tmp/model-repo"
+  before_script:
+    # Install build dependencies for Python packages
+    - apt-get update && apt-get install -y --no-install-recommends python3-dev python3-pip bash gcc g++ make cmake libssl-dev git git-lfs file net-tools
+    # Setup git-lfs
+    - git lfs install
+    # Setup Docker with BuildKit support
+    - *setup_docker_buildkit
+    # Setup NGC CLI
+    - *setup_ngc_cli
+    # Setup Python dependencies
+    - python3 --version
+    - pip3 install --upgrade pip --break-system-packages || pip3 install --upgrade pip
+    - |-
+      if [ -f requirements.txt ]; then
+        pip install -r <(grep -v '^opencv-python' requirements.txt) --break-system-packages || pip install -r requirements.txt
+      else
+        echo "No requirements.txt found, skipping"
+      fi
+    # Create model repository directory
+    - mkdir -p "$MODEL_REPO" && chmod 777 "$MODEL_REPO"
+  script:
+    - echo "Running vLLM tests with automatic model download..."
+    - cd builder/tests
+    - export PATH="/opt/ngc-cli:$PATH"
+    - chmod +x run_tests.sh
+    - ./run_tests.sh custom --config ../samples/vllm/test_config.json --log-dir vllm_logs --output vllm_report.json
+    - echo "vLLM tests completed"
+  after_script:
+    - echo "Cleaning up Docker images..."
+    - docker images | grep test-inference_builder | awk '{print $3}' | xargs -r docker rmi -f || true
+    - echo "Cleaning up downloaded models..."
+    - rm -rf /tmp/model-repo || true
+    - echo "Cleanup completed"
+  artifacts:
+    name: "vllm-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - builder/tests/vllm_logs/
+      - builder/tests/vllm_report.json
+    when: always
+    expire_in: 1 week
+  timeout: 3h
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+  tags:
+    - os/linux
+    - type/docker
+    - gpu
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  allow_failure: true
+
+# ------------------------------
+# Qwen Test (automatic)
+# ------------------------------
+test:qwen:
+  stage: test
+  image: python:3.12-slim
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: unix:///var/run/docker.sock
+    DOCKER_BUILDKIT: "1"
+    NGC_CLI_VERSION: "3.50.0"
+    MODEL_REPO: "/tmp/model-repo"
+  before_script:
+    # Install build dependencies for Python packages
+    - apt-get update && apt-get install -y --no-install-recommends python3-dev python3-pip bash gcc g++ make cmake libssl-dev git git-lfs file net-tools
+    # Setup git-lfs
+    - git lfs install
+    # Setup Docker with BuildKit support
+    - *setup_docker_buildkit
+    # Setup NGC CLI
+    - *setup_ngc_cli
+    # Setup Python dependencies
+    - python3 --version
+    - pip3 install --upgrade pip --break-system-packages || pip3 install --upgrade pip
+    - |-
+      if [ -f requirements.txt ]; then
+        pip install -r <(grep -v '^opencv-python' requirements.txt) --break-system-packages || pip install -r requirements.txt
+      else
+        echo "No requirements.txt found, skipping"
+      fi
+    # Create model repository directory
+    - mkdir -p "$MODEL_REPO"
+  script:
+    - echo "Running Qwen tests with automatic model download..."
+    - cd builder/tests
+    - export PATH="/opt/ngc-cli:$PATH"
+    - chmod +x run_tests.sh
+    - ./run_tests.sh custom --config ../samples/qwen/test_config.json --log-dir qwen_logs --output qwen_report.json
+    - echo "Qwen tests completed"
+  after_script:
+    - echo "Cleaning up Docker images..."
+    - docker images | grep test-inference_builder | awk '{print $3}' | xargs -r docker rmi -f || true
+    - echo "Cleaning up downloaded models..."
+    - rm -rf /tmp/model-repo || true
+    - echo "Cleanup completed"
+  artifacts:
+    name: "qwen-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - builder/tests/qwen_logs/
+      - builder/tests/qwen_report.json
     when: always
     expire_in: 1 week
   timeout: 3h

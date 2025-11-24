@@ -21,6 +21,18 @@ input:
   - name: "max_tokens"
     data_type: TYPE_INT32
     dims: [ 1 ]
+  - name: "temperature"
+    data_type: TYPE_FP32
+    dims: [1]
+    optional: true
+  - name: "top_p"
+    data_type: TYPE_FP32
+    dims: [1]
+    optional: true
+  - name: "top_k"
+    data_type: TYPE_INT32
+    dims: [1]
+    optional: true
 output:
   - name: "outputs"
     data_type: TYPE_CUSTOM_OBJECT
@@ -43,6 +55,15 @@ server:
             ]
             {% if 'max_tokens' in request %}
             , "max_tokens": {{ request.max_tokens }}
+            {% endif %}
+            {% if 'temperature' in request %}
+            , "temperature": {{ request.temperature }}
+            {% endif %}
+            {% if 'top_p' in request %}
+            , "top_p": {{ request.top_p }}
+            {% endif %}
+            {% if 'top_k' in request %}
+            , "top_k": {{ request.top_k }}
             {% endif %}
           }
       responses:
@@ -97,8 +118,11 @@ server:
               } {% if not loop.last %}, {% endif %} {% endfor %}
             ]
           }
+    healthy_ready:
+      operation: health_ready_v1_health_ready_get
+
 models:
-  - name: "Cosmos-Reason1-7B"
+  - name: "Cosmos"
     backend: "vllm"
     input:
       - name: "inputs"
@@ -107,6 +131,18 @@ models:
       - name: "max_tokens"
         data_type: TYPE_INT32
         dims: [ 1 ]
+      - name: "temperature"
+        data_type: TYPE_FP32
+        dims: [1]
+        optional: true
+      - name: "top_p"
+        data_type: TYPE_FP32
+        dims: [1]
+        optional: true
+      - name: "top_k"
+        data_type: TYPE_INT32
+        dims: [1]
+        optional: true
     output:
       - name: "outputs"
         data_type: TYPE_STRING
@@ -126,7 +162,7 @@ models:
 # The explicit routes are used to separate the data flow for video and image,
 # so that they can be processed by different hardware decoders
 routes: {
-  ':["images", "messages", "max_tokens"]': 'Cosmos-Reason1-7B',
-  ':["videos", "messages", "max_tokens"]': 'Cosmos-Reason1-7B',
-  'Cosmos-Reason1-7B:["outputs"]': ':'
+  ':["images", "messages", "max_tokens", "temperature", "top_p", "top_k"]': 'Cosmos',
+  ':["videos", "messages", "max_tokens", "temperature", "top_p", "top_k"]': 'Cosmos',
+  'Cosmos:["outputs"]': ':'
 }

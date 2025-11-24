@@ -33,16 +33,18 @@ options:
 
 Before using the tool, you must prepare a YAML configuration file to define the inference flow. If server integration is required, you also need to provide an OpenAPI specification that defines the server and update the configuration with server templates based on the OpenAPI specification.
 
+For comprehensive documentation on configuration schemas, including validation, IDE support, and detailed backend specifications, see [schemas/README.md](../schemas/README.md).
+
 The configuration file is a YAML file that defines the inference flow and server implementation. It contains the following sections:
 
 - **name**: The name of the inference pipeline, which will be also used as the name of the folder for saving the generated inference code or the name of the tarball if '-t' is specified.
 - **model_repo**: Specifies the path to the model repository from which the inference pipeline searches and loads the required model files. Each model has a separate folder for their files.
 - **models**: List of model definitions. A inference flow can incorporate multiple models, each might be implemented with different backends to achieve optimal performance.
-- **input**(optional): Defines the top-level inputs of the inference flow. This field is required only when the pipeline includes multiple models or when at least one input is a custom type—such as in cases that require standard preprocessing like video decoding before the input data is passed to the model.
-- **output**(optional): Defines the top-level outputs of the inference flow. This field is required only when the pipeline includes multiple models or when at least one output is custom type—such as in cases that require standard preprocessing like video encoding before the output data is passed out.
-- **server**(optional): Defines the endpoint templates for the server implementation. This field is not required if the server type is set to "serverless".
-- **routes**(optional): Defines the routing rules for the inference flow when multiple models are involved.
-- **postprocessors**(optional): Defines the top-level post-processors for the inference flow. This field is required only when the pipeline includes multiple models and the output of these models need to be consolidated.
+- **input** (optional): Defines the top-level inputs of the inference flow. This field is required only when the pipeline includes multiple models or when at least one input is a custom type—such as in cases that require standard preprocessing like video decoding before the input data is passed to the model.
+- **output** (optional): Defines the top-level outputs of the inference flow. This field is required only when the pipeline includes multiple models or when at least one output is custom type—such as in cases that require standard preprocessing like video encoding before the output data is passed out.
+- **server** (optional): Defines the endpoint templates for the server implementation. This field is not required if the server type is set to "serverless".
+- **routes** (optional): Defines the routing rules for the inference flow when multiple models are involved.
+- **postprocessors** (optional): Defines the top-level post-processors for the inference flow. This field is required only when the pipeline includes multiple models and the output of these models need to be consolidated.
 
 A configuration file can be as simple as the following example:
 
@@ -85,45 +87,21 @@ Breakdown of the configuration:
 
 ### Input and Output Definition
 
-Input and output definitions are required at the model level, and in some cases also at the top level of the pipeline. Each input and output definition typically includes the following sections:
+Input and output definitions are required at the model level, and in some cases also at the top level of the pipeline. Each definition specifies the name, data type, dimensions, and optional flags for tensors flowing through the pipeline.
 
-- **name**: a string representation to identify the data that passes through the input or output.
-- **data_type**: Expected type of the data. The type is in string format and is derived from [basic data types defined by Triton](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/user_guide/model_configuration.html#datatypes) with following extensions:
-  - TYPE_CUSTOM_IMAGE_BASE64: When used for an input, the data is treated as base64 encoded images and will be decoded into an image tensors by default. When used for an output, the image tensors are encoded into a base64 string.
-  - TYPE_CUSTOM_IMAGE_ASSETS: When used for an input, the data is treated as UUID strings that reference managed image assets. These assets will be automatically passed to the image decoder and converted into image tensors.
-  - TYPE_CUSTOM_VIDEO_ASSETS: When used as an input, the data is treated as UUID strings that reference managed video assets, along with parameters that control frame sampling. These assets are automatically decoded and evenly sampled into image tensors, which are then passed downstream frame by frame. The frame sampling parameters are provided as a query string in the format: ?key1=value1&key2=value2. Supported keys include:
-    - frames: Number of total frames to be extracted.
-    - start: Start timestamp in nanoseconds: 10*1e9 for 10 seconds.
-    - duration: Duration in nanoseconds: 10*1e9 for 10 seconds.
-  - TYPE_CUSTOM_VIDEO_CHUNK_ASSETS: similar to TYPE_CUSTOM_VIDEO_ASSETS, the data represents managed video assets and will be automatically decoded and sampled. The only difference is that all the frames will be packaged into a single list before being passed downstream.
-  - TYPE_BINARY_URLS: When used for input, the data will be converted to a list and treated as urls.
-  - TYPE_CUSTOM_DS_IMAGE: Encoded image specifically for inputs of Deepstream pipeline
-  - TYPE_CUSTOM_DS_MIME: Mime type used by Deepstream pipeline to determine the input media type
-  - TYPE_CUSTOM_DS_METADATA: Structured output data specifically for Deepstream pipeline
-- **dims**: The dimensions of the input or output in the form of a list. Each item in the list specifies the maximum length of the dimension and -1 means the dimension is dynamic.
-- **optional**(optional): Whether the input or output is optional. By default, it is false.
-- **force_cpu**(optional): Whether to force the input or output to be on CPU. By default, it is false.
+For complete documentation on input/output specifications, supported data types (including custom types like TYPE_CUSTOM_IMAGE_BASE64, TYPE_CUSTOM_VIDEO_ASSETS, etc.), and field descriptions, see the [Data Types section in schemas/README.md](../schemas/README.md#data-types).
 
 ### Model Definition
 
-The model definition is derived from the Triton model configuration and extended to fit all the other backend requirements:
+The model definition specifies the inference backend, input/output tensors, batch size, and optional preprocessors/postprocessors. The definition is derived from the Triton model configuration and extended to support various backends including DeepStream, TensorRT, TensorRT-LLM, vLLM, and others.
 
-- **name**: Specifies the model's name. The model files are expected to reside in the model repository under a folder matching this name.
-- **backend**: Defines the inference backend of the model. The definition is hierarchical and the backend type can be specified at multiple levels. e.g. `backend: deepstream/nvinfer` means the backend uses "nvinfer" from "deepstream"; and `backend: triton/python/tensorrtllm` means the backend uses Triton with python and tensorrtllm plugin. Supported backends include:
-  - deepstream: Deepstream backend, supporting "nvinfer" and "nvinferserver"
-  - triton: Triton backend, supporting "python" and all the other triton backends
-  - tensorrtllm/pytorch: TensorRT LLM backend with pytorch flow
-  - polygraphy: Tensorrt backend through polygraphy
-  - pytorch: Pytorch backend for models from Huggingface Transformers
-  - dummy: Dummy backend for dry-run test without a model
-- **max_batch_size**: The maximum batch size for inference with the model.
-- **input**: The input definition of the model.
-- **output**: The output definition of the model.
-- **parameters** (optional): The parameters of the model. This part is a custom section and is backend dependent.
-- **preprocessors** (optional): list of the preprocessors used by the model.
-- **postprocessors** (optional): list of the postprocessors used by the model.
+For complete documentation on model specifications, including:
+- Supported backend types and their hierarchical structure (e.g., `deepstream/nvinfer`, `triton/tensorrt`, `tensorrtllm/pytorch`, `vllm`)
+- Backend-specific parameters and configuration options
+- Input/output tensor definitions
+- Preprocessor and postprocessor specifications
 
-When triton is used as the backend, all the [standard triton model parameters](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/user_guide/model_configuration.html) are supported.
+See the [Backend-Specific Schemas section in schemas/README.md](../schemas/README.md#backend-specific-schemas).
 
 
 ### Custom Preprocessors and Postprocessors
@@ -131,11 +109,13 @@ When triton is used as the backend, all the [standard triton model parameters](h
 Custom preprocessors and postprocessors integrate user-defined Python code into the inference flow, offering a new paradigm for programming with neural network models.
 
 Both custom preprocessors and postprocessors are defined using the following specification:
-- **kind**: The kind of the processor: "custom" or "auto", only "custom" processors are supported in the current release.
-- **name**: The name of the processor. It must match the "name" defined in user implemented processor class.
-- **input**: Specifies the names of the processor’s inputs in order. This defines how tensors from the inference flow are passed to the processor.
-- **output**: Specifies the names of the processor’s output in order. This defines how the inference flow extracts the tensors from the processor.
-- **config**: Defines the processor’s configuration as a dictionary. The contents are implementation-specific.
+- **kind**: The kind of the processor: "custom" or "auto". Only "custom" processors are supported in the current release.
+- **name**: The name of the processor. It must match the "name" defined in the user-implemented processor class.
+- **input**: Specifies the names of the processor's inputs in order. This defines how tensors from the inference flow are passed to the processor.
+- **output**: Specifies the names of the processor's outputs in order. This defines how the inference flow extracts the tensors from the processor.
+- **config**: Defines the processor's configuration as a dictionary. The contents are implementation-specific.
+
+For a list of common preprocessors (image normalizers, tokenizers, VLM loaders) and postprocessors (masking, embedding processors) with their configurations, see the [Preprocessors and Postprocessors section in schemas/README.md](../schemas/README.md#preprocessors-and-postprocessors).
 
 #### Custom Preprocessor/Postprocessor Implementation Requirements
 
@@ -153,37 +133,15 @@ The server definition is required at the top level unless the server type is set
 - Format the inference outputs into the desired server response.
 
 The "responders" section allows users to map server implementations to operations defined in the OpenAPI specification. Each responder corresponds to a specific endpoint or operation.
-
-Below are the supported responder types:
-
-- infer: Performs the inference with the available models.
-- add_file: upload a new file to the server as an asset.
-- del_file: delete a file from the server.
-- list_files: list all the file assets in the server.
-- add_live_stream: add a live stream as an asset
-- del_live_stream: delete a live stream from the asset pool
-- list_live_streams: list all the live streams known by the server
+For detailed information about responders, operations, and examples, see the [Server Configuration section in schemas/README.md](../schemas/README.md#server-configuration).
 
 ### Routing
 
-The routes section is optional and typically used for more complex inference flows. It defines custom routing rules that control how data flows between different models in the pipeline.
+The routes section is optional and typically used for multi-model inference flows. It defines custom routing rules that control how data flows between different models in the pipeline.
 
-The routes definition is a map where each entry specifies a connection between an input and an output:
-- The key represents the source (input), and the value represents the destination (output).
-- Both the input and output are defined using the format: <model_name>:<input_or_output_list>
-- If the model name is omitted (e.g., :input_name), the input or output is assumed to be at the top level of the inference flow.
+The routes definition is a map where each entry specifies a connection between a source and destination:
+- Format: `<source_model>:<tensor_list> : <destination_model>:<tensor_list>`
+- If the model name is omitted (e.g., `:`), the tensors are at the top level of the inference flow.
+- Tensor lists are optional and specified as JSON arrays (e.g., `["tensor1", "tensor2"]`).
 
-Here is an example of route definition:
-
-```yaml
-routes:
-  ':["images"]': "visionenc",
-  'visionenc:["features"]': 'vila1.5-13b:',
-  'vila1.5-13b:["text"]': ':["summary"]'
-```
-
-This defines the routing logic for a multi-stage inference pipeline. The meaning of each route is as follows:
-
-- The top-level input named "images" is routed to the "visionenc" model and the tensors named "image" will be passed to "visionenc".
-- The output named "features" from the "visionenc" model is routed to the input of the "vila1.5-13b" model. Since no input name is specified for "vila1.5-13b", tensors with name "features" will be passed to it without renaming.
-- The output named "text" from the "vila1.5-13b" model is routed to the top-level output named "summary", which means tensors named "text" will be passed to top level after being renamed to "summary".
+For detailed examples and explanation of routing logic, see the [Routes section in schemas/README.md](../schemas/README.md#routes).

@@ -79,8 +79,11 @@ server:
               } {% if not loop.last %}, {% endif %} {% endfor %}
             ]
           }
+    healthy_ready:
+      operation: health_ready_v1_health_ready_get
+
 models:
-  - name: "Cosmos-Reason1-7B"
+  - name: "Cosmos"
     backend: "vllm"
     input:
       - name: "inputs"

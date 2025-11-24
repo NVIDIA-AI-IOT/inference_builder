@@ -7,13 +7,13 @@ This example demonstrates how to build an inference pipeline with Nvidia Deepstr
 The sample models including `Cosmos-Reason1-7B` and `Qwen3-VL-30B-A3B-Instruct` can all be downloaded from huggingface (Be sure to have git-lfs installed):
 
 ```bash
-git clone https://huggingface.co/nvidia/Cosmos-Reason1-7B ~/.cache/model-repo/Cosmos-Reason1-7B
+git clone https://huggingface.co/nvidia/Cosmos-Reason1-7B ~/.cache/model-repo/Cosmos
 ```
 
 or
 
 ```bash
-git clone https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct ~/.cache/model-repo/Qwen3-VL-30B-A3B-Instruct
+git clone https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct ~/.cache/model-repo/Qwen3-VL
 ```
 
 ## Generate the Inference Package
