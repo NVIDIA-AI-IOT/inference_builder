@@ -25,20 +25,34 @@
             self.logger.error(f"Request processing failed: {type(e).__name__}: {e}")
             return 400, str(e)
 
+        def get_error_response(err):
+            """Get structured error response for EnhancedError, or simple dict for Error."""
+            if isinstance(err, EnhancedError):
+                return err.to_dict(include_stack_trace=False)
+            return {"error": str(err)}
+
         try:
             if streaming:
-                # If streaming, yield results as they are processed
                 async def generate_stream():
                     async for result in self._inference.execute(in_data):
-                        response = self.process_response("infer", request, result)
-                        yield response
+                        if not result:
+                            if isinstance(result, Stop):
+                                return  # Normal termination
+                            self.logger.error(f"Inference error: {result}")
+                            yield get_error_response(result)
+                            return
+                        yield self.process_response("infer", request, result)
 
-                # Wrap the generator with StreamingResponse
                 return 200, StreamingResponse(generate_stream(), media_type="application/x-ndjson")
             else:
                 # If not streaming, process and return the last result
                 response = None
                 async for result in self._inference.execute(in_data):
+                    if not result:
+                        if isinstance(result, Stop):
+                            break  # Normal termination
+                        self.logger.error(f"Inference error: {result}")
+                        return 500, get_error_response(result)
                     response = self.process_response("infer", request, result)
                 return (200, response) if response else (500, "No results generated from inference")
         except Exception as e:

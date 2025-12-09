@@ -14,10 +14,10 @@
 # limitations under the License.
 
 
+import atexit
 import base64
 from concurrent.futures import ThreadPoolExecutor, Future
 import os
-import types
 import threading
 from queue import Queue, Empty, Full
 from abc import ABC, abstractmethod
@@ -38,6 +38,16 @@ from .asset_manager import AssetManager
 import time
 import asyncio
 import inspect
+from .errors import (
+    Error,
+    EnhancedError,
+    ErrorFactory,
+    ErrorCategory,
+    ErrorSeverity,
+    enable_global_error_collection,
+    get_global_error_collector
+)
+
 
 logger = get_logger(__name__)
 
@@ -60,7 +70,9 @@ py_datatype_mapping = {
     "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
     "TYPE_CUSTOM_BINARY_BASE64": str,
     "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": str,
-    "TYPE_CUSTOM_VIDEO_ASSETS": str
+    "TYPE_CUSTOM_VIDEO_ASSETS": str,
+    "TYPE_CUSTOM_IMAGE_ASSETS": str,
+    "TYPE_CUSTOM_IMAGE_BASE64": str
 }
 
 np_datatype_mapping = {
@@ -108,13 +120,6 @@ torch_datatype_mapping = {
 }
 
 @dataclass
-class Error:
-    message: str
-
-    def __bool__(self):
-        return False
-
-@dataclass
 class Stop:
     reason: str
 
@@ -147,10 +152,27 @@ class DataFlow:
                 config["optional"] if "optional" in config else False
                 for config in self._configs
             ])
-        self._future_consumer = None
         self._queue_consumer = None
 
-    def _process_custom_data(self, tensor: np.ndarray, data_type: str):
+    def _process_custom_data(self, tensor: np.ndarray, data_type: str) -> Union[List, np.ndarray, Queue, EnhancedError]:
+        """
+        Process custom data types that are not standard numpy types.
+
+        Args:
+            tensor: Input tensor data
+            data_type: The custom data type string (e.g., "TYPE_CUSTOM_BINARY_BASE64")
+
+        Returns:
+            Union[List, np.ndarray, Queue, EnhancedError]:
+                - List: For processed data like base64 decoded arrays
+                - np.ndarray: For tensor data
+                - Queue: For streaming data (in subclasses)
+                - EnhancedError: If processing fails (e.g., decoder not initialized)
+
+        Note:
+            Subclasses override this method to handle specific data types.
+            The return value is assigned to collected[o_name] in the put() method.
+        """
         processed = tensor
         if self._inbound:
             if data_type == "TYPE_CUSTOM_BINARY_URLS":
@@ -160,12 +182,29 @@ class DataFlow:
                 logger.debug(f"DataFlow _process_custom_data: {data_type}")
                 processed = []
                 for input in tensor:
-                    if isinstance(input, np.bytes_) or isinstance(input, bytes):
-                        input = input.decode()
-                    elif not isinstance(input, np.str_):
-                        logger.error(f"base64 binary must be bytes or string")
-                        continue
-                    processed.append(np.frombuffer(base64.b64decode(input), dtype=np.uint8))
+                    if not isinstance(input, np.str_):
+                        error = ErrorFactory.create(
+                            "ERR_DF_002",
+                            message=f"base64 binary must be bytes or string, got {type(input).__name__}",
+                            caller=self,
+                            input_data={"input_type": type(input).__name__},
+                            expected_data={"valid_types": ["bytes", "np.bytes_", "str", "np.str_"]}
+                        )
+                        error.log(logger, as_json=False)
+                        return error
+                    try:
+                        decoded = base64.b64decode(input)
+                    except Exception as e:
+                        error = ErrorFactory.create(
+                            "ERR_DF_002",
+                            message=f"Failed to decode base64 string: {e}",
+                            caller=self,
+                            input_data={"input": input},
+                            expected_data={"valid_encoding": "base64"}
+                        )
+                        error.log(logger, as_json=False)
+                        return error
+                    processed.append(np.frombuffer(decoded, dtype=np.uint8))
         return processed
 
     def _is_collected_valid(self, collected: Dict):
@@ -178,7 +217,6 @@ class DataFlow:
                 name = config["name"]
                 optional = "optional" in config and config["optional"]
                 if name not in collected and not optional:
-                    logger.error(f"{name} is not optional and not found from the dataflow output configs!")
                     return False
         return True
 
@@ -201,7 +239,7 @@ class DataFlow:
 
     def put(self, item: Union[Dict, Error, Stop]):
         if not item:
-            if self._future_consumer is None and self._queue_consumer is None:
+            if self._queue_consumer is None:
                 # pass Error or Stop to the downstream
                 self._queue.put(item, timeout=self._timeout)
             return
@@ -211,7 +249,17 @@ class DataFlow:
                 name = config["name"]
                 optional = "optional" in config and config["optional"]
                 if name not in item and not optional:
-                    logger.error(f"{name} is not optional and not found from the dataflow input configs!")
+                    error = ErrorFactory.create(
+                        "ERR_DF_001",
+                        message=f"{name} is not optional and not found from the dataflow input configs",
+                        caller=self,
+                        dataflow_names=self.in_names,
+                        tensor_names=[name],
+                        expected_data={"required_tensors": [c["name"] for c in self._configs if not c.get("optional", False)]},
+                        actual_data={"provided_tensors": list(item.keys())},
+                        related_config={"config": config, "all_configs": self._configs}
+                    )
+                    error.log(logger, as_json=False)
                     return
         # collect data and deposit it to the queue
         collected = {}
@@ -223,58 +271,50 @@ class DataFlow:
             if self._inbound or self._outbound:
                 config = self.get_config(i_name)
                 if config and not config["data_type"] in np_datatype_mapping and isinstance(tensor, np.ndarray):
-                    collected[o_name] = self._process_custom_data(tensor, config["data_type"])
+                    result = self._process_custom_data(tensor, config["data_type"])
+                    # Check if processing returned an error
+                    if isinstance(result, EnhancedError):
+                        self._queue.put(result)
+                        return
+                    collected[o_name] = result
                 else:
                     collected[o_name] = tensor
             else:
                 collected[o_name] = tensor
         # check output data integrity
         if not self._is_collected_valid(collected):
-            logger.warning(f"Invalid data collected from the dataflow: {self.in_names}, data: {collected}, ignored")
+            error = ErrorFactory.create(
+                "ERR_DF_007",
+                message=f"Invalid data collected from the dataflow: {self.in_names}",
+                caller=self,
+                severity=ErrorSeverity.WARNING,
+                dataflow_names=self.in_names,
+                actual_data={"collected_keys": list(collected.keys()) if collected else []}
+            )
+            error.log(logger, as_json=False)
+            self._queue.put(error)
             return
 
         #  deposit the collected data to the queue
-        generators = {}
         values = {}
-        futures = {}
         results_queues = {}
         for k, v in collected.items():
-            if isinstance(v, types.GeneratorType):
-                generators[k] = v
-            elif isinstance(v, Future):
-                futures[k] = v
-            elif isinstance(v, Queue):
+            if isinstance(v, Queue):
                 results_queues[k] = v
             else:
                 values[k] = v
-        if generators:
-            keys = list(generators.keys())
-            generators = list(generators.values())
-            for vs in zip(*generators):
-                result = dict(zip(keys, vs))
-                result.update(values)
-                self._queue.put(result, timeout=self._timeout)
-        elif futures:
-            if len(futures) > 1:
-                error_message = f"Multiple futures are not supported in one dataflow yet, got {len(futures)} futures"
-                logger.error(error_message)
-                self._queue.put(Error(error_message))
-                return
-            # Process futures in a separate thread while maintaining order
-            def on_future_result(result, user_data):
-                result_values = user_data[1]
-                result_values[user_data[0]] = result
-                self._queue.put(result_values, timeout=self._timeout)
-            if self._future_consumer is None:
-                self._future_consumer = FutureConsumer("dataflow_future_consumer", self._stop_event, on_future_result)
-            for k, future in futures.items():
-                collected.pop(k)
-                self._future_consumer.append_future(future, k, collected)
-        elif results_queues:
+
+        if results_queues:
             if len(results_queues) > 1:
-                error_message = f"Multiple result queues are not supported in one dataflow yet, got {len(results_queues)} queues"
-                logger.error(error_message)
-                self._queue.put(Error(error_message))
+                error = ErrorFactory.create(
+                    "ERR_DF_004",
+                    message=f"Multiple result queues are not supported in one dataflow yet, got {len(results_queues)} queues",
+                    caller=self,
+                    dataflow_names=self.in_names,
+                    actual_data={"n_queues": len(results_queues), "queue_keys": list(results_queues.keys())}
+                )
+                error.log(logger, as_json=False)
+                self._queue.put(error)
                 return
             q_key, q = next(iter(results_queues.items()))
             def on_result_queue_result(item, user_data):
@@ -316,7 +356,7 @@ class DataFlow:
 
 class VideoInputDataFlow(DataFlow):
     """A data flow for live stream data"""
-    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=None):
+    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=1.0):
         super().__init__(configs, tensor_names, True, False, timeout)
         self._video_tensor_type = key_tensor_type
         self._video_tensor_names = []
@@ -325,15 +365,22 @@ class VideoInputDataFlow(DataFlow):
             if config and config["data_type"] == key_tensor_type:
                 self._video_tensor_names.append(tensor_name[1])
 
-    def _process_custom_data(self, tensor: np.ndarray, data_type: str):
-        logger.debug(f"LiveStreamDataFlow._process_custom_data: {data_type}")
+    def _process_custom_data(self, tensor: np.ndarray, data_type: str) -> Union[List, np.ndarray, EnhancedError]:
+        """
+        Process custom video data types.
+
+        Returns:
+            Union[List, np.ndarray, EnhancedError]:
+                - List: Frames extracted from video assets
+                - np.ndarray: Fallback to parent processing
+                - EnhancedError: If asset not found or processing fails
+        """
         if data_type == self._video_tensor_type:
-            return self._process_live_stream(tensor)
+            return self._process_video_assets(tensor)
         else:
             return super()._process_custom_data(tensor, data_type)
 
-    def _process_live_stream(self, assets: np.ndarray):
-        logger.debug(f"LiveStreamDataFlow._process_live_stream: {assets}")
+    def _process_video_assets(self, assets: np.ndarray):
         media_chunks = []
         results = []
         asset_list = []
@@ -355,8 +402,23 @@ class VideoInputDataFlow(DataFlow):
                     interval=interval
                 ))
             else:
-                logger.error(f"Asset not found: {asset_id}")
-                return results
+                error = ErrorFactory.create(
+                    "ERR_DF_003",
+                    message=f"Asset not found: {asset_id}",
+                    caller=self,
+                    input_data={
+                        "asset_id": asset_id,
+                        "asset_string": a,
+                        "params": params
+                    },
+                    metadata={
+                        "n_frames": params.get("frames"),
+                        "start": params.get("start"),
+                        "duration": params.get("duration")
+                    }
+                )
+                error.log(logger, as_json=False)
+                return error
         with MediaExtractor(media_chunks, n_thread=1) as media_extractor:
             qs = media_extractor()
             for q in qs:
@@ -387,7 +449,7 @@ class VideoInputDataFlow(DataFlow):
 
 class VideoFrameSamplingDataFlow(DataFlow):
     """A data flow for video frame sampling"""
-    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=None):
+    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=1.0):
         super().__init__(configs, tensor_names, True, False, timeout)
         n_codec_instances = int(os.getenv("N_CODEC_INSTANCES", 1))
         self._media_extractor = MediaExtractor(chunks=[], n_thread=n_codec_instances) # TODO: make it configurable
@@ -401,7 +463,17 @@ class VideoFrameSamplingDataFlow(DataFlow):
         self._frame_collector = ThreadPoolExecutor(max_workers=n_codec_instances)
         logger.info(f"VideoFrameSamplingDataFlow initialized")
 
-    def _process_custom_data(self, tensor: np.ndarray, data_type: str):
+    def _process_custom_data(self, tensor: np.ndarray, data_type: str) -> Union[Queue, List, np.ndarray, EnhancedError]:
+        """
+        Process custom video frame sampling data types.
+
+        Returns:
+            Union[Queue, List, np.ndarray, EnhancedError]:
+                - Queue: Results queue for frame sampling (streaming)
+                - List: Fallback to parent processing
+                - np.ndarray: Fallback to parent processing
+                - EnhancedError: If asset not found or processing fails
+        """
         logger.debug(f"VideoFrameSamplingDataFlow._process_custom_data: {data_type}")
         if data_type == self._video_tensor_type:
             return self._do_video_frame_sampling(tensor)
@@ -426,7 +498,17 @@ class VideoFrameSamplingDataFlow(DataFlow):
             try:
                 results_queue.put(total_frames, timeout=10.0)
             except Full:
-                logger.warning(f"Results queue is full, dropping the frames")
+                error = ErrorFactory.create(
+                    "ERR_DF_005",
+                    caller=self,
+                    severity=ErrorSeverity.WARNING,
+                    metadata={
+                        "n_frames": n_frames,
+                        "n_chunks": n_chunks,
+                        "queue_info": "Results queue is full"
+                    }
+                )
+                error.log(logger, as_json=False)
                 break
         results_queue.put(Stop("end"))
         for asset in assets:
@@ -436,42 +518,101 @@ class VideoFrameSamplingDataFlow(DataFlow):
 
     def _do_video_frame_sampling(self, assets: np.ndarray):
         qs = []
+        asset_list = []
         n_frames = None
         n_chunks = None
-        asset_list = []
+        start = None
+        duration = None
+        interval = None
         for asset in assets:
             asset_manager = AssetManager()
             asset_id, params = self.parse_asset_string(asset)
             asset = asset_manager.get_asset(asset_id)
             if asset:
-                asset.lock()
                 asset_list.append(asset)
                 n = int(params.get("frames", -1))
                 if n_frames is None:
                     n_frames = n
                 elif n_frames != n:
-                    logger.warning(f"frames mismatch on multiple assets: {n_frames} != {n}")
+                    error = ErrorFactory.create(
+                        "ERR_VIDEO_001",
+                        message=f"frames mismatch on multiple assets: {n_frames} != {n}",
+                        caller=self,
+                        severity=ErrorSeverity.WARNING,
+                        actual_data={"n_frames_first": n_frames, "n_frames_current": n}
+                    )
+                    error.log(logger, as_json=False)
+                    return error
                 n = int(params.get("chunks", 1))
                 if n_chunks is None:
                     n_chunks = n
                 elif n_chunks != n:
-                    logger.warning(f"chunks mismatch on multiple assets: {n_chunks} != {n}")
-
-                start = int(params.get("start", 0))
-                duration = int(params.get("duration", asset.duration))
-                interval = duration / (n_frames * n_chunks) if n_frames > 0  else 0
-                chunk = MediaChunk(
-                    asset.path,
-                    start_pts=start,
-                    duration=duration,
-                    interval=interval
-                )
-                qs.append(self._media_extractor.append(chunk))
+                    error = ErrorFactory.create(
+                        "ERR_VIDEO_001",
+                        message=f"chunks mismatch on multiple assets: {n_chunks} != {n}",
+                        caller=self,
+                        severity=ErrorSeverity.WARNING,
+                        actual_data={"n_chunks_first": n_chunks, "n_chunks_current": n}
+                    )
+                    error.log(logger, as_json=False)
+                    return error
+                n = int(params.get("start", 0))
+                if start is None:
+                    start = n
+                elif start != n:
+                    error = ErrorFactory.create(
+                        "ERR_VIDEO_001",
+                        message=f"start mismatch on multiple assets: {start} != {n}",
+                        caller=self,
+                        severity=ErrorSeverity.WARNING,
+                        actual_data={"start_first": start, "start_current": n}
+                    )
+                    error.log(logger, as_json=False)
+                    return error
+                n = int(params.get("duration", asset.duration))
+                if duration is None:
+                    duration = n
+                elif duration != n:
+                    error = ErrorFactory.create(
+                        "ERR_VIDEO_001",
+                        message=f"duration mismatch on multiple assets: {duration} != {n}",
+                        caller=self,
+                        severity=ErrorSeverity.WARNING,
+                        actual_data={"duration_first": duration, "duration_current": n}
+                    )
+                    error.log(logger, as_json=False)
+                    return error
             else:
-                logger.error(f"Asset not found: {asset_id}")
-                return []
+                error = ErrorFactory.create(
+                    "ERR_DF_003",
+                    message=f"Asset not found: {asset_id}",
+                    caller=self,
+                    input_data={
+                        "asset_id": asset_id,
+                        "asset_string": asset,
+                        "params": params
+                    },
+                    metadata={
+                        "n_frames": n_frames,
+                        "n_chunks": n_chunks,
+                        "start": params.get("start", 0),
+                        "duration": params.get("duration")
+                    }
+                )
+                error.log(logger, as_json=False)
+                return error
 
         results_queue = Queue()
+        for asset in asset_list:
+            asset.lock()
+            interval = duration / (n_frames * n_chunks) if n_frames > 0  else 0
+            chunk = MediaChunk(
+                asset.path,
+                start_pts=start,
+                duration=duration if duration else -1,
+                interval=interval if interval else 0
+            )
+            qs.append(self._media_extractor.append(chunk))
         self._frame_collector.submit(
             self._collect_frames_from_queue, asset_list, qs, n_frames, n_chunks, results_queue
         )
@@ -492,7 +633,7 @@ class VideoFrameSamplingDataFlow(DataFlow):
 
 class ImageInputDataFlow(DataFlow):
     """A data flow for image data"""
-    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str,timeout=None):
+    def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=1.0):
         super().__init__(configs, tensor_names, True, False, timeout)
         self._image_decoder = ImageDecoder(["JPEG", "PNG"])
         self._image_tensor_names = []
@@ -503,10 +644,31 @@ class ImageInputDataFlow(DataFlow):
         if not self._image_tensor_names:
             raise Exception("Image tensor name not found in the ImageInputDataFlow")
 
-    def _process_custom_data(self, images: np.ndarray, data_type: str):
+    def _process_custom_data(self, images: np.ndarray, data_type: str) -> Union[List, np.ndarray, EnhancedError]:
+        """
+        Process custom image data types.
+
+        Args:
+            images: Input image data (base64 or asset references)
+            data_type: The custom data type string
+
+        Returns:
+            Union[List, np.ndarray, EnhancedError]:
+                - List: Decoded images (list of tensors)
+                - np.ndarray: Fallback to parent processing
+                - EnhancedError: If decoder not initialized or processing fails
+
+        Note:
+            Returns EnhancedError (not raises) when decoder is not initialized,
+            allowing the error to be propagated through the pipeline.
+        """
         logger.debug(f"ImageInputDataFlow._process_custom_data: {data_type}")
         if self._image_decoder is None:
-            return Error("Image decoder is not sucessfully created")
+            return ErrorFactory.create(
+                "ERR_IMG_003",
+                caller=self,
+                severity=ErrorSeverity.CRITICAL
+            )
         if data_type == "TYPE_CUSTOM_IMAGE_BASE64":
             return self._process_base64_image(images)
         elif data_type == "TYPE_CUSTOM_IMAGE_ASSETS":
@@ -523,22 +685,45 @@ class ImageInputDataFlow(DataFlow):
     def _process_base64_image(self, images: np.ndarray):
         result = []
         for image in images:
-            if isinstance(image, np.bytes_) or isinstance(image, bytes):
-                image = image.decode()
-            elif not isinstance(image, np.str_):
-                logger.error(f"base64 image must be bytes or string: {type(image)}")
-                continue
-            data_prefix, data_payload = image.split(",")
-            mime_type = data_prefix.split(";")[0].split(":")[1]
-            format = None
-            if mime_type == "image/jpeg" or mime_type == "image/jpg":
-                format = "JPEG"
-            elif mime_type == "image/png":
-                format = "PNG"
-            else:
-                logger.error(f"Unsupported image format: {mime_type}")
-                continue
-            data_payload = base64.b64decode(data_payload)
+            if not isinstance(image, np.str_):
+                error = ErrorFactory.create(
+                    "ERR_IMG_002",
+                    message=f"base64 image must be bytes or string, got {type(image).__name__}",
+                    caller=self,
+                    input_data={"image_type": type(image).__name__},
+                    expected_data={"valid_types": ["bytes", "np.bytes_", "str", "np.str_"]}
+                )
+                error.log(logger, as_json=False)
+                return error
+            try:
+                data_prefix, data_payload = image.split(",")
+                mime_type = data_prefix.split(";")[0].split(":")[1]
+                format = None
+                if mime_type == "image/jpeg" or mime_type == "image/jpg":
+                    format = "JPEG"
+                elif mime_type == "image/png":
+                    format = "PNG"
+                else:
+                    error = ErrorFactory.create(
+                        "ERR_IMG_001",
+                        message=f"Unsupported image format: {mime_type}",
+                        caller=self,
+                        input_data={"mime_type": mime_type, "data_prefix": data_prefix},
+                        expected_data={"supported_formats": ["image/jpeg", "image/jpg", "image/png"]}
+                    )
+                    error.log(logger, as_json=False)
+                    return error
+                data_payload = base64.b64decode(data_payload)
+            except Exception:
+                error = ErrorFactory.create(
+                    "ERR_DF_002",
+                    message=f"Failed to decode base64 string for image data: {image}",
+                    caller=self,
+                    input_data={"input": input},
+                    expected_data={"valid_encoding": "base64"}
+                )
+                error.log(logger, as_json=False)
+                return error
             tensor = as_tensor(np.frombuffer(data_payload, dtype=np.uint8).copy(), format)
             result.append(self._image_decoder.decode(tensor, format))
         logger.debug(f"ImageInputDataFlow._process_base64_image generates {len(result)} tensors")
@@ -550,8 +735,14 @@ class ImageInputDataFlow(DataFlow):
             asset_manager = AssetManager()
             asset = asset_manager.get_asset(asset)
             if not asset:
-                logger.error(f"Asset not found: {asset}")
-                continue
+                error = ErrorFactory.create(
+                    "ERR_DF_003",
+                    message=f"Asset not found: {asset}",
+                    caller=self,
+                    input_data={"asset_id": asset}
+                )
+                error.log(logger, as_json=False)
+                return error
             asset.lock()
             format = None
             if asset.mime_type == "image/jpeg" or asset.mime_type == "image/jpg":
@@ -559,8 +750,16 @@ class ImageInputDataFlow(DataFlow):
             elif asset.mime_type == "image/png":
                 format = "PNG"
             else:
-                logger.error(f"Unsupported image format: {asset.mime_type}")
-                continue
+                error = ErrorFactory.create(
+                    "ERR_IMG_001",
+                    message=f"Unsupported image format: {asset.mime_type}",
+                    caller=self,
+                    input_data={"mime_type": asset.mime_type, "asset_path": asset.path},
+                    expected_data={"supported_formats": ["image/jpeg", "image/jpg", "image/png"]}
+                )
+                error.log(logger, as_json=False)
+                asset.unlock()
+                return error
             with open(asset.path, "rb") as f:
                 data = f.read()
                 tensor = as_tensor(np.frombuffer(data, dtype=np.uint8).copy(), format)
@@ -639,7 +838,15 @@ class AutoProcessor(Processor):
         import transformers
         self._processor = transformers.AutoProcessor.from_pretrained(model_home)
         if self._processor is None:
-            logger.error(f"Failed to load AutoProcessor from {model_home}")
+            error = ErrorFactory.create(
+                "ERR_PROC_002",
+                message=f"Failed to load AutoProcessor from {model_home}",
+                caller=self,
+                severity=ErrorSeverity.CRITICAL,
+                related_config={"model_home": model_home, "config": config}
+            )
+            error.log(logger, as_json=False)
+            raise RuntimeError(str(error))
 
     def __call__(self, *args):
         # TODO value parser should be configurable
@@ -650,13 +857,27 @@ class CustomProcessor(Processor):
     def __init__(self, config: Dict, model_home: str):
         super().__init__(config, model_home)
         if not hasattr(custom, "create_instance"):
-            logger.error("Custom processor module not valid!!")
-            raise ValueError("Custom processor module not valid!!")
+            error = ErrorFactory.create(
+                "ERR_PROC_003",
+                caller=self,
+                severity=ErrorSeverity.CRITICAL,
+                related_config={"config": config, "model_home": model_home}
+            )
+            error.log(logger, as_json=False)
+            raise RuntimeError(str(error))
         self._processor = custom.create_instance(self.name, self.config)
         if self._processor is not None:
             logger.info(f"Custom processor {self._processor.name} created")
         else:
-            logger.error(f"Failed to create processor {self.name}")
+            error = ErrorFactory.create(
+                "ERR_PROC_004",
+                message=f"Failed to create processor {self.name}",
+                caller=self,
+                severity=ErrorSeverity.CRITICAL,
+                related_config={"processor_name": self.name, "config": config}
+            )
+            error.log(logger, as_json=False)
+            raise RuntimeError(str(error))
 
     def __call__(self, *args):
         ret = self._processor(*args)
@@ -681,19 +902,20 @@ class SingleFlowCollector(Collector):
         return self._data_flow.get()
 
     def stop(self):
-        pass
+        return self._data_flow.stop()
 
 class AggregationFlowCollector(Collector):
     """AggregationFlowCollector is a collector aggregating multiple data flows"""
-    def __init__(self, data_flows: List[DataFlow]):
+    def __init__(self, data_flows: List[DataFlow], timeout=None):
         self._data_flows = data_flows
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._queue = Queue()
         self._stop_event = threading.Event()
+        self._timeout = timeout
         self._futures = self._executor.submit(self._collect)
 
     def collect(self):
-        return self._queue.get()
+        return self._queue.get(timeout=self._timeout)
 
     def _collect(self):
         logger.info(f"AggregationFlowCollector starts collecting data")
@@ -730,7 +952,7 @@ class AggregationFlowCollector(Collector):
 
 class MultiFlowCollector(Collector):
     """MultiFlowCollector is a collector for multiple data flows"""
-    def __init__(self, data_flows: List[DataFlow]):
+    def __init__(self, data_flows: List[DataFlow], timeout=None):
         self._data_flows = data_flows
         self._executor = ThreadPoolExecutor(max_workers=len(data_flows))
         self._queue = Queue()
@@ -738,9 +960,11 @@ class MultiFlowCollector(Collector):
         self._futures = [self._executor.submit(self._poll, i) for i in range(len(self._data_flows))]
         self._condition = threading.Condition()
         self._active_flow = -1
+        self._timeout = timeout
 
     def collect(self):
-        return self._queue.get()
+        data = self._queue.get(timeout=self._timeout)
+        return data
 
     def _poll(self, index: int):
         logger.info(f"Start polling data flow {self._data_flows[index].in_names}")
@@ -749,7 +973,7 @@ class MultiFlowCollector(Collector):
         while not self._stop_event.is_set():
             try:
                 data = data_flow.get()
-                is_stop = isinstance(data, Error) or isinstance(data, Stop)
+                is_stop = isinstance(data, Stop)
                 if is_stop and n_data == 0:
                     # empty data flow, skip it
                     logger.info(f"Empty data flow {data_flow.in_names}, skip it")
@@ -764,7 +988,7 @@ class MultiFlowCollector(Collector):
                         self._active_flow = index
                 self._queue.put(data)
                 with self._condition:
-                    if isinstance(data, Error) or isinstance(data, Stop):
+                    if isinstance(data, Stop):
                         logger.info(f"Data flow {data_flow.in_names} ended in: {data}")
                         self._active_flow = -1
                         n_data = 0
@@ -797,16 +1021,32 @@ class AsyncDispatcher:
         try:
             self._consumer_queues.put_nowait(async_queue)
         except Full:
-            error_message =(f"Comsumer queue reached the maximum size, stop accepting more async queues")
-            raise Exception(error_message)
+            error = ErrorFactory.create(
+                "ERR_ASYNC_003",
+                caller=self,
+                severity=ErrorSeverity.CRITICAL,
+                metadata={"queue_maxsize": self._consumer_queues.maxsize}
+            )
+            error.log(logger, as_json=False)
+            raise RuntimeError(str(error))
 
     def run(self):
         if self._collector is None:
-            logger.error("AsyncDispatcher failed to start: collector is None")
-            return
+            error = ErrorFactory.create(
+                "ERR_ASYNC_001",
+                caller=self,
+                severity=ErrorSeverity.CRITICAL
+            )
+            error.log(logger, as_json=False)
+            raise RuntimeError(str(error))
         if self._loop is None:
-            logger.error("AsyncDispatcher failed to start: loop is None")
-            return
+            error = ErrorFactory.create(
+                "ERR_ASYNC_002",
+                caller=self,
+                severity=ErrorSeverity.CRITICAL
+            )
+            error.log(logger, as_json=False)
+            raise RuntimeError(str(error))
         logger.info("AsyncDispatcher started")
         while not self._stop_event.is_set():
             try:
@@ -915,6 +1155,28 @@ class ModelOperator:
     def set_backend(self, backend: ModelBackend):
         self._backend = backend
 
+    def _pass_error_or_stop_downstream(self, data: Union[Error, Stop]):
+        """
+        Pass Error or Stop message to downstream dataflows.
+
+        Args:
+            data: Error or Stop object to pass downstream
+
+        Note:
+            If _future_consumer exists, the error/stop is wrapped in a Future
+            and sent through the consumer. Otherwise, it's sent directly to
+            output dataflows.
+        """
+        if self._future_consumer is None:
+            # pass the error or stop message downstream
+            for out in self._out:
+                logger.debug(f"Passing error or stop message to {out.in_names}")
+                out.put(data)
+        else:
+            f = Future()
+            f.set_result(data)
+            self._future_consumer.append_future(f)
+
     def run(self):
         logger.debug(f"Model operator for {self._model_name} started")
 
@@ -938,20 +1200,22 @@ class ModelOperator:
                         raise Exception("Invalid Processor")
         # backend loop
         self._collector = self._create_collector()
+        if not self._out:
+            error = ErrorFactory.create(
+                "ERR_MO_003",
+                caller=self,
+                model_name=self._model_name,
+                severity=ErrorSeverity.CRITICAL,
+                related_config={"model_config": self._model_config}
+            )
+            error.log(logger, as_json=False)
+            raise RuntimeError(str(error))
         while not self._stop_event.is_set():
             try:
                 # collect input data until Stop is received
                 data = self._collector.collect()
                 if isinstance(data, Stop) or isinstance(data, Error):
-                    if self._future_consumer is None:
-                        # pass the error or stop message downstream
-                        for out in self._out:
-                            logger.debug(f"Passing error or stop message to {out.in_names}")
-                            out.put(data)
-                    else:
-                        f = Future()
-                        f.set_result(data)
-                        self._future_consumer.append_future(f)
+                    self._pass_error_or_stop_downstream(data)
                     continue
                 logger.info(f"Input collected from {self._collector.__class__.__name__}: {data}")
 
@@ -976,7 +1240,21 @@ class ModelOperator:
                 processed, passthrough_tensors = self._preprocess(args if args else [kwargs])
                 in_names = [i["name"] for i in self._model_config["input"]]
                 if not processed:
-                    logger.error(f"Empty result from preprocess: {args} and {kwargs}")
+                    error = ErrorFactory.create(
+                        "ERR_MO_001",
+                        caller=self,
+                        model_name=self._model_name,
+                        input_data={
+                            "args": str(args)[:500] if args else "",
+                            "kwargs_keys": list(kwargs.keys()) if kwargs else []
+                        },
+                        related_config={
+                            "preprocessors": [p.name for p in self._preprocessors],
+                            "model_input": in_names
+                        }
+                    )
+                    error.log(logger, as_json=False)
+                    self._pass_error_or_stop_downstream(error)
                     continue
                 if args:
                     # explicitly batched data
@@ -985,7 +1263,18 @@ class ModelOperator:
                     # implicitly batched data
                     kwargs = processed[0]
                 else:
-                    logger.error(f"Invalid result from preprocess: {args} and {kwargs}")
+                    error = ErrorFactory.create(
+                        "ERR_MO_004",
+                        message="Invalid result from preprocess: both args and kwargs are empty",
+                        caller=self,
+                        model_name=self._model_name,
+                        input_data={
+                            "processed": str(processed)[:500] if processed else "",
+                            "passthrough_tensors_keys": list(passthrough_tensors[0].keys()) if passthrough_tensors else []
+                        }
+                    )
+                    error.log(logger, as_json=False)
+                    self._pass_error_or_stop_downstream(error)
                     continue
                 # execute inference backend and collect result
                 logger.debug(f"Model {self._model_name} invokes backend {self._backend.__class__.__name__} with {args if args else kwargs}")
@@ -993,6 +1282,7 @@ class ModelOperator:
                 if isinstance(rs, Future):
                     def on_future_result(result: Dict|Error|Stop, user_data: List):
                         if isinstance(result, Error) or isinstance(result, Stop):
+                            # Pass error/stop directly - already in FutureConsumer callback context
                             for out in self._out:
                                 out.put(result)
                             return
@@ -1007,8 +1297,7 @@ class ModelOperator:
                 elif inspect.isgenerator(rs):
                     self._on_inference_result(rs, passthrough_tensors)
                 elif isinstance(rs, Error) or isinstance(rs, Stop):
-                    for out in self._out:
-                        out.put(rs)
+                    self._pass_error_or_stop_downstream(rs)
                     continue
                 else:
                     error_msg = (
@@ -1019,9 +1308,30 @@ class ModelOperator:
             except Empty:
                 continue
             except Exception as e:
-                logger.exception(e)
-                for out in self._out:
-                    out.put(Error(str(e)))
+                error = ErrorFactory.from_exception(
+                    e,
+                    caller=self,
+                    category=ErrorCategory.BACKEND if "backend" in str(e).lower() else ErrorCategory.INTERNAL,
+                    model_name=self._model_name,
+                    dataflow_names=[o.in_names for o in self._out],
+                    input_data={
+                        "data_keys": list(data.keys()) if 'data' in locals() and isinstance(data, dict) else []
+                    },
+                    related_config={
+                        "model_config": {
+                            "name": self._model_config.get("name"),
+                            "input": [i["name"] for i in self._model_config.get("input", [])],
+                            "output": [o["name"] for o in self._model_config.get("output", [])]
+                        },
+                        "backend": self._backend.__class__.__name__ if self._backend else None,
+                        "n_preprocessors": len(self._preprocessors),
+                        "n_postprocessors": len(self._postprocessors)
+                    }
+                )
+                error.log(logger, as_json=False)
+
+                # Pass error downstream
+                self._pass_error_or_stop_downstream(error)
 
         logger.info(f"Model operator {self._model_name} stopped")
 
@@ -1034,27 +1344,13 @@ class ModelOperator:
         self._out.clear()
         self._preprocessors.clear()
         self._postprocessors.clear()
-        self._backend = None
-        self._stop_event = None
-        self._collector = None
-        self._future_consumer = None
-        logger.info(f"Model operator {self._model_name} stopped")
 
     def _on_inference_result(self, results: Generator, passthrough_tensors: Dict):
         for r in results:
             logger.debug(
-                    f"Model {self._model_name} generated result from backend"
-                    f"{self._backend.__class__.__name__}: {r}"
+                    "Model %s generated result from backend %s: %s",
+                    self._model_name, self._backend.__class__.__name__, r
                 )
-            if not self._out:
-                logger.error(
-                    f"No output data flow is bound to model {self._model_name},"
-                    "please check the route configuration"
-                )
-                continue
-            if isinstance(r, Error):
-                logger.error(f"Error from model {self._model_name}: {r}")
-                continue
             # iterate the result list and postprocess each of them
             for out in self._out:
                 output_data = {n : [] for n in out.in_names}
@@ -1067,11 +1363,17 @@ class ModelOperator:
                             result.update(passthrough_tensors[i])
                         result = self._postprocess(result)
                         if not all([n in result for n in out.in_names]):
-                            logger.error(
-                                f"Data received from model {self._model_name} is incomplete,"
-                                f"expected: {out.in_names}, received: {result.keys()}."
-                                "Post-processor missing?"
+                            error = ErrorFactory.create(
+                                "ERR_MO_002",
+                                message=f"Model output incomplete (batch item {i})",
+                                caller=self,
+                                model_name=self._model_name,
+                                dataflow_names=out.in_names,
+                                expected_data={"required_outputs": out.in_names},
+                                actual_data={"provided_outputs": list(result.keys())},
+                                related_config={"postprocessors": [p.name for p in self._postprocessors]}
                             )
+                            error.log(logger, as_json=False)
                             continue
                         # collect the result
                         for n, v in output_data.items():
@@ -1085,11 +1387,17 @@ class ModelOperator:
                         r.update(passthrough_tensors[0])
                     output_data = self._postprocess(r)
                     if not all([n in output_data for n in out.in_names]):
-                        logger.error(
-                            f"Data received from model {self._model_name} is incomplete,"
-                            f"expected: {out.in_names}, received: {output_data.keys()}."
-                            "Post-processor missing?"
+                        error = ErrorFactory.create(
+                            "ERR_MO_002",
+                            message="Model output incomplete",
+                            caller=self,
+                            model_name=self._model_name,
+                            dataflow_names=out.in_names,
+                            expected_data={"required_outputs": out.in_names},
+                            actual_data={"provided_outputs": list(output_data.keys())},
+                            related_config={"postprocessors": [p.name for p in self._postprocessors]}
                         )
+                        error.log(logger, as_json=False)
                         continue
                 logger.debug(f"ModelOperator of {self._model_name} deposits result: {output_data}")
                 out.put(output_data)
@@ -1108,18 +1416,28 @@ class ModelOperator:
                     logger.debug(f"{self._model_name} invokes preprocessor {preprocessor.name} with given input {input}")
                     output = preprocessor(*input)
                     logger.debug(f"{self._model_name} preprocessor {preprocessor.name} generated output {output}")
-                    if not isinstance(output, tuple):
-                        logger.error("Return value of a processor must be a tuple")
-                        continue
                     if len(output) != len(preprocessor.output):
-                        logger.warning(f"Number of preprocessing output doesn't match the configuration, expecting {len(preprocessor.output)}, while getting {len(output)}")
+                        error = ErrorFactory.create(
+                            "ERR_PROC_001",
+                            message=f"Number of preprocessing output doesn't match the configuration, expecting {len(preprocessor.output)}, while getting {len(output)}",
+                            caller=self,
+                            severity=ErrorSeverity.WARNING,
+                            model_name=self._model_name,
+                            expected_data={"output_count": len(preprocessor.output), "output_names": preprocessor.output},
+                            actual_data={"output_count": len(output)},
+                            related_config={"preprocessor": preprocessor.name}
+                        )
+                        error.log(logger, as_json=False)
                         continue
                     # update as processed
                     for key, value in zip(preprocessor.output, output):
                         if value is not None:
                             processed[key] = value
                 else:
-                    logger.warning(f"Pre-processor {preprocessor.name} skipped because of missing input tensors")
+                    logger.info(
+                        "Pre-processor %s skipped on mismatching input",
+                        preprocessor.name
+                    )
                 result.append(processed)
             # update outcome
             outcome = result
@@ -1152,14 +1470,27 @@ class ModelOperator:
         processed = {k: v for k, v in data.items()}
         for processor in self._postprocessors:
             if not all([i in data for i in processor.input]):
-                logger.warning(f"Post-processor {processor.name} skipped because of missing input tensors")
+                logger.info(
+                        "Pre-processor %s skipped on mismatching input",
+                        processor.name
+                    )
                 continue
             input = [processed.pop(i) for i in processor.input]
             logger.debug(f"Post-processor {processor.name} invoked with given input {input}")
             output = processor(*input)
             logger.debug(f"Post-processor generated output {output}")
             if len(output) != len(processor.output):
-                logger.warning(f"Number of postprocessing output doesn't match the configuration, expecting {len(processor.output)}, while getting {len(output)}")
+                error = ErrorFactory.create(
+                    "ERR_PROC_001",
+                    message=f"Number of postprocessing output doesn't match the configuration, expecting {len(processor.output)}, while getting {len(output)}",
+                    caller=self,
+                    severity=ErrorSeverity.WARNING,
+                    model_name=self._model_name,
+                    expected_data={"output_count": len(processor.output), "output_names": processor.output},
+                    actual_data={"output_count": len(output)},
+                    related_config={"postprocessor": processor.name}
+                )
+                error.log(logger, as_json=False)
                 continue
             # update as processed
             for key, value in zip(processor.output, output):
@@ -1175,14 +1506,19 @@ class ModelOperator:
             intersection = set.intersection(*outputs)
             if len(intersection) == 0 and not any([d.optional for d in self._in]):
                 logger.info(f"Aggregation data flow input detected, using aggregation flow collector on model {self._model_name}")
-                return AggregationFlowCollector(self._in)
+                return AggregationFlowCollector(self._in, timeout=1.0)
             else:
                 logger.info(f"Multi data flow input detected, using multi flow collector on model {self._model_name}")
-                return MultiFlowCollector(self._in)
+                return MultiFlowCollector(self._in, timeout=1.0)
 
 class InferenceBase:
     """The base model that drives the inference flow"""
     def initialize(self):
+        # Enable global error collection FIRST - before any error can occur
+        enable_global_error_collection(max_errors=5000)
+        atexit.register(InferenceBase._export_errors)
+        logger.info("Enhanced error collection enabled (with atexit export)")
+
         def parse_route(i1, i2) -> Route:
             m1 = ''
             m2 = ''
@@ -1191,7 +1527,16 @@ class InferenceBase:
             s = i1.split(':')
             t = i2.split(':')
             if len(s) > 2 or len(t) > 2:
-                logger.error("Invalid routes")
+                error = ErrorFactory.create(
+                    "ERR_ROUTE_001",
+                    message=f"Invalid route format: {i1} -> {i2}",
+                    component="InferenceBase",
+                    operation="initialize",
+                    severity=ErrorSeverity.CRITICAL,
+                    input_data={"source": i1, "target": i2}
+                )
+                error.log(logger, as_json=False)
+                raise RuntimeError(str(error))
             else:
                 m1 = s[0]
                 m2 = t[0]
@@ -1200,13 +1545,31 @@ class InferenceBase:
                     if isinstance(data, list):
                         d1 = data
                     else:
-                        logger.error("Invalid routes")
+                        error = ErrorFactory.create(
+                            "ERR_ROUTE_001",
+                            message="Invalid route: source data must be a list",
+                            component="InferenceBase",
+                            operation="initialize.parse_route",
+                            severity=ErrorSeverity.CRITICAL,
+                            input_data={"source_data": data}
+                        )
+                        error.log(logger, as_json=False)
+                        raise RuntimeError(str(error))
                 if len(t) == 2 and t[1]:
                     data = json.loads(t[1])
                     if isinstance(data, list):
                         d2 = data
                     else:
-                        logger.error("Invalid routes")
+                        error = ErrorFactory.create(
+                            "ERR_ROUTE_001",
+                            message="Invalid route: target data must be a list",
+                            component="InferenceBase",
+                            operation="initialize.parse_route",
+                            severity=ErrorSeverity.CRITICAL,
+                            input_data={"target_data": data}
+                        )
+                        error.log(logger, as_json=False)
+                        raise RuntimeError(str(error))
 
             return Route(Path(m1, m2), Path(d1, d2))
 
@@ -1220,8 +1583,15 @@ class InferenceBase:
         self._ready = False
 
         if not os.path.exists(self._model_repo):
-            logger.error(f"Model repository {self._model_repo} does not exist")
-            raise Exception(f"Model repository {self._model_repo} does not exist")
+            error = ErrorFactory.create(
+                "ERR_SYS_001",
+                message=f"Model repository {self._model_repo} does not exist",
+                caller=self,
+                severity=ErrorSeverity.CRITICAL,
+                related_config={"model_repo": self._model_repo}
+            )
+            error.log(logger, as_json=False)
+            raise RuntimeError(str(error))
 
         # set up the inference flow
         for model_config in global_config.models:
@@ -1278,15 +1648,31 @@ class InferenceBase:
                 elif route.model.target:
                     operator1 = next((o for o in self._operators if o.model_name == route.model.target), None)
                     if operator1 is None:
-                        logger.error(f"Model {route.model.target} in the routes not found")
-                        continue
+                        error = ErrorFactory.create(
+                            "ERR_ROUTE_002",
+                            message=f"Model {route.model.target} in the routes not found",
+                            caller=self,
+                            severity=ErrorSeverity.CRITICAL,
+                            input_data={"model_name": route.model.target},
+                            related_config={"available_models": [o.model_name for o in self._operators]}
+                        )
+                        error.log(logger, as_json=False)
+                        raise RuntimeError(str(error))
                     # both source and target model are specified.
                     if route.model.source:
                         # this is the model provides data
                         operator2 = next((o for o in self._operators if o.model_name == route.model.source), None)
                         if operator2 is None:
-                            logger.error(f"Model {route.model.source} in the routes not found")
-                            continue
+                            error = ErrorFactory.create(
+                                "ERR_ROUTE_002",
+                                message=f"Model {route.model.source} in the routes not found",
+                                caller=self,
+                                severity=ErrorSeverity.CRITICAL,
+                                input_data={"model_name": route.model.source},
+                                related_config={"available_models": [o.model_name for o in self._operators]}
+                            )
+                            error.log(logger, as_json=False)
+                            raise RuntimeError(str(error))
                         flow = None
                         if route.data.source and route.data.target:
                             tensor_names = [(i, o) for i, o in zip(route.data.source, route.data.target)]
@@ -1320,8 +1706,16 @@ class InferenceBase:
                     # this is the top level output
                     operator = next((o for o in self._operators if o.model_name == route.model.source), None)
                     if operator is None:
-                        logger.error(f"Model {route.model.source} in the routes not found")
-                        continue
+                        error = ErrorFactory.create(
+                            "ERR_ROUTE_002",
+                            message=f"Model {route.model.source} in the routes not found",
+                            caller=self,
+                            severity=ErrorSeverity.CRITICAL,
+                            input_data={"model_name": route.model.source},
+                            related_config={"available_models": [o.model_name for o in self._operators]}
+                        )
+                        error.log(logger, as_json=False)
+                        raise RuntimeError(str(error))
                     if route.data.target:
                         configs = [OmegaConf.to_container(c) for c in global_config.output if c.name in route.data.target]
                         self._outputs.append(operator.bind_output(configs, route.data.source))
@@ -1346,9 +1740,21 @@ class InferenceBase:
         else:
             logger.error("Unable to set up inference routes")
         if len(self._inputs) == 0 or len(self._outputs) == 0:
-            error = "Either input or output is empty, inference pipeline is not complete"
-            logger.error(error)
-            raise Exception(error)
+            error = ErrorFactory.create(
+                "ERR_SYS_002",
+                message="Either input or output is empty, inference pipeline is not complete",
+                caller=self,
+                severity=ErrorSeverity.CRITICAL,
+                actual_data={
+                    "n_inputs": len(self._inputs),
+                    "n_outputs": len(self._outputs)
+                },
+                related_config={
+                    "models": [o.model_name for o in self._operators]
+                }
+            )
+            error.log(logger, as_json=False)
+            raise RuntimeError(str(error))
         self._executor = ThreadPoolExecutor(max_workers=len(self._operators))
         self._future = None
 
@@ -1379,6 +1785,7 @@ class InferenceBase:
         # stop event for request lifecycle
         self._stop_event = threading.Event()
 
+
         # start the inference flow
         for operator in self._operators:
             self._submit(operator)
@@ -1403,10 +1810,62 @@ class InferenceBase:
         for operator in self._operators:
             operator.stop()
         self._executor.shutdown()
+
         logger.info("Inference pipeline is finalized")
+
+    @staticmethod
+    def _export_errors():
+        """Export collected errors to JSON file for test validation.
+
+        Uses ERROR_EXPORT_PATH env var to determine the full file path
+        (defaults to /tmp/inference_errors.json).
+        """
+        error_export_path = os.environ.get("ERROR_EXPORT_PATH", "/tmp/inference_errors.json")
+        try:
+            collector = get_global_error_collector()
+            if collector:
+                stats = collector.get_stats(include_recent=100)
+                if stats["total_errors"] > 0:
+                    collector.export_to_json(error_export_path, include_stack_traces=False)
+                    logger.info(f"Exported {stats['total_errors']} errors to {error_export_path}")
+                else:
+                    # Write empty stats file to indicate no errors
+                    with open(error_export_path, 'w') as f:
+                        json.dump({"total_errors": 0, "errors": []}, f)
+                    logger.info(f"No errors to export, wrote empty file to {error_export_path}")
+        except Exception as e:
+            logger.warning(f"Failed to export errors: {e}")
 
     def _create_backend(self, backend_spec: List[str], model_config: Dict, model_home: str) -> ModelBackend | None:
         raise NotImplementedError("Subclass must implement this method")
 
+    def _on_operator_done(self, future: Future, operator: ModelOperator):
+        """Callback when an operator thread completes. Handles exceptions by logging to error JSON."""
+        try:
+            future.result()  # This raises if the thread had an exception
+        except Exception as e:
+            error = ErrorFactory.from_exception(
+                e,
+                caller=self,
+                category=ErrorCategory.INTERNAL,
+                model_name=operator.model_name,
+                related_config={
+                    "model_config": {
+                        "name": operator.model_config.get("name"),
+                        "preprocessors": operator.model_config.get("preprocessors", []),
+                        "postprocessors": operator.model_config.get("postprocessors", [])
+                    }
+                }
+            )
+            error.log(logger, as_json=False)
+
+            logger.critical(f"Operator {operator.model_name} thread failed with exception: {e}")
+            logger.critical("Forcing application exit due to model thread failure")
+
+            # Export errors and force exit - no graceful shutdown for unrecoverable critical exception
+            InferenceBase._export_errors()
+            os._exit(1)
+
     def _submit(self, op: ModelOperator):
-        self._future = self._executor.submit(lambda: op.run())
+        future = self._executor.submit(lambda: op.run())
+        future.add_done_callback(lambda f: self._on_operator_done(f, op))

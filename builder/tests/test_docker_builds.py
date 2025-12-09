@@ -523,6 +523,17 @@ def validate_test_config(test_config: dict) -> Tuple[bool, str]:
         if any(char in endpoint for char in ['<', '>', '"', '{', '}', '|', '\\', '^', '`', ' ']):
             return False, f"Invalid characters in endpoint: {endpoint}"
 
+    # Validate expected_error for negative tests
+    if "expected_error" in test_config:
+        expected_error = test_config["expected_error"]
+        if not isinstance(expected_error, str):
+            return False, "expected_error must be a string"
+        if not expected_error:
+            return False, "expected_error cannot be empty"
+        # Basic validation - should be an error code pattern (e.g., ERR_ROUTE_001)
+        if len(expected_error) > 100:
+            return False, "expected_error is too long (max 100 characters)"
+
     return True, ""
 
 
@@ -1281,6 +1292,9 @@ class DockerBuildTester:
             # Use host network for serverless; use port mapping for non-serverless to avoid port conflicts
             cmd = ["docker", "run", "--gpus", gpus]
 
+            # Run as current user so files in mounted volumes are owned by host user
+            cmd.extend(["--user", f"{os.getuid()}:{os.getgid()}"])
+
             # Add environment variables if specified
             if "env" in test_config:
                 for key, value in test_config["env"].items():
@@ -1291,11 +1305,23 @@ class DockerBuildTester:
                         return False, error_msg, ""
                     cmd.extend(["-e", f"{key}={value}"])
 
+            # Get the test config directory for resolving relative paths
+            config_dir = Path(test_config.get("_config_dir", ".")).resolve()
+
+            # Automatically add ERROR_EXPORT_PATH for error file collection
+            # Use unique error file names for different test cases
+            error_export_dir = Path("/tmp/error")
+            error_export_dir.mkdir(parents=True, exist_ok=True)
+            error_filename = f"inference_errors_{test_id}_{int(time.time())}.json"
+            error_export_file = error_export_dir / error_filename
+            container_error_path = f"/tmp/error/{error_filename}"
+            cmd.extend(["-e", f"ERROR_EXPORT_PATH={container_error_path}"])
+            cmd.extend(["-v", f"{error_export_dir}:{error_export_dir}"])
+            logger.info(f"📄 Error export: {error_export_file} -> {container_error_path}")
+
             # Add volume mounts if specified
             if "volumes" in test_config:
                 logger.info(f"📁 Processing volumes: {test_config['volumes']}")
-                # Get the test config directory for resolving relative paths
-                config_dir = Path(test_config.get("_config_dir", ".")).resolve()
 
                 for host_path, container_path in test_config["volumes"].items():
                     # Double-check validation to prevent injection
@@ -1326,7 +1352,13 @@ class DockerBuildTester:
                     cmd.extend(["-v", volume_arg])
                     logger.info(f"📁 Adding volume mount: {volume_arg}")
             else:
-                logger.info("📁 No volumes specified in test config")
+                logger.info("📁 No additional volumes specified in test config")
+
+            # Give the container a name for logging/cleanup purposes
+            expected_error = test_config.get("expected_error")
+            container_name = f"test-{test_id}-{int(time.time())}"
+            cmd.extend(["--name", container_name])
+            logger.info(f"🏷️  Container name: {container_name}")
 
             # For FastAPI (or any non-serverless), run detached on host network (DinD friendly)
             if server_type != "serverless":
@@ -1356,73 +1388,31 @@ class DockerBuildTester:
             logger.info("🔍 Complete docker run command:")
             logger.info(f"   {' '.join(cmd)}")
 
-            # Check if error detection is enabled
-            error_detection_config = test_config.get("error_detection", {})
-            error_detection_enabled = error_detection_config.get("enabled", False)
-
             if server_type == "serverless":
-                if error_detection_enabled:
-                    # Capture output for error detection
-                    logger.info("🔍 Error detection enabled - capturing output for analysis")
-                    result = subprocess.run(
-                        cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=timeout  # Use configurable timeout
-                    )
-                    stdout_output = result.stdout
-                    stderr_output = result.stderr
+                # Run container and capture output
+                logger.info("🔍 Running container and capturing output...")
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout
+                )
+                stdout_output = result.stdout
+                stderr_output = result.stderr
+
+                # Clean up the container
+                subprocess.run(["docker", "rm", container_name], capture_output=True, text=True, timeout=10)
+
+                # Check if error export file was created
+                error_copy_failed = False
+                error_copy_msg = ""
+                if error_export_file.exists():
+                    file_size = error_export_file.stat().st_size
+                    logger.info(f"📄 Found error export file: {error_export_file} (size: {file_size} bytes)")
                 else:
-                    # Stream output to host stdout in real-time
-                    logger.info("📺 Error detection disabled - streaming output to host stdout")
-                    logger.info("=" * 80)
-                    logger.info(f"CONTAINER OUTPUT FOR: {image_name}")
-                    logger.info("=" * 80)
-
-                    # Run container and stream output to host stdout in real-time
-                    process = subprocess.Popen(
-                        cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,  # Redirect stderr to stdout
-                        text=True,
-                        bufsize=1,  # Line buffered
-                        universal_newlines=True
-                    )
-
-                    # Collect output while streaming to stdout
-                    stdout_output = ""
-                    try:
-                        while True:
-                            output = process.stdout.readline()
-                            if output == '' and process.poll() is not None:
-                                break
-                            if output:
-                                print(output, end='', flush=True)
-                                stdout_output += output
-
-                        # Wait for process to complete and get return code
-                        return_code = process.poll()
-                        stderr_output = ""
-
-                    except KeyboardInterrupt:
-                        process.terminate()
-                        process.wait()
-                        return_code = process.poll()
-                        stderr_output = ""
-                        logger.info("\n⚠️  Process interrupted by user")
-
-                    # Create result object for consistency
-                    class Result:
-                        def __init__(self, returncode, stdout, stderr):
-                            self.returncode = returncode
-                            self.stdout = stdout
-                            self.stderr = stderr
-
-                    result = Result(return_code, stdout_output, stderr_output)
-
-                    logger.info("=" * 80)
-                    logger.info(f"END CONTAINER OUTPUT FOR: {image_name}")
-                    logger.info("=" * 80)
+                    error_copy_failed = True
+                    error_copy_msg = f"Error export file not found: {error_export_file}"
+                    logger.warning(f"⚠️  {error_copy_msg}")
             else:
                 # FastAPI-like server flow: start container detached, poll readiness, run client, then stop and collect logs
                 logger.info("🚀 Starting server container in detached mode")
@@ -1663,6 +1653,17 @@ class DockerBuildTester:
                 if logs_proc.stderr:
                     server_logs += "\n=== STDERR ===\n" + logs_proc.stderr
 
+                # Check if error export file was created
+                error_copy_failed = False
+                error_copy_msg = ""
+                if error_export_file.exists():
+                    file_size = error_export_file.stat().st_size
+                    logger.info(f"📄 Found error export file: {error_export_file} (size: {file_size} bytes)")
+                else:
+                    error_copy_failed = True
+                    error_copy_msg = f"Error export file not found: {error_export_file}"
+                    logger.warning(f"⚠️  {error_copy_msg}")
+
                 # Now stop and remove container
                 subprocess.run(["docker", "stop", container_id], capture_output=True, text=True)
                 subprocess.run(["docker", "rm", container_id], capture_output=True, text=True)
@@ -1688,7 +1689,7 @@ class DockerBuildTester:
                 f.write(f"Command: {' '.join(cmd)}\n")
                 f.write(f"Return Code: {result.returncode}\n")
                 f.write(f"Timeout: {timeout} seconds\n")
-                f.write(f"Error Detection: {'Enabled' if error_detection_enabled else 'Disabled'}\n")
+                f.write("Error Detection: Enabled (via JSON export)\n")
                 f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write("\n=== STDOUT ===\n")
                 f.write(result.stdout)
@@ -1696,79 +1697,116 @@ class DockerBuildTester:
                 f.write(result.stderr)
                 f.write("\n=== END LOG ===\n")
 
-            # Check for ERROR patterns in the output only if error detection is enabled
-            if error_detection_enabled:
-                error_patterns = error_detection_config.get("patterns", [
-                    "ERROR",
-                    "Error",
-                    "error",
-                    "CRITICAL",
-                    "Critical",
-                    "critical",
-                    "FATAL",
-                    "Fatal",
-                    "fatal",
-                    "Exception:",
-                    "exception:",
-                    "Traceback",
-                    "traceback"
-                ])
-
-                has_errors = False
-                error_lines = []
-
-                # Check stdout for errors
-                for line in result.stdout.split('\n'):
-                    for pattern in error_patterns:
-                        if pattern in line:
-                            has_errors = True
-                            error_lines.append(f"STDOUT: {line.strip()}")
-                            break
-
-                # Check stderr for errors
-                for line in result.stderr.split('\n'):
-                    for pattern in error_patterns:
-                        if pattern in line:
-                            has_errors = True
-                            error_lines.append(f"STDERR: {line.strip()}")
-                            break
-
-                if result.returncode == 0 and not has_errors:
-                    logger.info(f"✅ Successfully tested image: {image_name}")
-                    logger.info(f"📄 Logs saved to: {log_file}")
-                    return True, result.stdout, str(log_file)
-                elif has_errors:
-                    error_msg = (
-                        f"Test failed due to ERROR logs detected in image: {image_name}"
-                    )
+            # Check for expected_error (negative test) using exported error JSON
+            expected_error = test_config.get("expected_error")
+            if expected_error:
+                # This is a negative test - fail immediately if error file not found
+                if error_copy_failed or error_export_file is None:
+                    error_msg = f"Negative test FAILED: Could not find error export file: {error_copy_msg}"
                     logger.error(f"❌ {error_msg}")
-                    logger.error("Error lines found:")
-                    for error_line in error_lines:
-                        logger.error(f"  {error_line}")
                     logger.info(f"📄 Logs saved to: {log_file}")
                     return False, error_msg, str(log_file)
+
+                # Try to read the exported error file
+                matched_error = None  # Will hold the error that matches expected_error exactly
+
+                if error_export_file.exists():
+                    try:
+                        with open(error_export_file, 'r') as f:
+                            error_data = json.load(f)
+
+                        total_errors = error_data.get("total_errors", 0)
+                        errors = error_data.get("errors", [])
+                        collected_codes = [err.get("error_code") for err in errors]
+
+                        # Search for EXACT match of expected error code
+                        for err in errors:
+                            if err.get("error_code") == expected_error:
+                                matched_error = err
+                                break
+
+                        if matched_error is not None:
+                            # EXACT match found - test passes
+                            logger.info(f"✅ Negative test PASSED: Error code '{expected_error}' matches exactly")
+                            logger.info(f"   Error message: {matched_error.get('message', 'N/A')[:200]}")
+                            logger.info(f"   Component: {matched_error.get('component', 'N/A')}")
+                            logger.info(f"   Operation: {matched_error.get('operation', 'N/A')}")
+                            logger.info(f"   Total errors collected: {total_errors}")
+                            logger.info(f"📄 Logs saved to: {log_file}")
+                            return True, result.stdout, str(log_file)
+                        else:
+                            # No exact match - test fails
+                            error_msg = f"Negative test FAILED: Expected error '{expected_error}' not found"
+                            logger.error(f"❌ {error_msg}")
+                            logger.error(f"   Collected error codes: {collected_codes}")
+                            logger.error(f"   Total errors: {total_errors}")
+                            logger.info(f"📄 Logs saved to: {log_file}")
+                            return False, error_msg, str(log_file)
+                    except json.JSONDecodeError as e:
+                        error_msg = f"Negative test FAILED: Failed to parse error export file: {e}"
+                        logger.error(f"❌ {error_msg}")
+                        logger.info(f"📄 Logs saved to: {log_file}")
+                        return False, error_msg, str(log_file)
+                    except Exception as e:
+                        error_msg = f"Negative test FAILED: Failed to read error export file: {e}"
+                        logger.error(f"❌ {error_msg}")
+                        logger.info(f"📄 Logs saved to: {log_file}")
+                        return False, error_msg, str(log_file)
                 else:
-                    logger.warning(
-                        f"⚠️  Test completed with non-zero return code for image: {image_name}"
-                    )
-                    logger.warning(f"Return code: {result.returncode}")
-                    logger.warning(f"Output: {result.stdout}")
-                    logger.warning(f"Error: {result.stderr}")
+                    # Error export file doesn't exist
+                    error_msg = f"Negative test FAILED: Error export file not found: {error_export_file}"
+                    logger.error(f"❌ {error_msg}")
                     logger.info(f"📄 Logs saved to: {log_file}")
-                    return False, f"Container exited with code {result.returncode}", str(log_file)
+                    return False, error_msg, str(log_file)
+
+            # Check for errors using the exported error JSON file (if ERROR_EXPORT_PATH was configured)
+            has_errors = False
+            error_details = []
+
+            if error_export_file and error_export_file.exists():
+                try:
+                    with open(error_export_file, 'r') as f:
+                        error_data = json.load(f)
+
+                    total_errors = error_data.get("total_errors", 0)
+                    errors = error_data.get("errors", [])
+
+                    if total_errors > 0:
+                        has_errors = True
+                        for err in errors:
+                            error_details.append({
+                                "code": err.get("error_code", "UNKNOWN"),
+                                "message": err.get("message", "N/A"),
+                                "severity": err.get("severity", "unknown"),
+                                "component": err.get("component", "N/A")
+                            })
+                except json.JSONDecodeError as e:
+                    logger.warning(f"⚠️  Failed to parse error export file: {e}")
+                except Exception as e:
+                    logger.warning(f"⚠️  Failed to read error export file: {e}")
+
+            if result.returncode != -1 and not has_errors:
+                logger.info(f"✅ Successfully tested image: {image_name}")
+                logger.info(f"📄 Logs saved to: {log_file}")
+                return True, result.stdout, str(log_file)
+            elif has_errors:
+                error_msg = f"Test failed: {len(error_details)} error(s) detected in image: {image_name}"
+                logger.error(f"❌ {error_msg}")
+                logger.error("Errors found:")
+                for err in error_details[:10]:  # Show first 10 errors
+                    logger.error(f"  [{err['severity'].upper()}] {err['code']}: {err['message'][:100]}")
+                if len(error_details) > 10:
+                    logger.error(f"  ... and {len(error_details) - 10} more errors")
+                logger.info(f"📄 Logs saved to: {log_file}")
+                logger.info(f"📄 Error export: {error_export_file}")
+                return False, error_msg, str(log_file)
             else:
-                # When error detection is disabled, only check return code
-                if result.returncode == 0:
-                    logger.info(f"✅ Successfully tested image: {image_name}")
-                    logger.info(f"📄 Logs saved to: {log_file}")
-                    return True, result.stdout, str(log_file)
-                else:
-                    logger.warning(
-                        f"⚠️  Test completed with non-zero return code for image: {image_name}"
-                    )
-                    logger.warning(f"Return code: {result.returncode}")
-                    logger.info(f"📄 Logs saved to: {log_file}")
-                    return False, f"Container exited with code {result.returncode}", str(log_file)
+                logger.warning(
+                    f"⚠️  Test completed with non-zero return code for image: {image_name}"
+                )
+                logger.warning(f"Return code: {result.returncode}")
+                logger.info(f"📄 Logs saved to: {log_file}")
+                return False, f"Container exited with code {result.returncode}", str(log_file)
 
         except subprocess.TimeoutExpired as timeout_ex:
             error_msg = f"Test timed out after {timeout} seconds for image: {image_name}"
@@ -2095,13 +2133,28 @@ class DockerBuildTester:
         logger.info(f"Failed: {results['failed']}")
         logger.info(f"Success rate: {report['summary']['success_rate']}")
 
-        # Print log file locations
+        # Print test results with log file locations
         logger.info(f"\n{'='*60}")
-        logger.info("LOG FILES")
+        logger.info("TEST RESULTS")
         logger.info(f"{'='*60}")
         for result in results["results"]:
-            if result.get("log_file"):
-                logger.info(f"Test {result['test_id']}: {result['log_file']}")
+            test_name = result["config"].get("name", f"Test {result['test_id']}")
+            status = result.get("status", "UNKNOWN")
+            log_file = result.get("log_file", "")
+
+            if status == "PASSED":
+                status_icon = "✅"
+            elif status == "FAILED":
+                status_icon = "❌"
+            elif status == "SKIPPED":
+                status_icon = "⏭️"
+            else:
+                status_icon = "❓"
+
+            if log_file:
+                logger.info(f"{status_icon} [{result['test_id']}] {test_name}: {log_file}")
+            else:
+                logger.info(f"{status_icon} [{result['test_id']}] {test_name}")
 
         return report
 

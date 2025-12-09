@@ -18,13 +18,6 @@
       "cmd": [
         "--video-files", "file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=10&chunks=10"
       ],
-      "error_detection": {
-        "enabled": false,
-        "patterns": [
-          "[ERROR]",
-          "[CRITICAL]"
-        ]
-      },
       "prerequisite_script": null
     }
   },
@@ -47,9 +40,6 @@
       "cmd": [
         "--video-streams", "rtsp://localhost:8554/test?frames=10&duration=1000000000"
       ],
-      "error_detection": {
-        "enabled": false
-      },
       "prerequisite_script": "./setup_rtsp_server.sh frame.jpg -m test -f 30 --daemon"
     }
   },
@@ -74,8 +64,7 @@
       },
       "cmd": []
     }
-  }
-  ,
+  },
   {
     "name": "fastapi_concurrency_test",
     "description": "Build concurrency app and run threaded client",
@@ -91,6 +80,331 @@
       "volumes": {
         "concurrency/models": "/workspace/models"
       },
+      "cmd": []
+    }
+  },
+  {
+    "name": "negative_invalid_route_config_1",
+    "description": "Negative test: Invalid route configuration should fail with proper error",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_route_test",
+      "APP_YAML_PATH": "./negative/route_1.yaml"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 5,
+      "expected_error": "ERR_ROUTE_001",
+      "volumes": {
+        "concurrency/models": "/workspace/models"
+      },
+      "cmd": [ "--inputs", "string" ]
+    }
+  },
+  {
+    "name": "negative_invalid_route_config_2",
+    "description": "Negative test: Invalid route configuration should fail with proper error",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_route_test",
+      "APP_YAML_PATH": "./negative/route_2.yaml"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 5,
+      "expected_error": "ERR_ROUTE_001",
+      "volumes": {
+        "concurrency/models": "/workspace/models"
+      },
+      "cmd": [ "--inputs", "string" ]
+    }
+  },
+  {
+    "name": "negative_invalid_route_config_3",
+    "description": "Negative test: Invalid route configuration should fail with proper error",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_route_test",
+      "APP_YAML_PATH": "./negative/route_3.yaml"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 5,
+      "expected_error": "ERR_ROUTE_001",
+      "volumes": {
+        "concurrency/models": "/workspace/models"
+      },
+      "cmd": [ "--inputs", "string" ]
+    }
+  },
+  {
+    "name": "negative_invalid_route_config_4",
+    "description": "Negative test: Invalid route configuration should fail with proper error",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_route_test",
+      "APP_YAML_PATH": "./negative/route_4.yaml"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 5,
+      "expected_error": "ERR_ROUTE_002",
+      "volumes": {
+        "concurrency/models": "/workspace/models"
+      },
+      "cmd": [ "--inputs", "string" ]
+    }
+  },
+  {
+    "name": "negative_invalid_route_config_5",
+    "description": "Negative test: Invalid route configuration should fail with proper error",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_route_test",
+      "APP_YAML_PATH": "./negative/route_5.yaml"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 5,
+      "expected_error": "ERR_ROUTE_002",
+      "volumes": {
+        "concurrency/models": "/workspace/models"
+      },
+      "cmd": [ "--inputs", "string" ]
+    }
+  },
+  {
+    "name": "negative_invalid_model_repo",
+    "description": "Negative test: Invalid model repository",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_model_test",
+      "APP_YAML_PATH": "./negative/model.yaml"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 5,
+      "expected_error": "ERR_SYS_001",
+      "volumes": {},
+      "cmd": [ "--inputs", "string" ]
+    }
+  },
+  {
+    "name": "negative_invalid_processor_1",
+    "description": "Negative test: Invalid post-processor",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_pp_test",
+      "APP_YAML_PATH": "./negative/pp_1.yaml"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout":10,
+      "expected_error": "ERR_PROC_001",
+      "volumes": {
+        "concurrency/models": "/workspace/models"
+      },
+      "cmd": [ "--inputs", "string" ]
+    }
+  },
+  {
+    "name": "negative_invalid_processor_2",
+    "description": "Negative test: Invalid post-processor",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_pp_test",
+      "APP_YAML_PATH": "./negative/pp_2.yaml"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 10,
+      "expected_error": "ERR_PROC_001",
+      "volumes": {
+        "concurrency/models": "/workspace/models"
+      },
+      "cmd": [ "--inputs", "string" ]
+    }
+  },
+  {
+    "name": "negative_invalid_processor_3",
+    "description": "Negative test: Invalid post-processor",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_pp_test",
+      "APP_YAML_PATH": "./negative/pp_3.yaml"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 10,
+      "expected_error": "ERR_PROC_004",
+      "volumes": {
+        "concurrency/models": "/workspace/models"
+      },
+      "cmd": [ "--inputs", "string" ]
+    }
+  },
+  {
+    "name": "negative_dataflow_test_1",
+    "description": "Negative test: Invalid base64 input",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_df_test",
+      "APP_YAML_PATH": "./negative/df_1.yaml",
+      "SERVER_TYPE": "fastapi",
+      "OPENAPI_SPEC": "builder/samples/dummy/openapi.yaml"
+    },
+
+    "test_config": {
+      "default_enable": true,
+      "timeout": 5,
+      "volumes": {
+        "output_types/models": "/workspace/models"
+      },
+      "expected_error": "ERR_DF_002",
+      "cmd": []
+    }
+  },
+  {
+    "name": "negative_dataflow_test_2",
+    "description": "Negative test: Invalid base64 input",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_df_test",
+      "APP_YAML_PATH": "./negative/df_2.yaml",
+      "SERVER_TYPE": "fastapi",
+      "OPENAPI_SPEC": "builder/samples/dummy/openapi.yaml"
+    },
+
+    "test_config": {
+      "default_enable": true,
+      "timeout": 5,
+      "volumes": {
+        "output_types/models": "/workspace/models"
+      },
+      "expected_error": "ERR_DF_002",
+      "cmd": []
+    }
+  },
+  {
+    "name": "negative_dataflow_test_3",
+    "description": "Negative test: Invalid asset",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_df_test",
+      "APP_YAML_PATH": "./negative/df_3.yaml"
+    },
+
+    "test_config": {
+      "default_enable": true,
+      "timeout": 10,
+      "volumes": {
+        "output_types/models": "/workspace/models"
+      },
+      "expected_error": "ERR_DF_003",
+      "cmd": [ "--video", "hello" ]
+    }
+  },
+  {
+    "name": "negative_dataflow_test_4",
+    "description": "Negative test: Invalid video frame sampling parameters",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_df_test",
+      "APP_YAML_PATH": "./negative/video.yaml"
+    },
+
+    "test_config": {
+      "default_enable": true,
+      "timeout": 10,
+      "volumes": {
+        "output_types/models": "/workspace/models"
+      },
+      "expected_error": "ERR_VIDEO_001",
+      "cmd": [
+        "--video-chunk",
+        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=10&chunks=10",
+        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=10&chunks=1"
+      ]
+    }
+  },
+  {
+    "name": "negative_dataflow_test_5",
+    "description": "Negative test: Invalid video frame sampling parameters",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_df_test",
+      "APP_YAML_PATH": "./negative/video.yaml"
+    },
+
+    "test_config": {
+      "default_enable": true,
+      "timeout": 10,
+      "volumes": {
+        "output_types/models": "/workspace/models"
+      },
+      "expected_error": "ERR_VIDEO_001",
+      "cmd": [
+        "--video-chunk",
+        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=10&chunks=10",
+        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=1&chunks=10"
+      ]
+    }
+  },
+  {
+    "name": "negative_dataflow_test_6",
+    "description": "Negative test: Invalid base64 string",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_df_test",
+      "APP_YAML_PATH": "./negative/image.yaml"
+    },
+
+    "test_config": {
+      "default_enable": true,
+      "timeout": 10,
+      "volumes": {
+        "output_types/models": "/workspace/models"
+      },
+      "expected_error": "ERR_DF_002",
+      "cmd": [ "--image", "hello" ]
+    }
+  },
+  {
+    "name": "negative_model_output_incomplete",
+    "description": "Negative test: Invalid model output",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_mo_test",
+      "APP_YAML_PATH": "./negative/mo_1.yaml"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 10,
+      "expected_error": "ERR_MO_002",
+      "volumes": {
+        "concurrency/models": "/workspace/models"
+      },
+      "cmd": [ "--inputs", "string" ]
+    }
+  },
+  {
+    "name": "negative_model_input_incomplete",
+    "description": "Negative test: Invalid base64 input",
+    "build_args": {
+      "TEST_APP_NAME": "negative",
+      "CACHE_BUSTER": "negative_df_test",
+      "APP_YAML_PATH": "./negative/mo_2.yaml",
+      "SERVER_TYPE": "fastapi",
+      "OPENAPI_SPEC": "builder/samples/dummy/openapi.yaml"
+    },
+
+    "test_config": {
+      "default_enable": true,
+      "timeout": 5,
+      "volumes": {
+        "output_types/models": "/workspace/models"
+      },
+      "expected_error": "ERR_DF_006",
       "cmd": []
     }
   }

@@ -80,7 +80,11 @@ def run_inference(args) -> Optional[int]:
 
     service = GenericInference()
     service.initialize()
+    status = 0
     for result in service.exec_sync(inputs):
+        if not result:
+            status = -1
+            break
         if save_to:
             with open(save_to, "a", encoding='utf-8') as f:
                 json_str = json.dumps(result, indent=4, cls=NumpyFlatEncoder)
@@ -92,7 +96,7 @@ def run_inference(args) -> Optional[int]:
 
     print("Inference completed.")
     service.finalize()
-    return 0
+    return status
 
 
 def main() -> int:

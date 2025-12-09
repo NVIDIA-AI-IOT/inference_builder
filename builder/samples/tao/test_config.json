@@ -28,15 +28,6 @@
         "8000": "8000"
       },
       "auto_validation": "./validation/gdino",
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "\\[ERROR\\]",
-          "Exception:",
-          "Traceback",
-          "Fatal error"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "gdino": {
@@ -77,15 +68,6 @@
         "8000": "8000"
       },
       "auto_validation": "./validation/citysemsegformer",
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "\\[ERROR\\]",
-          "Exception:",
-          "Traceback",
-          "Fatal error"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "citysemsegformer": {
@@ -126,15 +108,6 @@
         "8000": "8000"
       },
       "auto_validation": "./validation/rtdetr",
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "\\[ERROR\\]",
-          "Exception:",
-          "Traceback",
-          "Fatal error"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "rtdetr": {
@@ -176,15 +149,6 @@
         "8000": "8000"
       },
       "auto_validation": "./validation/mgdino",
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "\\[ERROR\\]",
-          "Exception:",
-          "Traceback",
-          "Fatal error"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "mask_gdino": {
