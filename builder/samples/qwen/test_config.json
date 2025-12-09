@@ -27,16 +27,6 @@
       },
       "payloads_path": ["payloads/images.jsonl"],
       "endpoint": "/v1/chat/completions",
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "ERROR",
-          "Exception:",
-          "Traceback",
-          "Fatal error",
-          "CRITICAL"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "Qwen2.5-VL": {
@@ -75,16 +65,6 @@
       },
       "payloads_path": ["payloads/images.jsonl"],
       "endpoint": "/v1/chat/completions",
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "ERROR",
-          "Exception:",
-          "Traceback",
-          "Fatal error",
-          "CRITICAL"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "Qwen2.5-VL": {
@@ -123,16 +103,6 @@
       },
       "payloads_path": ["payloads/images.jsonl", "payloads/videos.jsonl"],
       "endpoint": "/v1/chat/completions",
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "ERROR",
-          "Exception:",
-          "Traceback",
-          "Fatal error",
-          "CRITICAL"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "Qwen2.5-VL": {

@@ -28,15 +28,6 @@
         "--text",
         "car,person"
       ],
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "\\[ERROR\\]",
-          "Exception:",
-          "Traceback",
-          "Fatal error"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "gdino": {
@@ -78,15 +69,6 @@
         "image/png",
         "image/png"
       ],
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "\\[ERROR\\]",
-          "Exception:",
-          "Traceback",
-          "Fatal error"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "changenet-classify": {
@@ -126,15 +108,6 @@
         "--mime",
         "video/mp4"
       ],
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "\\[ERROR\\]",
-          "Exception:",
-          "Traceback",
-          "Fatal error"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "rtdetr": {
@@ -174,15 +147,6 @@
         "--mime",
         "video/mp4"
       ],
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "\\[ERROR\\]",
-          "Exception:",
-          "Traceback",
-          "Fatal error"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "citysemsegformer": {
