@@ -18,9 +18,8 @@ RUN --mount=type=cache,target=/root/.cache/pip pip install qwen-vl-utils[decord]
     python-magic==0.4.27 \
     numpy==1.26.4 \
     omegaconf==2.3.0 \
-    vllm==0.11.0
-
-RUN pip install --no-cache-dir git+https://github.com/huggingface/transformers accelerate
+    vllm==0.11.0 \
+    transformers==4.57.3
 
 WORKDIR /workspace
 ADD vllm.tgz /workspace

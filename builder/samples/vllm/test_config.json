@@ -25,7 +25,15 @@
       "ports": {
         "8000": "8000"
       },
-      "payloads_path": ["payloads/images.jsonl"],
+      "test_requests": [
+        {
+          "payload_path": "payloads/images.jsonl",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        }
+      ],
       "endpoint": "/v1/chat/completions",
       "error_detection": {
         "enabled": true,
@@ -73,7 +81,22 @@
       "ports": {
         "8000": "8000"
       },
-      "payloads_path": ["payloads/images.jsonl", "payloads/videos.jsonl"],
+      "test_requests": [
+        {
+          "payload_path": "payloads/images.jsonl",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        },
+        {
+          "payload_path": "payloads/videos.jsonl",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        }
+      ],
       "endpoint": "/v1/chat/completions",
       "error_detection": {
         "enabled": true,
@@ -121,7 +144,15 @@
       "ports": {
         "8000": "8000"
       },
-      "payloads_path": ["payloads/images.jsonl"],
+      "test_requests": [
+        {
+          "payload_path": "payloads/images.jsonl",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        }
+      ],
       "endpoint": "/v1/chat/completions",
       "error_detection": {
         "enabled": true,
@@ -169,7 +200,22 @@
       "ports": {
         "8000": "8000"
       },
-      "payloads_path": ["payloads/images.jsonl", "payloads/videos.jsonl"],
+      "test_requests": [
+        {
+          "payload_path": "payloads/images.jsonl",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        },
+        {
+          "payload_path": "payloads/videos.jsonl",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        }
+      ],
       "endpoint": "/v1/chat/completions",
       "error_detection": {
         "enabled": true,
