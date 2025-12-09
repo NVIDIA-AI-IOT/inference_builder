@@ -45,10 +45,28 @@ class Asset:
     password: str
     live: bool
     managed: bool
-    _lock: threading.Lock = field(init=False, repr=False, default=None)
+    _lock: threading.Lock = field(init=False, repr=False, compare=False, default=None)
 
     def __post_init__(self):
         self._lock = threading.Lock()
+
+    def to_dict(self):
+        """Convert Asset to dictionary, excluding non-serializable fields."""
+        return {
+            "id": self.id,
+            "file_name": self.file_name,
+            "mime_type": self.mime_type,
+            "size": self.size,
+            "duration": self.duration,
+            "path": self.path,
+            "use_count": self.use_count,
+            "asset_dir": self.asset_dir,
+            "description": self.description,
+            "username": self.username,
+            "password": self.password,
+            "live": self.live,
+            "managed": self.managed
+        }
 
     def lock(self):
         with self._lock:

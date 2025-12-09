@@ -1,0 +1,46 @@
+name: "test-app"
+model_repo: "/workspace/models"
+
+server:
+  responders:
+    healthy_ready:
+      operation: health_ready_v1_health_ready_get
+    add_file:
+      operation: add_media_file
+      responses:
+        AddFileResponse: >
+          {
+            "data": {
+              "id": {{response.id|tojson}},
+              "path": {{response.path|tojson}},
+              "size": {{response.size|tojson}},
+              "duration": {{response.duration|tojson}},
+              "contentType": {{response.mime_type|tojson}}
+            }
+          }
+    list_files:
+      operation: list_media_files
+      responses:
+        ListFilesResponse: >
+          {
+            "data": [
+              {% for item in response.assets %} {
+                "id": {{item.id|tojson}},
+                "path": {{item.path|tojson}},
+                "size": {{item.size|tojson}},
+                "contentType": {{item.mime_type|tojson}}
+              } {% if not loop.last %}, {% endif %} {% endfor %}
+            ]
+          }
+models:
+- name: dummy
+  backend: dummy
+  max_batch_size: 1
+  input:
+  - name: "input"
+    data_type: TYPE_STRING
+    dims: [ -1 ]
+  output:
+  - name: output
+    data_type: TYPE_FP32
+    dims: [ 1 ]

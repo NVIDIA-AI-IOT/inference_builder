@@ -39,7 +39,7 @@ The sample folder already contains all the ingredients for building the microser
 
 ```bash
 cd builder/samples
-docker compose up ms-cosmos --build
+docker compose up ms-vllm --build
 ```
 
 ## Test the model with a client
@@ -78,6 +78,7 @@ You'll get a response 200 with a json body:
 Run the client.py with the returned video path:
 
 ```bash
+cd builder/samples/qwen
 python client.py --videos 577a9f11-2b24-4db8-82c8-2601e0c2b6e4?frames=8
 ```
 

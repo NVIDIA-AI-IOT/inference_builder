@@ -323,6 +323,53 @@ def validate_env_var_value(value: str) -> bool:
     return True
 
 
+def validate_http_method(method: str) -> bool:
+    """Validate HTTP method."""
+    if not isinstance(method, str):
+        return False
+
+    # Allow common HTTP methods
+    allowed_methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
+    return method.upper() in allowed_methods
+
+
+def validate_http_header_name(name: str) -> bool:
+    """Validate HTTP header name."""
+    if not isinstance(name, str) or not name:
+        return False
+
+    # Header names should be alphanumeric with hyphens
+    # Follow RFC 7230 field-name = token
+    if not re.match(r'^[a-zA-Z0-9!#$%&\'*+\-.^_`|~]+$', name):
+        return False
+
+    # Prevent excessively long header names
+    if len(name) > 256:
+        return False
+
+    return True
+
+
+def validate_http_header_value(value: str) -> bool:
+    """Validate HTTP header value."""
+    if not isinstance(value, str):
+        return False
+
+    # Check for null bytes and control characters (except tab and space)
+    if '\x00' in value or any(ord(c) < 32 for c in value if c not in ['\t', ' ']):
+        return False
+
+    # Check for newlines that could cause header injection
+    if '\n' in value or '\r' in value:
+        return False
+
+    # Prevent excessively long header values
+    if len(value) > 8192:
+        return False
+
+    return True
+
+
 def validate_volume_path(path: str) -> bool:
     """Validate volume mount path to prevent injection attacks.
 
@@ -500,16 +547,41 @@ def validate_test_config(test_config: dict) -> Tuple[bool, str]:
             return False, "auto_validation must be a string path"
         if not validate_safe_path(test_config["auto_validation"]):
             return False, f"Invalid auto_validation path: {test_config['auto_validation']}"
-    # Validate payloads_path (must be a list of strings)
-    if "payloads_path" in test_config:
-        payloads_path = test_config["payloads_path"]
-        if not isinstance(payloads_path, list):
-            return False, "payloads_path must be a list of strings"
-        for path in payloads_path:
-            if not isinstance(path, str):
-                return False, "All items in payloads_path list must be strings"
-            if not validate_safe_path(path):
-                return False, f"Invalid payloads_path: {path}"
+    # Validate test_requests (must be a list of objects with optional payload_path, method, headers)
+    if "test_requests" in test_config:
+        test_requests = test_config["test_requests"]
+        if not isinstance(test_requests, list):
+            return False, "test_requests must be a list"
+
+        for item in test_requests:
+            # Must be dict format with payload_path (optional), method (optional), and headers (optional)
+            if not isinstance(item, dict):
+                return False, "test_requests items must be dictionaries"
+
+            # Validate payload_path if present (optional for GET requests without body)
+            if "payload_path" in item:
+                payload_path = item["payload_path"]
+                if not isinstance(payload_path, str):
+                    return False, "test_requests 'payload_path' must be a string"
+                if not validate_safe_path(payload_path):
+                    return False, f"Invalid test_requests payload_path: {payload_path}"
+
+            # Validate method if specified (optional, defaults to POST)
+            if "method" in item:
+                method = item["method"]
+                if not validate_http_method(method):
+                    return False, f"Invalid HTTP method in payload_config: {method}"
+
+            # Validate headers if specified (optional)
+            if "headers" in item:
+                headers = item["headers"]
+                if not isinstance(headers, dict):
+                    return False, "payload_config headers must be a dictionary"
+                for header_name, header_value in headers.items():
+                    if not validate_http_header_name(header_name):
+                        return False, f"Invalid HTTP header name in payload_config: {header_name}"
+                    if not validate_http_header_value(str(header_value)):
+                        return False, f"Invalid HTTP header value in payload_config for {header_name}: {header_value}"
 
     # Validate endpoint
     if "endpoint" in test_config:
@@ -1553,17 +1625,17 @@ class DockerBuildTester:
                     else:
                         logger.info("✅ Server is ready. Launching concurrent curl requests...")
                         # Read NDJSON files and launch curl for each line
-                        # Get payloads_path from test_config, with a default fallback based on app name
+                        # Get test_requests from test_config, with a default fallback based on app name
                         test_app_name = test_config.get("TEST_APP_NAME") or None
-                        default_payloads_paths = [f"{test_app_name}/payloads/payloads.jsonl"]
-                        payloads_path_list = test_config.get("payloads_path", default_payloads_paths)
+                        default_test_requests = [{"payload_path": f"{test_app_name}/payloads/payloads.jsonl"}]
+                        test_requests_list = test_config.get("test_requests", default_test_requests)
 
-                        # Ensure payloads_path is a list
-                        if not isinstance(payloads_path_list, list):
-                            logger.error(f"❌ payloads_path must be a list, got: {type(payloads_path_list)}")
+                        # Ensure test_requests is a list
+                        if not isinstance(test_requests_list, list):
+                            logger.error(f"❌ test_requests must be a list, got: {type(test_requests_list)}")
                             client_rc = 1
                             client_stdout = ""
-                            client_stderr = "payloads_path must be a list"
+                            client_stderr = "test_requests must be a list"
                         else:
                             # Resolve payloads_path relative to config directory
                             config_dir = Path(test_config.get("_config_dir", ".")).resolve()
@@ -1572,38 +1644,113 @@ class DockerBuildTester:
                             endpoint = test_config.get("endpoint", "/v1/inference")
                             logger.info(f"🎯 Using endpoint: {endpoint}")
 
-                            # Collect all payload lines from all files
-                            all_payload_lines = []
-                            for payloads_path_str in payloads_path_list:
-                                payloads_path = (config_dir / payloads_path_str).resolve()
-                                logger.info(f"📄 Resolved payloads path: {payloads_path_str} -> {payloads_path}")
+                            # Collect all payload lines from all files with their configs
+                            # Each entry: (payload_line, method, headers)
+                            all_payloads = []
+                            for request_item in test_requests_list:
+                                # Parse test request (must be dict)
+                                if not isinstance(request_item, dict):
+                                    logger.error(f"❌ Invalid test_requests item (must be dict): {request_item}")
+                                    continue
 
-                                if not payloads_path.exists():
-                                    logger.error(f"❌ Payloads file not found: {payloads_path}")
+                                # Extract config with defaults
+                                http_method = request_item.get("method", "POST").upper()
+                                http_headers = request_item.get("headers", {"Content-Type": "application/json"})
+
+                                # Check if payload_path is provided
+                                if "payload_path" not in request_item:
+                                    # No payload_path - single request with no payload (useful for GET)
+                                    logger.info(f"📄 No payload file specified")
+                                    logger.info(f"   Method: {http_method}, Headers: {http_headers}")
+                                    all_payloads.append(("", http_method, http_headers))
                                 else:
-                                    with payloads_path.open("r") as f:
-                                        payload_lines = [line.strip() for line in f if line.strip()]
-                                        all_payload_lines.extend(payload_lines)
-                                        logger.info(f"📋 Loaded {len(payload_lines)} payloads from {payloads_path.name}")
+                                    # Path provided - load payloads from file
+                                    payload_path_str = request_item["payload_path"]
+                                    payload_path = (config_dir / payload_path_str).resolve()
+                                    logger.info(f"📄 Resolved payload path: {payload_path_str} -> {payload_path}")
+                                    logger.info(f"   Method: {http_method}, Headers: {http_headers}")
 
-                            if not all_payload_lines:
+                                    if not payload_path.exists():
+                                        logger.error(f"❌ Payload file not found: {payload_path}")
+                                    else:
+                                        with payload_path.open("r") as f:
+                                            payload_lines = [line.strip() for line in f if line.strip()]
+                                            # Associate each payload with its method and headers
+                                            for line in payload_lines:
+                                                all_payloads.append((line, http_method, http_headers))
+                                            logger.info(f"📋 Loaded {len(payload_lines)} payloads from {payload_path.name}")
+
+                            if not all_payloads:
                                 logger.error(f"❌ No payloads found in any file")
                                 client_rc = 1
                                 client_stdout = ""
                                 client_stderr = "No payloads found"
                             else:
-                                logger.info(f"📋 Total payloads to process: {len(all_payload_lines)}")
+                                logger.info(f"📋 Total payloads to process: {len(all_payloads)}")
 
                                 procs: List[subprocess.Popen] = []
-                                for line in all_payload_lines:
+                                for payload_line, method, headers in all_payloads:
+                                    # Check if this is a multipart/form-data upload
+                                    content_type = headers.get("Content-Type", "").lower()
+                                    is_multipart = "multipart/form-data" in content_type
+
+                                    # Build curl command with method and headers from payload config
+                                    curl_cmd = ["curl", "-sS", "-X", method, "-w", "%{http_code}"]
+
+                                    if is_multipart and method in ["POST", "PUT", "PATCH"] and payload_line:
+                                        # Multipart upload: parse JSON to get file field and use -F
+                                        try:
+                                            payload_data = json.loads(payload_line)
+
+                                            # Add non-Content-Type headers (curl -F sets Content-Type automatically)
+                                            for header_name, header_value in headers.items():
+                                                if header_name.lower() != "content-type":
+                                                    curl_cmd.extend(["-H", f"{header_name}: {header_value}"])
+
+                                            # Add form fields with -F
+                                            for field_name, field_value in payload_data.items():
+                                                if isinstance(field_value, str):
+                                                    # Try to resolve as a file path (relative to config dir)
+                                                    file_path = Path(field_value)
+                                                    if not file_path.is_absolute():
+                                                        # Try relative to config dir
+                                                        resolved_path = (config_dir / field_value).resolve()
+                                                    else:
+                                                        # Already absolute
+                                                        resolved_path = file_path.resolve()
+
+                                                    # Check if the resolved path exists and is a file
+                                                    if resolved_path.exists() and resolved_path.is_file():
+                                                        # Use @ prefix for file upload
+                                                        curl_cmd.extend(["-F", f"{field_name}=@{resolved_path}"])
+                                                        logger.info(f"   📎 Uploading file: {field_name}={resolved_path}")
+                                                    else:
+                                                        # Not a valid file path, send as string value
+                                                        curl_cmd.extend(["-F", f"{field_name}={field_value}"])
+                                                        if field_value:
+                                                            logger.debug(f"   📝 Form field: {field_name}={field_value}")
+                                                else:
+                                                    # Non-string value (number, bool, etc.)
+                                                    curl_cmd.extend(["-F", f"{field_name}={field_value}"])
+                                        except json.JSONDecodeError as e:
+                                            logger.error(f"❌ Failed to parse payload as JSON for multipart upload: {e}")
+                                            logger.error(f"   Payload: {payload_line}")
+                                            continue
+                                    else:
+                                        # Regular JSON request
+                                        # Add headers
+                                        for header_name, header_value in headers.items():
+                                            curl_cmd.extend(["-H", f"{header_name}: {header_value}"])
+
+                                        # Add data for methods that support body (only if payload is not empty)
+                                        if method in ["POST", "PUT", "PATCH"] and payload_line:
+                                            curl_cmd.extend(["--data", payload_line])
+
+                                    # Add URL
+                                    curl_cmd.append(f"http://{service_host}:8000{endpoint}")
+
                                     procs.append(subprocess.Popen(
-                                        [
-                                            "curl", "-sS", "-X", "POST", "-w",
-                                            "%{http_code}",
-                                            "-H", "Content-Type: application/json",
-                                            "--data", line,
-                                            f"http://{service_host}:8000{endpoint}"
-                                        ],
+                                        curl_cmd,
                                         stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE,
                                         text=True
@@ -1785,7 +1932,7 @@ class DockerBuildTester:
                 except Exception as e:
                     logger.warning(f"⚠️  Failed to read error export file: {e}")
 
-            if result.returncode != -1 and not has_errors:
+            if result.returncode == 0 and not has_errors:
                 logger.info(f"✅ Successfully tested image: {image_name}")
                 logger.info(f"📄 Logs saved to: {log_file}")
                 return True, result.stdout, str(log_file)
@@ -1801,12 +1948,12 @@ class DockerBuildTester:
                 logger.info(f"📄 Error export: {error_export_file}")
                 return False, error_msg, str(log_file)
             else:
-                logger.warning(
-                    f"⚠️  Test completed with non-zero return code for image: {image_name}"
+                logger.error(
+                    f"❌ Test failed with non-zero return code for image: {image_name}"
                 )
-                logger.warning(f"Return code: {result.returncode}")
+                logger.error(f"Return code: {result.returncode}")
                 logger.info(f"📄 Logs saved to: {log_file}")
-                return False, f"Container exited with code {result.returncode}", str(log_file)
+                return False, f"Test failed with return code {result.returncode}", str(log_file)
 
         except subprocess.TimeoutExpired as timeout_ex:
             error_msg = f"Test timed out after {timeout} seconds for image: {image_name}"

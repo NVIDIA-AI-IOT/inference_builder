@@ -957,10 +957,10 @@ class MultiFlowCollector(Collector):
         self._executor = ThreadPoolExecutor(max_workers=len(data_flows))
         self._queue = Queue()
         self._stop_event = threading.Event()
-        self._futures = [self._executor.submit(self._poll, i) for i in range(len(self._data_flows))]
         self._condition = threading.Condition()
         self._active_flow = -1
         self._timeout = timeout
+        self._futures = [self._executor.submit(self._poll, i) for i in range(len(self._data_flows))]
 
     def collect(self):
         data = self._queue.get(timeout=self._timeout)

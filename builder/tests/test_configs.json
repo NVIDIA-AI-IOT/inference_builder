@@ -44,6 +44,45 @@
     }
   },
   {
+    "name": "asset_upload_test",
+    "description": "Test asset upload",
+    "build_args": {
+      "TEST_APP_NAME": "asset_management",
+      "CACHE_BUSTER": "asset_management",
+      "SERVER_TYPE": "fastapi",
+      "OPENAPI_SPEC": "builder/samples/dummy/openapi.yaml"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 5,
+      "env": {
+        "MODEL_REPO": "/workspace/model-repo"
+      },
+      "volumes": {
+        "asset_management/models": "/workspace/models"
+      },
+      "ports": {
+        "8000": "8000"
+      },
+      "test_requests": [
+        {
+          "payload_path": "asset_management/payloads/assets.jsonl",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "multipart/form-data"
+          }
+        },
+        {
+          "method": "GET",
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        }
+      ],
+      "endpoint": "/v1/files"
+    }
+  },
+  {
     "name": "Output Types Compatibility Test",
     "description": "Test numpy array output type compatibility with simplified dummy backend",
     "build_args": {
