@@ -530,7 +530,44 @@ class VideoFrameSamplingDataFlow(DataFlow):
             asset = asset_manager.get_asset(asset_id)
             if asset:
                 asset_list.append(asset)
-                n = int(params.get("frames", -1))
+
+                # Require explicit, valid, positive "frames" parameter until Asset Manager support n_frames
+                if "frames" not in params:
+                    error = ErrorFactory.create(
+                        "ERR_VIDEO_001",
+                        message="Missing required parameter 'frames' for video frame sampling",
+                        caller=self,
+                        severity=ErrorSeverity.CRITICAL,
+                        input_data={"asset_id": asset_id, "params": params},
+                        expected_data={"required_params": ["frames"]}
+                    )
+                    error.log(logger, as_json=False)
+                    return error
+                try:
+                    n = int(params["frames"])
+                except (TypeError, ValueError):
+                    error = ErrorFactory.create(
+                        "ERR_VIDEO_001",
+                        message=f"Invalid 'frames' value for video frame sampling: {params['frames']}",
+                        caller=self,
+                        severity=ErrorSeverity.CRITICAL,
+                        input_data={"asset_id": asset_id, "frames": params["frames"]},
+                        expected_data={"frames_type": "positive integer"}
+                    )
+                    error.log(logger, as_json=False)
+                    return error
+                if n <= 0:
+                    error = ErrorFactory.create(
+                        "ERR_VIDEO_001",
+                        message=f"'frames' must be a positive integer, got {n}",
+                        caller=self,
+                        severity=ErrorSeverity.CRITICAL,
+                        input_data={"asset_id": asset_id, "frames": n},
+                        expected_data={"frames_min_value": 1}
+                    )
+                    error.log(logger, as_json=False)
+                    return error
+
                 if n_frames is None:
                     n_frames = n
                 elif n_frames != n:

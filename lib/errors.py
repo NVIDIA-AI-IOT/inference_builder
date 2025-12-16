@@ -647,7 +647,7 @@ class ErrorFactory:
 
         # Video processing errors (VIDEO)
         "ERR_VIDEO_001": {
-            "message": "Frame sampling parameter mismatch",
+            "message": "Invalid video frame sampling parameters",
             "category": ErrorCategory.CONFIGURATION,
             "severity": ErrorSeverity.WARNING,
             "hints": [

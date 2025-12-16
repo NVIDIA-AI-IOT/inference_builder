@@ -107,7 +107,7 @@ test:standard:
     - echo "Running standard test suite..."
     - cd builder/tests
     - chmod +x run_tests.sh
-    - ./run_tests.sh standard -t "*" --output "$TEST_REPORT_FILE" --log-dir "$TEST_LOG_DIR"
+    - ./run_tests.sh -t "*" --output "$TEST_REPORT_FILE" --log-dir "$TEST_LOG_DIR"
     - echo "Tests completed"
   after_script:
     - echo "Cleaning up Docker images..."
@@ -259,7 +259,7 @@ test:quick:
     - echo "Running quick test (first test configuration only)..."
     - cd builder/tests
     - chmod +x run_tests.sh
-    - ./run_tests.sh standard --output quick_test_report.json --log-dir quick_logs
+    - ./run_tests.sh --output quick_test_report.json --log-dir quick_logs
     - echo "Quick test completed"
   after_script:
     - echo "Cleaning up Docker images..."
@@ -317,7 +317,7 @@ test:ds_app:
     - cd builder/tests
     - export PATH="/opt/ngc-cli:$PATH"
     - chmod +x run_tests.sh
-    - ./run_tests.sh custom --config ../samples/ds_app/test_config.json --log-dir ds_app_logs --output ds_app_report.json
+    - ./run_tests.sh --config ../samples/ds_app/test_config.json --log-dir ds_app_logs --output ds_app_report.json
     - echo "DeepStream app tests completed"
   after_script:
     - echo "Cleaning up Docker images..."
@@ -385,7 +385,7 @@ test:vllm:
     - cd builder/tests
     - export PATH="/opt/ngc-cli:$PATH"
     - chmod +x run_tests.sh
-    - ./run_tests.sh custom --config ../samples/vllm/test_config.json --log-dir vllm_logs --output vllm_report.json
+    - ./run_tests.sh --config ../samples/vllm/test_config.json --log-dir vllm_logs --output vllm_report.json
     - echo "vLLM tests completed"
   after_script:
     - echo "Cleaning up Docker images..."
@@ -453,7 +453,7 @@ test:qwen:
     - cd builder/tests
     - export PATH="/opt/ngc-cli:$PATH"
     - chmod +x run_tests.sh
-    - ./run_tests.sh custom --config ../samples/qwen/test_config.json --log-dir qwen_logs --output qwen_report.json
+    - ./run_tests.sh --config ../samples/qwen/test_config.json --log-dir qwen_logs --output qwen_report.json
     - echo "Qwen tests completed"
   after_script:
     - echo "Cleaning up Docker images..."
@@ -523,7 +523,7 @@ test:tao_cv:
     - cd builder/tests
     - export PATH="/opt/ngc-cli:$PATH"
     - chmod +x run_tests.sh
-    - ./run_tests.sh custom --config ../samples/tao/test_config.json --log-dir tao_cv_logs --output tao_cv_report.json
+    - ./run_tests.sh --config ../samples/tao/test_config.json --log-dir tao_cv_logs --output tao_cv_report.json
     - echo "TAO CV tests completed"
   after_script:
     - echo "Cleaning up Docker images..."

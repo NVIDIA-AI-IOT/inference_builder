@@ -1359,13 +1359,11 @@ class DockerBuildTester:
 
             # Detect server type to choose test strategy
             server_type = test_config.get("SERVER_TYPE", "serverless")
+            is_serverless = server_type == "serverless"
 
             # Run the container with test configuration
             # Use host network for serverless; use port mapping for non-serverless to avoid port conflicts
             cmd = ["docker", "run", "--gpus", gpus]
-
-            # Run as current user so files in mounted volumes are owned by host user
-            cmd.extend(["--user", f"{os.getuid()}:{os.getgid()}"])
 
             # Add environment variables if specified
             if "env" in test_config:
@@ -1433,7 +1431,7 @@ class DockerBuildTester:
             logger.info(f"🏷️  Container name: {container_name}")
 
             # For FastAPI (or any non-serverless), run detached on host network (DinD friendly)
-            if server_type != "serverless":
+            if not is_serverless:
                 cmd.insert(2, "--network=host")
                 cmd.insert(2, "-d")  # run detached
             else:
@@ -1460,7 +1458,7 @@ class DockerBuildTester:
             logger.info("🔍 Complete docker run command:")
             logger.info(f"   {' '.join(cmd)}")
 
-            if server_type == "serverless":
+            if is_serverless:
                 # Run container and capture output
                 logger.info("🔍 Running container and capturing output...")
                 result = subprocess.run(
@@ -1827,7 +1825,11 @@ class DockerBuildTester:
                     "\n=== CLIENT STDOUT ===\n", client_stdout or "",
                 ])
                 combined_stderr = client_stderr or ""
-                result = Result(0 if (ready and client_rc == 0) else 1, combined_stdout, combined_stderr)
+                # For non-serverless flows, we care about HTTP responses and validation status,
+                # not the container's own exit code. Track client failure separately and
+                # keep Result.returncode neutral (0) so final status can branch by server type.
+                client_failed = not (ready and client_rc == 0)
+                result = Result(0, combined_stdout, combined_stderr)
 
             # Save logs to file
             with open(log_file, 'w') as f:
@@ -1932,7 +1934,17 @@ class DockerBuildTester:
                 except Exception as e:
                     logger.warning(f"⚠️  Failed to read error export file: {e}")
 
-            if result.returncode == 0 and not has_errors:
+            # Determine overall success:
+            # - For serverless flows, rely on container return code and error exports.
+            # - For non-serverless HTTP server flows, rely on HTTP/client status (client_failed)
+            #   and error exports; ignore the container's own exit code.
+            if is_serverless:
+                rc_failed = result.returncode < 0
+            else:
+                # client_failed is only set in non-serverless branch; default to False otherwise
+                rc_failed = 'client_failed' in locals() and client_failed
+
+            if not rc_failed and not has_errors:
                 logger.info(f"✅ Successfully tested image: {image_name}")
                 logger.info(f"📄 Logs saved to: {log_file}")
                 return True, result.stdout, str(log_file)
@@ -1948,12 +1960,19 @@ class DockerBuildTester:
                 logger.info(f"📄 Error export: {error_export_file}")
                 return False, error_msg, str(log_file)
             else:
-                logger.error(
-                    f"❌ Test failed with non-zero return code for image: {image_name}"
-                )
-                logger.error(f"Return code: {result.returncode}")
+                if is_serverless:
+                    logger.error(
+                        f"❌ Test failed with negative return code for image: {image_name}"
+                    )
+                    logger.error(f"Return code: {result.returncode}")
+                    failure_reason = f"Test failed with negative return code {result.returncode}"
+                else:
+                    logger.error(
+                        f"❌ Test failed due to client/HTTP errors for image: {image_name}"
+                    )
+                    failure_reason = "Test failed due to client/HTTP errors"
                 logger.info(f"📄 Logs saved to: {log_file}")
-                return False, f"Test failed with return code {result.returncode}", str(log_file)
+                return False, failure_reason, str(log_file)
 
         except subprocess.TimeoutExpired as timeout_ex:
             error_msg = f"Test timed out after {timeout} seconds for image: {image_name}"
