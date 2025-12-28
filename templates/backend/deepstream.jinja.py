@@ -115,6 +115,33 @@ class KittiConfig:
             return False
         return True
 
+@dataclass
+class AnalyticsConfig:
+    """Configuration for nvdsanalytics plugin.
+
+    Enables spatial analytics including:
+    - ROI filtering
+    - Line crossing detection
+    - Direction detection
+    - Overcrowding detection
+
+    Requires tracker to be enabled for direction and line crossing analytics.
+    """
+    config_file: str | None = None
+    enable: bool = False
+
+    def __bool__(self) -> bool:
+        """Check if analytics configuration is valid."""
+        if not self.enable:
+            return False
+        if self.config_file is None:
+            logger.warning("AnalyticsConfig: config_file is required when analytics is enabled")
+            return False
+        if not os.path.exists(self.config_file):
+            logger.warning(f"AnalyticsConfig: config_file does not exist: {self.config_file}")
+            return False
+        return True
+
 class ImageTensorInput(BufferProvider):
 
     def __init__(self, height, width, format):
@@ -250,6 +277,7 @@ class BulkVideoInputPool(TensorInputPool):
         infer_config_paths,
         preprocess_config_paths,
         tracker_config: TrackerConfig,
+        analytics_config: AnalyticsConfig,
         msgbroker_config: MessageBrokerConfig,
         render_config: RenderConfig,
         perf_config: PerfConfig,
@@ -275,6 +303,7 @@ class BulkVideoInputPool(TensorInputPool):
         self._device_id = device_id
         self._dims = dims
         self._tracker_config = tracker_config
+        self._analytics_config = analytics_config
         self._msgbroker_config = msgbroker_config
         self._render_config = render_config
         self._perf_config = perf_config
@@ -348,6 +377,10 @@ class BulkVideoInputPool(TensorInputPool):
             )
             if self._kitti_config.tracker_kitti_output_dir:
                 flow = flow.attach(what="kitti_dump_probe", name="tracker_kitti_dump", properties={"tracker-kitti-output": True,"kitti-dir": self._kitti_config.tracker_kitti_output_dir})
+
+        # nvdsanalytics for spatial analytics (ROI, line crossing, direction, overcrowding)
+        if self._analytics_config:
+            flow = flow.analyze(self._analytics_config.config_file)
 
         flow = flow.attach(Probe('tensor_retriver', self._output))
 
@@ -625,6 +658,18 @@ class DeepstreamBackend(ModelBackend):
         else:
             tracker_config = TrackerConfig()
 
+        if "analytics_config" in model_config["parameters"]:
+            analytics_config = AnalyticsConfig(
+                config_file=self._correct_config_paths(
+                    [model_config["parameters"]["analytics_config"].get("config_file")]
+                )[0] if model_config["parameters"]["analytics_config"].get("config_file") else None,
+                enable=model_config["parameters"]["analytics_config"].get("enable", False)
+            )
+            if not analytics_config:
+                logger.warning("DeepstreamBackend: analytics_config is not properly configured")
+        else:
+            analytics_config = AnalyticsConfig()
+
         if "msgbroker_config" in model_config["parameters"]:
             msgbroker_config = MessageBrokerConfig(
                 proto_lib_path=self._correct_config_paths(
@@ -833,6 +878,7 @@ class DeepstreamBackend(ModelBackend):
                 infer_config_paths=infer_config_paths,
                 preprocess_config_paths=preprocess_config_paths,
                 tracker_config=tracker_config,
+                analytics_config=analytics_config,
                 msgbroker_config=msgbroker_config,
                 render_config=render_config,
                 perf_config=perf_config,
