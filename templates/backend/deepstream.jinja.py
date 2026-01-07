@@ -390,8 +390,9 @@ class BulkVideoInputPool(TensorInputPool):
                        rtsp_port=self._render_config.rtsp_port,
                        sync=False)
 
+        seg_mask_config = dict(self._render_config.seg_mask_config) if self._render_config.seg_mask_config else None
         flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
-                    enable_osd=self._render_config.enable_osd, seg_mask_config=self._render_config.seg_mask_config, sync=False)
+                    enable_osd=self._render_config.enable_osd, seg_mask_config=seg_mask_config, sync=False)
 
         if self._pipeline is not None:
             self._pipeline.wait()
