@@ -46,9 +46,13 @@ class Asset:
     live: bool
     managed: bool
     _lock: threading.Lock = field(init=False, repr=False, compare=False, default=None)
+    _condition: threading.Condition = field(init=False, repr=False, compare=False, default=None)
+    _marked_for_deletion: bool = field(init=False, repr=False, compare=False, default=False)
 
     def __post_init__(self):
         self._lock = threading.Lock()
+        self._condition = threading.Condition(self._lock)
+        self._marked_for_deletion = False
 
     def to_dict(self):
         """Convert Asset to dictionary, excluding non-serializable fields."""
@@ -69,17 +73,20 @@ class Asset:
         }
 
     def lock(self):
-        with self._lock:
+        with self._condition:
             self.use_count += 1
 
     def unlock(self):
-        with self._lock:
+        with self._condition:
             if self.use_count <= 0:
                 logger.warning("Attempted to unlock asset %s with use_count %d",
                                self.id, self.use_count)
                 return
             self.use_count -= 1
             if self.use_count == 0:
+                # Notify waiting threads (e.g., delete_asset)
+                self._condition.notify_all()
+
                 # Safety net: cleanup unmanaged assets when object is destroyed
                 if not self.managed and os.path.exists(self.path):
                     try:
@@ -89,6 +96,17 @@ class Asset:
                     except OSError as e:
                         logger.exception(
                             "Failed to cleanup asset %s: %s", self.id, e)
+
+    def is_marked_for_deletion(self):
+        """Check if this asset is marked for deletion."""
+        with self._condition:
+            return self._marked_for_deletion
+
+    def mark_for_deletion(self):
+        """Mark this asset for deletion, signaling processing loops to stop."""
+        with self._condition:
+            self._marked_for_deletion = True
+            logger.info("Marked asset %s for deletion", self.id)
 
     @classmethod
     def fromdir(cls, asset_dir):
@@ -296,14 +314,41 @@ class AssetManager:
                 logger.error(f"Invalid asset ID: {asset_id}")
                 return None
 
-    def delete_asset(self, asset_id):
+    def delete_asset(self, asset_id, timeout=None):
+        """
+        Delete an asset, waiting for it to be released if currently in use.
+
+        Args:
+            asset_id: The ID of the asset to delete
+            timeout: Maximum time to wait in seconds (None for indefinite wait)
+
+        Returns:
+            bool: True if asset was deleted, False if asset not found or timeout occurred
+        """
         if asset_id not in self._asset_map:
             return False
-        if self._asset_map[asset_id].use_count > 0:
-            logger.error(f"Asset {asset_id} is still in use")
-            return False
+
+        asset = self._asset_map[asset_id]
+
+        # Mark asset for deletion first (signals processing loops to stop)
+        logger.info(f"Marking asset {asset_id} for deletion")
+        asset.mark_for_deletion()
+        logger.info(f"Marked asset {asset_id} for deletion")
+
+        # Wait for asset to be released
+        with asset._condition:
+            if asset.use_count > 0:
+                logger.info(f"Asset {asset_id} is in use (use_count={asset.use_count}), waiting for release...")
+                # Wait until use_count becomes 0
+                if not asset._condition.wait_for(lambda: asset.use_count == 0, timeout=timeout):
+                    logger.error(f"Timeout waiting for asset {asset_id} to be released")
+                    return False
+                logger.info(f"Asset {asset_id} released, proceeding with deletion")
+
+        # Now safe to delete
         asset_dir = os.path.join(self._asset_dir, asset_id)
-        shutil.rmtree(asset_dir)
+        if os.path.exists(asset_dir):
+            shutil.rmtree(asset_dir)
         self._asset_map.pop(asset_id)
         logger.info(f"Removed asset {asset_id} and cleaned up associated resources")
         return True

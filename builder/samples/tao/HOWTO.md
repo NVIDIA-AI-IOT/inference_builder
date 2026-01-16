@@ -183,6 +183,111 @@ curl -X 'POST' \
 
 The inference results are returned in the JSON payload of the HTTP response, including the detected bounding boxes, associated probabilities, labels, and other metadata. For image input, the payload contains a single data object, whereas for video input, it contains multiple data objects—one for each frame. Given the model is trained for traffic scenes, it detects "car", "roadsign", "bicycle", "person" and "background".
 
+### Generic CV Microservice for detection, classification and segmentation on live videos.
+
+This microservice supports common CV models including image classification, object detection and segmentation on live streams.
+
+#### 1. Generate the inference pipeline using inference builder
+
+```bash
+python builder/main.py builder/samples/tao/ds_tao_live.yaml \
+-a builder/samples/tao/openapi.yaml -o builder/samples/tao -t
+```
+
+#### 2. Download the model files from NGC and apply the configurations.
+
+Here, we use object detection model `trafficcamnet_transformer_lite` as an example.
+
+```bash
+ngc registry model download-version "nvidia/tao/trafficcamnet_transformer_lite:deployable_v1.0" --dest $MODEL_REPO
+chmod 777 $MODEL_REPO/trafficcamnet_transformer_lite_vdeployable_v1.0
+export TAO_MODEL_NAME=trafficcamnet_transformer_lite_vdeployable_v1.0
+cp builder/samples/ds_app/detection/rtdetr/* $MODEL_REPO/$TAO_MODEL_NAME/
+cp builder/samples/tao/config/live_source.yaml $MODEL_REPO/$TAO_MODEL_NAME/
+chmod 666 $MODEL_REPO/$TAO_MODEL_NAME/*
+```
+
+After completing above steps, run `ls $MODEL_REPO/$TAO_MODEL_NAME`, and the below files are expected in the model folder:
+
+```
+labels.txt  live_source.yaml  nvdsinfer_config.yaml  resnet50_trafficamnet_rtdetr.onnx
+```
+
+#### 3. Build and run the container image
+
+Building the Docker image from the provided Dockerfile may take 10–20 minutes, depending on your network bandwidth and the hardware in use.
+
+```bash
+cd builder/samples
+sed -i "s/TAO_MODEL_NAME: .*/TAO_MODEL_NAME: $TAO_MODEL_NAME/" docker-compose.yml
+docker compose up tao-cv --build
+```
+
+#### 4. Test the microservice
+
+The microservice exposes a REST API that accepts inference requests with images and videos over HTTP, and it works with any frontend that is compatible with the OpenAPI spec. Once the server is ready, an OpenAPI compatible interactive documentation endpoint is available on the server for detailed API usage: http://localhost:8800/docs.
+
+Before adding live streams, you need first send an inference request and waiting for the responses:
+
+```bash
+curl -X POST \
+  'http://localhost:8800/v1/inference' \
+  -H 'accept: application/x-ndjson' \
+  -H 'Content-Type: application/json' -d '{ "input": []}'
+```
+
+Define the RTSP feed you want to perform inference on:
+
+```bash
+# replace the RTSP URL with real source
+export LIVE_SOURCE="rtsp://10.111.53.230:8554/video-stream"
+```
+
+Then you can add an RTSP stream through the Deepstream add/delete REST APIs (mapped to 8803 on the host):
+
+```bash
+curl -XPOST 'http://localhost:8803/api/v1/stream/add' -d "{
+  \"key\": \"sensor\",
+  \"value\": {
+     \"camera_id\": \"my_camera_0\",
+     \"camera_name\": \"traffic\",
+     \"camera_url\": \"$LIVE_SOURCE\",
+     \"change\": \"camera_add\",
+     \"metadata\": {
+         \"resolution\": \"1920 x1080\",
+         \"codec\": \"h264\",
+         \"framerate\": 30
+     }
+ },
+ \"headers\": {
+     \"source\": \"vst\",
+     \"created_at\": \"2021-06-01T14:34:13.417Z\"
+ }
+}"
+```
+
+Similarly, you can remove the RTSP stream through the same APIs:
+
+```bash
+curl -XPOST 'http://localhost:8803/api/v1/stream/remove' -d "{
+    \"key\": \"sensor\",
+    \"value\": {
+        \"camera_id\": \"my_camera_0\",
+        \"camera_name\": \"traffic\",
+        \"camera_url\": \"$LIVE_SOURCE\",
+        \"change\": \"camera_remove\",
+        \"metadata\": {
+            \"resolution\": \"1920 x1080\",
+            \"codec\": \"h264\",
+            \"framerate\": 30
+        }
+    },
+    \"headers\": {
+        \"source\": \"vst\",
+        \"created_at\": \"2021-06-01T14:34:13.417Z\"
+    }
+}"
+```
 
 ### Microservice for Grounding Dino and Mask Grounding Dino models.
 
@@ -284,7 +389,7 @@ Now you can invoke the inference API based on the data object in the above respo
 **Note:** Please replace the `id` and `path` below with the values from your return response and run the curl command.
 
 
-```base
+```bash
 curl -X 'POST' \
   'http://localhost:8800/v1/inference' \
   -H 'accept: application/x-ndjson' \

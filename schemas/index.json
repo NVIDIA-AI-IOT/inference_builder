@@ -75,6 +75,11 @@
         "description": "Base model configuration (shared structure)",
         "path": "./common/base-model.schema.json"
       },
+      "base_processor": {
+        "id": "common/base-processor.schema.json",
+        "description": "Base processor configuration (shared by preprocessors and postprocessors)",
+        "path": "./common/base-processor.schema.json"
+      },
       "definitions": {
         "id": "common/definitions.schema.json",
         "description": "Common definitions and reusable schemas",

@@ -29,6 +29,7 @@ from omegaconf.errors import ConfigKeyError
 from jinja2 import Environment, FileSystemLoader
 import ast
 import os
+import sys
 import subprocess
 import validate
 import re
@@ -416,8 +417,12 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
     api_tpl_dir = get_resource_path(f"templates/api_server/{server_type}/route")
 
     # Use safer subprocess call with argument list instead of shell string interpolation
+    # Find fastapi-codegen in the same directory as the current Python executable
+    python_dir = Path(sys.executable).parent
+    fastapi_codegen = python_dir / "fastapi-codegen"
+    
     command = [
-        "fastapi-codegen",
+        str(fastapi_codegen),
         "--input", api_spec.name,
         "--output", str(output_dir),
         "--output-model-type", "pydantic_v2.BaseModel",

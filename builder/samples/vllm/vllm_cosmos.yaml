@@ -42,7 +42,7 @@ server:
                 {% if not loop.last %}, {% endif %}
                 {% endfor %}
               ],
-            "model": "Cosmos-Reason1-7B",
+            "model": "Cosmos",
             "usage": {"completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0}
           }
     add_file:
@@ -101,6 +101,6 @@ models:
       async_mode: true
     preprocessors:
       - kind: "custom"
-        name: "qwen-vl-loader"
+        name: "qwen3-vl-loader"
         input: ["messages"]
         output: ["inputs"]

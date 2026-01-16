@@ -92,6 +92,8 @@ class GenericInference(InferenceBase):
                     logger.debug(f"Got result: {result}")
                     # post-process the data
                     result = self._post_process(result)
+                # Yield control to allow other requests to be processed
+                await asyncio.sleep(0)
                 yield result
             except Exception as e:
                 error = ErrorFactory.from_exception(e, caller=self)

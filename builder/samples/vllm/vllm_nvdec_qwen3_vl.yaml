@@ -9,10 +9,10 @@ input:
   - name: "messages"
     data_type: TYPE_STRING
     dims: [ -1 ]
-  - name : "videos"
-    # This custom data type automatically converts the video chunk to a list of image Tensors
-    data_type: TYPE_CUSTOM_VIDEO_CHUNK_ASSETS
-    dims: [ -1 ]
+    # This custom data type chunks and samples long videos or live streams and converts them to image tensors
+  - name: "videos"
+    data_type: TYPE_CUSTOM_LONG_VIDEO_ASSETS
+    dims: [-1]
     optional: true
   - name: "images"
     data_type: TYPE_CUSTOM_IMAGE_BASE64
@@ -81,7 +81,7 @@ server:
                 {% if not loop.last %}, {% endif %}
                 {% endfor %}
               ],
-            "model": "Qwen3-VL-30B-A3B-Instruct",
+            "model": "Qwen3-VL",
             "usage": {"completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0}
           }
     add_file:
@@ -118,6 +118,47 @@ server:
               } {% if not loop.last %}, {% endif %} {% endfor %}
             ]
           }
+    add_live_stream:
+      operation: add_live_stream
+      requests:
+        AddStreamRequest: >
+          {
+            "url": {{ request.url|tojson }},
+            "description": {{ request.name|default("")|tojson }},
+            "username": "",
+            "password": ""
+          }
+      responses:
+        AddStreamResponse: >
+          {
+            "data": {
+              "id": {{ response.id|tojson }},
+              "url": {{ response.url|default(response.path|default(request.url))|tojson }},
+              "status": "active"
+            }
+          }
+    del_live_stream:
+      operation: delete_live_stream
+      responses:
+        DeleteStreamResponse: >
+          {
+            "deleted": {{ response.status|tojson }}
+          }
+
+    list_live_streams:
+      operation: list_live_streams
+      responses:
+        ListStreamsResponse: >
+          {
+            "data": [
+              {% for item in response.assets %} {
+                "id": {{ item.id|tojson }},
+                "url": {{ item.path|tojson }},
+                "status": "active"
+              } {% if not loop.last %}, {% endif %} {% endfor %}
+            ]
+          }
+
     healthy_ready:
       operation: health_ready_v1_health_ready_get
 
@@ -149,6 +190,7 @@ models:
         dims: [ -1 ]
     parameters:
       max_num_tokens: 19200
+      async_mode: true
     preprocessors:
       - kind: "custom"
         name: "qwen3-vl-video-coordinator"

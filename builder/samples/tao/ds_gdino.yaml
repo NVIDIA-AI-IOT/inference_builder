@@ -84,11 +84,11 @@ server:
             "data": [
               {% for item in response.output %} {
                 "index": {{loop.index0}},
-                "shape": {{item.shape}},
-                "bboxes": {{item.bboxes}},
-                "probs": {{item.probs}},
-                "labels": {{item.labels|tojson}},
-                "masks": {{item.mask}}
+                "shape": {{item['shape']}},
+                "bboxes": {{item['bboxes']}},
+                "probs": {{item['probs']}},
+                "labels": {{item['labels']|tojson}},
+                "masks": {{item['mask']}}
               } {% if not loop.last %}, {% endif %} {% endfor %} ],
             "usage": { "num_images": 1},
             "model": "nvidia/nvdinov2"
@@ -176,6 +176,7 @@ models:
       - nvdsinfer_config.yaml
     preprocess_config_path:
       - nvdspreprocess_config.yaml
+    inference_timeout: "$INFERENCE_TIMEOUT|3"
   preprocessors:
     - kind: "custom"
       name: "gdino-tokenizer"

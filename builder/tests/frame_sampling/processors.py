@@ -1,4 +1,7 @@
 import torch
+import logging
+
+logger = logging.getLogger(__name__)
 
 class FramePickerProcessor:
     name = "frame-picker"
@@ -21,4 +24,11 @@ class FramePickerProcessor:
             torch.utils.dlpack.from_dlpack(frame.tensor)
             for frame in frame_list
         ]
+
+        # Log frame dimensions for verification
+        if torch_tensors:
+            # Tensor shape is typically (H, W, C) from MediaExtractor
+            h, w = torch_tensors[0].shape[0], torch_tensors[0].shape[1]
+            logger.info(f"FramePickerProcessor: received {len(torch_tensors)} frames with dimensions {w}x{h}")
+
         return torch.stack(torch_tensors)

@@ -256,91 +256,262 @@ The following data types are supported:
 - `TYPE_STRING`: String data
 
 ### Custom Types
-- `TYPE_CUSTOM_IMAGE_BASE64`: Base64-encoded images. When used for an input, the data will be decoded into an image tensors by default. When used for an output, the image tensors are encoded into a base64 string.
-- `TYPE_CUSTOM_IMAGE_ASSETS`: Video asset strings. When used for an input, the is treated as image assets references. The assets will be automatically passed to the image decoder and converted into image tensors.
-- `TYPE_CUSTOM_VIDEO_ASSETS`: Video asset strings. When used for an input, the data is interpreted as video assets with parameters controlling frame sampling. The assets are automatically decoded and evenly sampled into image tensors, which are then passed downstream frame by frame. The frame sampling parameters are provided as a query string in the format: ?key1=value1&key2=value2. Supported keys include:
-    - frames: Number of total frames to be extracted.
-    - start: Start timestamp in nanoseconds: 10*1e9 for 10 seconds.
-    - duration: Duration in nanoseconds: 10*1e9 for 10 seconds.
-- `TYPE_CUSTOM_VIDEO_CHUNK_ASSETS`: Video chunk asset strings. When used for an input, the data is interpreted as video assets with parameters controlling frame sampling and chunking. Assets are automatically decoded, chunked, and evenly sampled into image-tensor batches. Each chunk carries a stack of frames in image-tensor format. Frame-sampling parameters are specified in the query string: ?key1=value1&key2=value2. Supported keys include:
-    - chunks: Number of chunks to split the video.
-    - frames: Number of total frames to be extracted per chunk.
-    - start: Start timestamp in nanoseconds: 10*1e9 for 10 seconds.
-    - duration: Duration in nanoseconds: 10*1e9 for 10 seconds.
-- `TYPE_CUSTOM_BINARY_BASE64`: Binary data encoded in base64. When used for an input, the data is automatically decoded into uint8 tensors. For output data, the data will be base64 encoded to a string.
-- `TYPE_CUSTOM_BINARY_URLS`: When used for input, the data will be converted to a list and treated as urls.
-- `TYPE_CUSTOM_VLM_INPUT`: Vision-Language Model input objects.
-- `TYPE_CUSTOM_OBJECT`: Generic object type.
+- `TYPE_CUSTOM_IMAGE_BASE64`: Base64-encoded JPEG/PNG image data. When used as a top-level input, it creates an `ImageInputDataFlow` that decodes the base64 payload into image tensors before they are passed to downstream models. When used for an output, image tensors are encoded into a base64 string.
+- `TYPE_CUSTOM_IMAGE_ASSETS`: Image asset identifiers (file paths, URLs, or asset IDs) referring to JPEG/PNG images. When used as a top-level input, it creates an `ImageInputDataFlow` that loads and decodes the referenced images into image tensors before they are passed to downstream models.
+- `TYPE_CUSTOM_LONG_VIDEO_ASSETS`: Video asset identifiers for **long videos and live streams requiring temporal chunking**. Particularly suitable for: (1) **live streams** such as RTSP feeds that need continuous processing in chunks, (2) long video files that should be split into temporal segments, (3) scenarios where frames need to be delivered in multiple batches over time. Supports file paths, URLs, RTSP streams, or asset IDs, with query parameters such as `?frames=N&interval=INTERVAL_NSEC&chunks=M&scale=WIDTHxHEIGHT`. When used as a top-level input, it creates a `VideoInputDataFlow` that asynchronously extracts frames in chunks, with each chunk containing N frames sampled at the specified interval. Results are delivered via a queue as they become available, enabling streaming processing. Processing always starts from the beginning of the video or live stream. Use `TYPE_CUSTOM_VIDEO_CHUNK_ASSETS` instead for short videos that fit in a single batch without temporal chunking, or when you need to specify a start position. Supported query parameters:
+  - `frames`: (Required) Number of frames to sample per chunk.
+  - `interval`: (Required) Time interval between frames in nanoseconds (e.g., `100*1e6` for 100ms between frames).
+  - `chunks`: (Optional) Maximum number of chunks to yield before stopping. Useful for RTSP streams that don't have a natural end-of-stream.
+  - `scale`: (Optional) Target resolution for frame scaling in format `WIDTHxHEIGHT` (e.g., `scale=640x360`). When specified, all extracted frames are resized to the target resolution. This is useful for reducing memory usage and inference time when processing high-resolution video streams. All assets in a batch must use the same scale value.
+- `TYPE_CUSTOM_VIDEO_CHUNK_ASSETS`: Video asset identifiers for **short videos requiring simple frame sampling without temporal chunking**. Use this type when:
+  1. Processing short video clips that fit in memory as a single batch
+  2. Extracting a fixed number of frames from a specific video segment
+  3. Simple uniform frame sampling from a video duration is needed
+
+  Supports file paths, URLs, or asset IDs, with query parameters such as `?frames=N&start=START_NSEC&duration=DURATION_NSEC`. When used as a top-level input, it creates a `VideoFrameSamplingDataFlow` that asynchronously extracts exactly N frames evenly distributed over the specified duration (interval is automatically calculated as duration/frames), decodes them, and produces a single frame batch delivered via queue. The result is one batch containing all requested frames. For long videos or live streams requiring temporal chunking and streaming delivery of multiple batches over time, use `TYPE_CUSTOM_LONG_VIDEO_ASSETS` instead. Supported query parameters:
+  - `frames`: (Required) Number of frames to sample.
+  - `start`: (Optional) Start timestamp in nanoseconds (default 0).
+  - `duration`: (Optional) Duration to sample from in nanoseconds (defaults to entire video).
+- `TYPE_CUSTOM_BINARY_BASE64`: Base64-encoded binary data. For inputs, the strings are automatically decoded into uint8 tensors before being passed downstream. For outputs, binary tensors are base64-encoded into strings.
+- `TYPE_CUSTOM_BINARY_URLS`: Binary file URLs for remote data access. The values are converted into a list and treated as URLs, which also implies explicit batching of the input data.
+- `TYPE_CUSTOM_VLM_INPUT`: Vision-Language Model input in dictionary form, passed through to downstream models as-is.
+- `TYPE_CUSTOM_OBJECT`: Generic custom object type for complex structured data.
 
 ### DeepStream-Specific Types
-- `TYPE_CUSTOM_DS_IMAGE`: 1-D uint8 tensor for DeepStream image data
-- `TYPE_CUSTOM_DS_METADATA`: DeepStream metadata object
-- `TYPE_CUSTOM_DS_MIME`: String for DeepStream MIME type
-- `TYPE_CUSTOM_DS_SOURCE_CONFIG`: String for DeepStream source configuration path
+
+#### TYPE_CUSTOM_DS_IMAGE
+DeepStream custom type for image buffer input. A 1-D uint8 tensor (or list of tensors) containing encoded JPEG/PNG image bytes that can be passed directly into DeepStream backends without additional decoding in the Python runtime.
+
+#### TYPE_CUSTOM_DS_METADATA
+DeepStream custom type for metadata output, containing per-frame detection, classification, and segmentation results. The output is returned as a **dictionary** with the following structure (defined in `definitions/deepstreamMetadata`):
+
+**Output Structure:**
+```python
+{
+  'shape': [height, width],              # Image dimensions in pixels
+  'bboxes': [[left, top, right, bottom], ...],  # Bounding boxes for detected objects
+  'probs': [0.95, 0.87, ...],           # Confidence scores (0.0-1.0)
+  'labels': [["car"], ["person"], ...],  # Classification labels (multi-label support)
+  'seg_maps': [array([[...]]), ...],    # Segmentation maps (2D arrays)
+  'objects': [1, 2, 3, ...],            # Tracking IDs (when tracker enabled)
+  'timestamp': 1234567890               # Buffer PTS in nanoseconds
+}
+```
+
+**Field Details:**
+- **`shape`**: Array of 2 integers `[height, width]` representing frame dimensions
+- **`bboxes`**: Array of bounding boxes, each with 4 integers `[left, top, right, bottom]` in pixel coordinates
+- **`probs`**: Array of confidence scores (floats between 0.0 and 1.0)
+- **`labels`**: Array of arrays of label strings, enabling multi-label classification (e.g., object type and attributes)
+- **`seg_maps`**: Array of 2D segmentation maps for semantic/instance segmentation (numpy arrays or lists)
+- **`objects`**: Array of tracking IDs (integers) assigned by DeepStream tracker (populated only when tracker is enabled)
+- **`timestamp`**: Buffer presentation timestamp in nanoseconds for temporal synchronization
+
+**Important**: This type requires a low-level C++ postprocessor library (e.g., `libnvds_infercustomparser_tao.so`) to be available and copied into the container image. The library can be obtained from:
+1. DeepStream SDK built-in parsers
+2. TAO model parsers from https://github.com/NVIDIA-AI-IOT/deepstream_tao_apps.git
+3. Custom user-implemented parsers
+
+Without such a library, use regular tensor output types (`TYPE_FP32`, etc.) with Python postprocessors instead.
+
+**Example Usage in Response Templates:**
+```yaml
+responses:
+  InferenceResponse: >
+    {
+      "data": [
+        {% for item in response.output %} {
+          "shape": {{item['shape']}},
+          "bboxes": {{item['bboxes']}},
+          "probs": {{item['probs']}},
+          "labels": {{item['labels']|tojson}},
+          "masks": {{item['seg_maps']}},
+          "timestamp": {{item['timestamp']}}
+        } {% if not loop.last %}, {% endif %} {% endfor %}
+      ]
+    }
+```
+
+#### TYPE_CUSTOM_DS_MIME
+DeepStream custom type for MIME type string (for example, `image/jpeg` or `image/png`) describing the associated DeepStream image or media buffers. Required alongside `TYPE_CUSTOM_DS_IMAGE` or `TYPE_CUSTOM_BINARY_URLS` inputs so the DeepStream pipeline can select the appropriate decoder.
+
+#### TYPE_CUSTOM_DS_SOURCE_CONFIG
+DeepStream custom type for path to a YAML source configuration file. When used as a model input, consider using it when sources such as live streams are dynamically added and removed.
 
 ## Preprocessors and Postprocessors
+
+Processors transform data at different stages of the inference pipeline. Preprocessors operate before model inference, while postprocessors operate after.
+
+**Base Schema**: `common/base-processor.schema.json`
+**Preprocessor Schema**: `common/preprocessors.schema.json`
+**Postprocessor Schema**: `common/postprocessors.schema.json`
+
+### Data Flow and Processor Interface
+
+Processors follow a standard interface pattern where data flows through dictionaries:
+
+**Input Flow**:
+1. Upstream data (from model outputs, top-level inputs, or previous processors) is provided as a dictionary
+2. The processor's `input` field specifies keys to extract from this dictionary, in order
+3. Extracted values are passed as positional arguments to the processor's `__call__` method
+
+**Output Flow**:
+1. The processor's `__call__` method returns a tuple
+2. The tuple length must match the length of the `output` field
+3. Returned values are mapped to output names to form a dictionary for downstream consumption
+
+**Example Flow**:
+```python
+# Upstream data dictionary
+upstream = {
+    'image': <image_tensor>,
+    'text': <text_string>,
+    'metadata': <metadata_dict>
+}
+
+# Processor configuration
+processor = {
+    'input': ['text', 'image'],    # Extract in this order
+    'output': ['tokens', 'pixels']  # Map results to these names
+}
+
+# Processor invocation
+result = processor.__call__(upstream['text'], upstream['image'])
+# result = (<token_tensor>, <pixel_tensor>)
+
+# Downstream receives
+downstream = {
+    'tokens': <token_tensor>,
+    'pixels': <pixel_tensor>
+}
+```
 
 ### Preprocessors
 
 **File**: `common/preprocessors.schema.json`
 
-Preprocessors transform input data before model inference.
+Preprocessors transform input data before model inference. They typically handle tasks like:
+- Image normalization and resizing
+- Text tokenization
+- Data format conversions
+- Feature extraction
 
-**Common Preprocessors**:
-
-1. **Image Preprocessors**
-   - `changenet-normalizer`: Normalize images for ChangeNet
-   - `nvclip-vision-preprocessor`: Preprocess images for NVCLIP
-   - Config: `network_size`, `mean`, `std`
-
-2. **Tokenizer Preprocessors**
-   - `openclip-tokenizer`: Tokenize text for CLIP
-   - `dummy-tokenizer`: Test tokenizer
-   - Config: `max_length`, `truncation`, `padding`
-
-3. **VLM Loaders**
-   - `qwen-vl-loader`: Load inputs for Qwen VL models
-   - `qwen-vl-image-loader`: Load images for Qwen VL
-   - `qwen-vl-video-loader`: Load videos for Qwen VL
-   - Config: `num_frames`, `fps`, `max_pixels`, `min_pixels`
+**Required Fields**:
+- `kind`: Processor type (`"custom"` or `"builtin"`)
+- `name`: Unique identifier for the processor; should match the `name` attribute defined within the processor class
+- `input`: Array of input tensor names (extracted from upstream data)
+- `output`: Array of output tensor names (mapped to returned tuple)
+- `config`: Optional processor-specific configuration
 
 **Example**:
 ```yaml
 preprocessors:
   - kind: "custom"
-    name: "changenet-normalizer"
-    input: ["reference_image", "test_image"]
-    output: ["input0", "input1"]
+    name: "image-normalizer"
+    input: ["raw_image"]          # Extract 'raw_image' from upstream
+    output: ["normalized_image"]   # Return maps to 'normalized_image'
     config:
-      network_size: [768, 768]
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+```
+
+**Corresponding Python Implementation**:
+```python
+class ImageNormalizer:
+    name = "image-normalizer"
+
+    def __init__(self, config):
+        self.mean = config['mean']
+        self.std = config['std']
+
+    def __call__(self, raw_image):
+        # Process the input
+        normalized = (raw_image - self.mean) / self.std
+        # Return tuple matching output length
+        return (normalized,)
 ```
 
 ### Postprocessors
 
 **File**: `common/postprocessors.schema.json`
 
-Postprocessors transform model outputs.
+Postprocessors transform model outputs after inference. They typically handle tasks like:
+- Output decoding
+- Masking and filtering
+- Embedding normalization
+- Result formatting
 
-**Common Postprocessors**:
-
-1. **Masking Postprocessor**
-   - `changenet-masking`: Apply masking to ChangeNet outputs
-   - Config: `network_size`, `n_class`, `threshold`
-
-2. **Embedding Postprocessor**
-   - `nvclip-postprocessor`: Process NVCLIP embeddings
-   - Config: `normalize`, `embedding_dim`
+**Required Fields**: Same as preprocessors
 
 **Example**:
 ```yaml
 postprocessors:
   - kind: "custom"
-    name: "changenet-masking"
-    input: ["output_final"]
-    output: ["output_final"]
+    name: "detection-decoder"
+    input: ["boxes", "scores", "classes"]  # Extract from model outputs
+    output: ["detections"]                  # Return as single output
     config:
-      network_size: [768, 768]
-      n_class: 10
+      confidence_threshold: 0.5
+      max_detections: 100
+```
+
+**Corresponding Python Implementation**:
+```python
+class DetectionDecoder:
+    name = "detection-decoder"
+
+    def __init__(self, config):
+        self.threshold = config['confidence_threshold']
+        self.max_detections = config['max_detections']
+
+    def __call__(self, boxes, scores, classes):
+        # Process three inputs
+        mask = scores > self.threshold
+        filtered_boxes = boxes[mask][:self.max_detections]
+        filtered_scores = scores[mask][:self.max_detections]
+        filtered_classes = classes[mask][:self.max_detections]
+
+        detections = {
+            'boxes': filtered_boxes,
+            'scores': filtered_scores,
+            'classes': filtered_classes
+        }
+        # Return tuple with one element
+        return (detections,)
+```
+
+### Multi-Input, Multi-Output Example
+
+Processors can handle multiple inputs and outputs:
+
+```yaml
+preprocessors:
+  - kind: "custom"
+    name: "dual-stream-processor"
+    input: ["reference_image", "test_image", "threshold"]
+    output: ["ref_features", "test_features"]
+    config:
+      feature_dim: 256
+```
+
+```python
+class DualStreamProcessor:
+    name = "dual-stream-processor"
+
+    def __init__(self, config):
+        self.feature_dim = config['feature_dim']
+
+    def __call__(self, reference_image, test_image, threshold):
+        # Process inputs (receives 3 arguments in order)
+        ref_features = self.extract_features(reference_image)
+        test_features = self.extract_features(test_image)
+
+        # Apply threshold
+        ref_features = ref_features * (ref_features > threshold)
+        test_features = test_features * (test_features > threshold)
+
+        # Return tuple matching output length (2 elements)
+        return (ref_features, test_features)
 ```
 
 ## Server Configuration
@@ -352,14 +523,23 @@ The server section defines how the inference service handles requests and respon
 Responders map API operations to request/response transformations using Jinja2 templates.
 
 **Available Responder Keys** (must match templates in `templates/responder/`):
-- `infer` - Main inference endpoint
-- `add_file` - Upload media file
-- `del_file` - Delete media file
-- `list_files` - List media files
-- `add_live_stream` - Add live stream
-- `del_live_stream` - Delete live stream
-- `list_live_streams` - List live streams
-- `healthy_ready` - Health check
+
+| Responder | Description | Input | Output |
+|-----------|-------------|-------|--------|
+| `infer` | Primary inference endpoint. Handles model inference requests. Supports streaming responses with `Accept: application/x-ndjson` header. | Top-level pipeline inputs (as defined in config `input` section) | Top-level pipeline outputs (as defined in config `output` section) |
+| `add_file` | File upload responder. Adds files to the asset store for later processing. | Multipart file upload (file object with `filename` and `content_type`) | Asset dict: `id`, `file_name`, `content_type`, `created_at` |
+| `del_file` | File deletion responder. Removes files from the asset store. | `asset_id` (string, from path parameter) | `status` (boolean, deletion success) |
+| `list_files` | File listing responder. Returns a list of files in the asset store. | None | `assets` (array of asset objects with `id`, `file_name`, `content_type`, `created_at`) |
+| `add_live_stream` | Live stream addition responder. Registers a new RTSP or video stream for processing. | `url` (string, required), `description` (string, optional), `username` (string, optional), `password` (string, optional) | Asset dict: `id`, `url`, `description`, `created_at` |
+| `del_live_stream` | Live stream removal responder. Stops and removes a registered live stream. | `asset_id` (string, from path parameter) | `status` (boolean, deletion success) |
+| `list_live_streams` | Live stream listing responder. Returns all registered live streams. | None | `assets` (array of stream asset objects with `id`, `url`, `description`, `created_at`) |
+| `healthy_ready` | Health check responder. Reports service health and readiness status. No request/response template mapping needed. | None | HTTP 200 with "Ready" or HTTP 503 with "Service Unavailable" |
+
+**Request/Response Template Mapping**:
+
+- **`requests`**: Jinja2 templates to map HTTP request body to responder inputs. Keys are **OpenAPI request schema/class names** (e.g., `InferenceRequest`, `AddLiveStreamRequest`), values are Jinja2 templates that transform the incoming `request` object into a JSON structure matching the responder's expected inputs.
+
+- **`responses`**: Jinja2 templates to map responder outputs to HTTP response body. Keys are **OpenAPI response schema/class names** (e.g., `InferenceResponse`, `AddFileResponse`), values are Jinja2 templates that transform the `response` object from the responder into the desired HTTP response JSON structure.
 
 **Common Operations** (values for the `operation` field):
 - `inference`: General inference operation

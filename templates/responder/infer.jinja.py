@@ -35,6 +35,8 @@
             if streaming:
                 async def generate_stream():
                     async for result in self._inference.execute(in_data):
+                        # Yield control to allow other requests to be processed
+                        await asyncio.sleep(0)
                         if not result:
                             if isinstance(result, Stop):
                                 return  # Normal termination
@@ -48,6 +50,8 @@
                 # If not streaming, process and return the last result
                 response = None
                 async for result in self._inference.execute(in_data):
+                    # Yield control to allow other requests to be processed
+                    await asyncio.sleep(0)
                     if not result:
                         if isinstance(result, Stop):
                             break  # Normal termination

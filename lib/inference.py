@@ -70,7 +70,7 @@ py_datatype_mapping = {
     "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
     "TYPE_CUSTOM_BINARY_BASE64": str,
     "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": str,
-    "TYPE_CUSTOM_VIDEO_ASSETS": str,
+    "TYPE_CUSTOM_LONG_VIDEO_ASSETS": str,
     "TYPE_CUSTOM_IMAGE_ASSETS": str,
     "TYPE_CUSTOM_IMAGE_BASE64": str
 }
@@ -238,6 +238,7 @@ class DataFlow:
         return next((config for config in self._configs if config["name"] == name), None)
 
     def put(self, item: Union[Dict, Error, Stop]):
+        logger.debug(f"[DataFlow.put] in_names={self.in_names}, o_names={self.o_names}, item_type={type(item).__name__}")
         if not item:
             if self._queue_consumer is None:
                 # pass Error or Stop to the downstream
@@ -331,9 +332,13 @@ class DataFlow:
             self._queue_consumer.append_queue(q, on_result_queue_result, (q_key, collected))
         else:
             self._queue.put(values, timeout=self._timeout)
+        return
 
     def get(self):
-        return self._queue.get(timeout=self._timeout)
+        logger.debug(f"[DataFlow.get] Attempting get from queue: in_names={self.in_names}, o_names={self.o_names}, qsize={self._queue.qsize()}")
+        result = self._queue.get(timeout=self._timeout)
+        logger.debug(f"[DataFlow.get] Got result: in_names={self.in_names}, item_type={type(result).__name__}")
+        return result
 
     def stop(self):
         self._stop_event.set()
@@ -364,14 +369,18 @@ class VideoInputDataFlow(DataFlow):
             config = next((c for c in configs if c["name"] == tensor_name[0]), None)
             if config and config["data_type"] == key_tensor_type:
                 self._video_tensor_names.append(tensor_name[1])
+        # Thread pool for collecting frames in background
+        n_codec_instances = int(os.getenv("N_CODEC_INSTANCES", 1))
+        self._frame_collector = ThreadPoolExecutor(max_workers=n_codec_instances)
+        logger.info(f"VideoInputDataFlow initialized with {n_codec_instances} codec instances")
 
-    def _process_custom_data(self, tensor: np.ndarray, data_type: str) -> Union[List, np.ndarray, EnhancedError]:
+    def _process_custom_data(self, tensor: np.ndarray, data_type: str):
         """
         Process custom video data types.
 
         Returns:
-            Union[List, np.ndarray, EnhancedError]:
-                - List: Frames extracted from video assets
+            Union[Queue, np.ndarray, EnhancedError]:
+                - Queue: Results queue for live video streams (non-blocking)
                 - np.ndarray: Fallback to parent processing
                 - EnhancedError: If asset not found or processing fails
         """
@@ -380,27 +389,182 @@ class VideoInputDataFlow(DataFlow):
         else:
             return super()._process_custom_data(tensor, data_type)
 
+    def _collect_live_stream_frames(self, asset_list, chunk_params, media_chunks, results_queue, scaling=None):
+        """
+        Collect frames from live streams in a background thread.
+
+        Args:
+            asset_list: List of locked assets
+            chunk_params: List of dicts with n_frames and max_chunks for each asset
+            media_chunks: List of MediaChunk configurations
+            results_queue: Queue to put results into
+            scaling: Optional target resolution as (width, height) tuple
+        """
+        unlocked = False
+        try:
+            max_batch_size = int(os.getenv("MAX_BATCH_SIZE", 16))
+            batch_size = min(max_batch_size, len(media_chunks))
+            extractor_kwargs = {"n_thread": 1, "batch_size": batch_size}
+            if scaling is not None:
+                extractor_kwargs["scaling"] = scaling
+            with MediaExtractor(media_chunks, **extractor_kwargs) as media_extractor:
+                qs = media_extractor()
+                eos_flags = [False] * len(qs)
+                chunks_yielded = [0] * len(qs)  # Track chunks per stream
+
+                while not all(eos_flags):
+                    results = []
+                    for idx, q in enumerate(qs):
+                        # Check if this specific asset is marked for deletion
+                        if asset_list[idx].is_marked_for_deletion():
+                            logger.info(f"Stream {idx} asset marked for deletion, stopping processing for this stream")
+                            eos_flags[idx] = True
+                            continue
+
+                        # Check if this stream has reached its maximum chunks limit
+                        max_chunks = chunk_params[idx].get("max_chunks")
+                        if max_chunks is not None and chunks_yielded[idx] >= max_chunks:
+                            logger.info(f"Stream {idx} reached maximum chunks limit: {max_chunks}")
+                            eos_flags[idx] = True
+                            continue
+
+                        n_frames = chunk_params[idx]["n_frames"]
+                        frames = []
+                        frame_count = 0
+
+                        while not eos_flags[idx]:
+                            try:
+                                frame = q.get(timeout=5.0)
+                                if frame is None:
+                                    logger.info(f"Frame extraction completed for stream {idx}")
+                                    eos_flags[idx] = True
+                                    break
+                                frames.append(frame)
+                                frame_count += 1
+
+                                # Put to results queue when we reach n_frames
+                                if n_frames and frame_count >= n_frames:
+                                    results.append(frames)
+                                    chunks_yielded[idx] += 1
+                                    frames = []
+                                    frame_count = 0
+                                    break  # Exit inner loop
+
+                            except Empty:
+                                logger.info(f"EOS on live stream {idx}")
+                                eos_flags[idx] = True
+                                break
+
+                        # TODO WAR on pyservicemaker error
+                        time.sleep(0)
+
+                    if results:  # Only put if we have collected frames
+                        try:
+                            results_queue.put(results, timeout=10.0)
+                        except Full:
+                            logger.warning(f"Results queue is full, dropping frame batch")
+                            break
+
+                # Unlock assets BEFORE MediaExtractor cleanup to avoid blocking on __exit__
+                results_queue.put(Stop("end"))
+                for asset in asset_list:
+                    asset.unlock()
+                unlocked = True
+
+            logger.info("Media processing completed")
+        except Exception as e:
+            logger.exception(f"Error in live stream frame collection: {e}")
+            error = ErrorFactory.from_exception(e, caller=self)
+            error.log(logger, as_json=False)
+            results_queue.put(error)
+        finally:
+            # Fallback: ensure assets are unlocked if exception occurred before unlocking
+            if not unlocked:
+                results_queue.put(Stop("end"))
+                for asset in asset_list:
+                    asset.unlock()
+
     def _process_video_assets(self, assets: np.ndarray):
+        """
+        Process video assets using Queue-based approach (non-blocking).
+
+        Args:
+            assets: Array of asset strings with query parameters
+
+        Returns:
+            Union[Queue, EnhancedError]: Results queue or error
+        """
         media_chunks = []
-        results = []
+        chunk_params = []  # Store n_frames and max_chunks for each asset
         asset_list = []
+        expected_n_frames = None
+        expected_scaling = None
+
         for a in assets:
             asset_manager = AssetManager()
             asset_id, params = self.parse_asset_string(a)
             asset = asset_manager.get_asset(asset_id)
             if asset:
-                asset.lock()
                 asset_list.append(asset)
-                n_frames = int(params.get("frames", None))
-                start = int(params.get("start", 0))
-                duration = int(params.get("duration", asset.duration))
-                interval = duration / n_frames if n_frames else 0
+                n = int(params.get("frames", None))
+                max_chunks = params.get("chunks", None)
+                if max_chunks is not None:
+                    max_chunks = int(max_chunks)
+
+                # Validate that all assets have the same n_frames
+                if expected_n_frames is None:
+                    expected_n_frames = n
+                elif expected_n_frames != n:
+                    error = ErrorFactory.create(
+                        "ERR_VIDEO_001",
+                        message=f"frames mismatch on multiple assets: {expected_n_frames} != {n}",
+                        caller=self,
+                        severity=ErrorSeverity.WARNING,
+                        actual_data={"n_frames_first": expected_n_frames, "n_frames_current": n}
+                    )
+                    error.log(logger, as_json=False)
+                    return error
+
+                interval = int(params.get("interval", 0))
+
+                # Parse scaling parameter (format: widthxheight, e.g., 1920x1080)
+                scaling = None
+                scale_param = params.get("scale", None)
+                if scale_param:
+                    try:
+                        width, height = scale_param.split("x")
+                        scaling = (int(width), int(height))
+                    except (ValueError, AttributeError) as e:
+                        error = ErrorFactory.create(
+                            "ERR_VIDEO_001",
+                            message=f"Invalid scale parameter format: {scale_param}. Expected format: widthxheight (e.g., 1920x1080)",
+                            caller=self,
+                            severity=ErrorSeverity.WARNING,
+                            input_data={"scale_param": scale_param}
+                        )
+                        error.log(logger, as_json=False)
+                        return error
+
+                # Validate that all assets have the same scaling
+                if expected_scaling is None:
+                    expected_scaling = scaling
+                elif expected_scaling != scaling:
+                    error = ErrorFactory.create(
+                        "ERR_VIDEO_001",
+                        message=f"scale mismatch on multiple assets: {expected_scaling} != {scaling}",
+                        caller=self,
+                        severity=ErrorSeverity.WARNING,
+                        actual_data={"scale_first": expected_scaling, "scale_current": scaling}
+                    )
+                    error.log(logger, as_json=False)
+                    return error
+
                 media_chunks.append(MediaChunk(
                     asset.path,
-                    start_pts=start,
-                    duration=duration,
+                    start_pts=0,
                     interval=interval
                 ))
+                chunk_params.append({"n_frames": n, "max_chunks": max_chunks})
             else:
                 error = ErrorFactory.create(
                     "ERR_DF_003",
@@ -413,32 +577,21 @@ class VideoInputDataFlow(DataFlow):
                     },
                     metadata={
                         "n_frames": params.get("frames"),
-                        "start": params.get("start"),
-                        "duration": params.get("duration")
+                        "interval": params.get("interval")
                     }
                 )
                 error.log(logger, as_json=False)
                 return error
-        with MediaExtractor(media_chunks, n_thread=1) as media_extractor:
-            qs = media_extractor()
-            for q in qs:
-                frames = []
-                while True:
-                    try:
-                        frame = q.get(timeout=10.0)
-                        if frame is None:
-                            logger.info("Duration reached")
-                            break
-                        frames.append(frame)
-                    except Empty:
-                        logger.info("EOS on live streams")
-                        break
-                results.append(frames)
-                # TODO WAR on pyservicemaker error
-                time.sleep(0)
+
+        # Create results queue and submit background thread
+        results_queue = Queue()
         for asset in asset_list:
-            asset.unlock()
-        return results
+            asset.lock()
+
+        self._frame_collector.submit(
+            self._collect_live_stream_frames, asset_list, chunk_params, media_chunks, results_queue, expected_scaling
+        )
+        return results_queue
 
     def _is_collected_valid(self, collected: Dict):
         result = super()._is_collected_valid(collected)
@@ -446,13 +599,21 @@ class VideoInputDataFlow(DataFlow):
             return False
         return all([n in collected for n in self._video_tensor_names])
 
+    def stop(self):
+        super().stop()
+        if hasattr(self, '_frame_collector') and self._frame_collector:
+            logger.info(f"VideoInputDataFlow: shutting down frame collector")
+            self._frame_collector.shutdown(wait=True)
+            logger.info(f"VideoInputDataFlow: frame collector shut down")
+            self._frame_collector = None
+
 
 class VideoFrameSamplingDataFlow(DataFlow):
-    """A data flow for video frame sampling"""
+    """A data flow for video frame sampling - for short videos without chunking"""
     def __init__(self, configs: List[Dict], tensor_names: List[Tuple[str, str]], key_tensor_type: str, timeout=1.0):
         super().__init__(configs, tensor_names, True, False, timeout)
         n_codec_instances = int(os.getenv("N_CODEC_INSTANCES", 1))
-        self._media_extractor = MediaExtractor(chunks=[], n_thread=n_codec_instances) # TODO: make it configurable
+        self._media_extractor = MediaExtractor(chunks=[], n_thread=n_codec_instances)
         self._video_tensor_type = key_tensor_type
         self._video_tensor_names = []
         for tensor_name in tensor_names:
@@ -461,7 +622,7 @@ class VideoFrameSamplingDataFlow(DataFlow):
                 self._video_tensor_names.append(tensor_name[1])
         self._media_extractor()
         self._frame_collector = ThreadPoolExecutor(max_workers=n_codec_instances)
-        logger.info(f"VideoFrameSamplingDataFlow initialized")
+        logger.info(f"VideoFrameSamplingDataFlow initialized for short video handling")
 
     def _process_custom_data(self, tensor: np.ndarray, data_type: str) -> Union[Queue, List, np.ndarray, EnhancedError]:
         """
@@ -480,21 +641,25 @@ class VideoFrameSamplingDataFlow(DataFlow):
         else:
             return super()._process_custom_data(tensor, data_type)
 
-    def _collect_frames_from_queue(self, assets, qs, n_frames, n_chunks, results_queue):
-        """Collect frames from a queue in a separate thread"""
-        for _ in range(n_chunks):
-            total_frames = [[] for _ in qs]
-            for _ in range(n_frames):
-                for i, q in enumerate(qs):
-                    try:
-                        frame = q.get(timeout=10.0)
-                        if frame is None:
-                            logger.info(f"Duration reached")
-                            break
-                        total_frames[i].append(frame)
-                    except Empty:
-                        logger.info(f"Decoder Queue is empty")
+    def _collect_frames_from_queue(self, assets, qs, n_frames, results_queue):
+        """Collect frames from queues in a separate thread - single batch, no chunking"""
+        total_frames = [[] for _ in qs]
+
+        # Collect n_frames from each queue
+        for frame_idx in range(n_frames):
+            for i, q in enumerate(qs):
+                try:
+                    frame = q.get(timeout=10.0)
+                    if frame is None:
+                        logger.info(f"Frame extraction completed for stream {i}")
                         break
+                    total_frames[i].append(frame)
+                except Empty:
+                    logger.warning(f"Frame queue empty for stream {i}")
+                    break
+
+        # Put the collected frames to results queue
+        if any(total_frames):
             try:
                 results_queue.put(total_frames, timeout=10.0)
             except Full:
@@ -504,12 +669,12 @@ class VideoFrameSamplingDataFlow(DataFlow):
                     severity=ErrorSeverity.WARNING,
                     metadata={
                         "n_frames": n_frames,
-                        "n_chunks": n_chunks,
                         "queue_info": "Results queue is full"
                     }
                 )
                 error.log(logger, as_json=False)
-                break
+
+        # Signal completion and unlock assets
         results_queue.put(Stop("end"))
         for asset in assets:
             asset.unlock()
@@ -517,141 +682,105 @@ class VideoFrameSamplingDataFlow(DataFlow):
 
 
     def _do_video_frame_sampling(self, assets: np.ndarray):
+        """Extract frames from videos - single batch, no chunking. Parameters: frames, start, duration"""
         qs = []
         asset_list = []
+        start_times = []  # Store per-asset start times
         n_frames = None
-        n_chunks = None
-        start = None
         duration = None
-        interval = None
-        for asset in assets:
+
+        for asset_str in assets:
             asset_manager = AssetManager()
-            asset_id, params = self.parse_asset_string(asset)
+            asset_id, params = self.parse_asset_string(asset_str)
             asset = asset_manager.get_asset(asset_id)
-            if asset:
-                asset_list.append(asset)
-
-                # Require explicit, valid, positive "frames" parameter until Asset Manager support n_frames
-                if "frames" not in params:
-                    error = ErrorFactory.create(
-                        "ERR_VIDEO_001",
-                        message="Missing required parameter 'frames' for video frame sampling",
-                        caller=self,
-                        severity=ErrorSeverity.CRITICAL,
-                        input_data={"asset_id": asset_id, "params": params},
-                        expected_data={"required_params": ["frames"]}
-                    )
-                    error.log(logger, as_json=False)
-                    return error
-                try:
-                    n = int(params["frames"])
-                except (TypeError, ValueError):
-                    error = ErrorFactory.create(
-                        "ERR_VIDEO_001",
-                        message=f"Invalid 'frames' value for video frame sampling: {params['frames']}",
-                        caller=self,
-                        severity=ErrorSeverity.CRITICAL,
-                        input_data={"asset_id": asset_id, "frames": params["frames"]},
-                        expected_data={"frames_type": "positive integer"}
-                    )
-                    error.log(logger, as_json=False)
-                    return error
-                if n <= 0:
-                    error = ErrorFactory.create(
-                        "ERR_VIDEO_001",
-                        message=f"'frames' must be a positive integer, got {n}",
-                        caller=self,
-                        severity=ErrorSeverity.CRITICAL,
-                        input_data={"asset_id": asset_id, "frames": n},
-                        expected_data={"frames_min_value": 1}
-                    )
-                    error.log(logger, as_json=False)
-                    return error
-
-                if n_frames is None:
-                    n_frames = n
-                elif n_frames != n:
-                    error = ErrorFactory.create(
-                        "ERR_VIDEO_001",
-                        message=f"frames mismatch on multiple assets: {n_frames} != {n}",
-                        caller=self,
-                        severity=ErrorSeverity.WARNING,
-                        actual_data={"n_frames_first": n_frames, "n_frames_current": n}
-                    )
-                    error.log(logger, as_json=False)
-                    return error
-                n = int(params.get("chunks", 1))
-                if n_chunks is None:
-                    n_chunks = n
-                elif n_chunks != n:
-                    error = ErrorFactory.create(
-                        "ERR_VIDEO_001",
-                        message=f"chunks mismatch on multiple assets: {n_chunks} != {n}",
-                        caller=self,
-                        severity=ErrorSeverity.WARNING,
-                        actual_data={"n_chunks_first": n_chunks, "n_chunks_current": n}
-                    )
-                    error.log(logger, as_json=False)
-                    return error
-                n = int(params.get("start", 0))
-                if start is None:
-                    start = n
-                elif start != n:
-                    error = ErrorFactory.create(
-                        "ERR_VIDEO_001",
-                        message=f"start mismatch on multiple assets: {start} != {n}",
-                        caller=self,
-                        severity=ErrorSeverity.WARNING,
-                        actual_data={"start_first": start, "start_current": n}
-                    )
-                    error.log(logger, as_json=False)
-                    return error
-                n = int(params.get("duration", asset.duration))
-                if duration is None:
-                    duration = n
-                elif duration != n:
-                    error = ErrorFactory.create(
-                        "ERR_VIDEO_001",
-                        message=f"duration mismatch on multiple assets: {duration} != {n}",
-                        caller=self,
-                        severity=ErrorSeverity.WARNING,
-                        actual_data={"duration_first": duration, "duration_current": n}
-                    )
-                    error.log(logger, as_json=False)
-                    return error
-            else:
+            if not asset:
                 error = ErrorFactory.create(
                     "ERR_DF_003",
                     message=f"Asset not found: {asset_id}",
                     caller=self,
-                    input_data={
-                        "asset_id": asset_id,
-                        "asset_string": asset,
-                        "params": params
-                    },
-                    metadata={
-                        "n_frames": n_frames,
-                        "n_chunks": n_chunks,
-                        "start": params.get("start", 0),
-                        "duration": params.get("duration")
-                    }
+                    input_data={"asset_id": asset_id, "asset_string": asset_str, "params": params}
                 )
                 error.log(logger, as_json=False)
                 return error
 
+            asset_list.append(asset)
+
+            # Validate frames parameter (required)
+            if "frames" not in params:
+                error = ErrorFactory.create(
+                    "ERR_VIDEO_001",
+                    message="Missing required parameter 'frames' for video frame sampling",
+                    caller=self,
+                    severity=ErrorSeverity.CRITICAL,
+                    input_data={"asset_id": asset_id, "params": params},
+                    expected_data={"required_params": ["frames"]}
+                )
+                error.log(logger, as_json=False)
+                return error
+
+            try:
+                n = int(params["frames"])
+                if n <= 0:
+                    raise ValueError("frames must be positive")
+            except (TypeError, ValueError) as e:
+                error = ErrorFactory.create(
+                    "ERR_VIDEO_001",
+                    message=f"Invalid 'frames' value: {params['frames']} - {e}",
+                    caller=self,
+                    severity=ErrorSeverity.CRITICAL,
+                    input_data={"asset_id": asset_id, "frames": params["frames"]}
+                )
+                error.log(logger, as_json=False)
+                return error
+
+            if n_frames is None:
+                n_frames = n
+            elif n_frames != n:
+                error = ErrorFactory.create(
+                    "ERR_VIDEO_001",
+                    message=f"frames mismatch on multiple assets: {n_frames} != {n}",
+                    caller=self,
+                    severity=ErrorSeverity.WARNING
+                )
+                error.log(logger, as_json=False)
+                return error
+
+            # Validate duration parameter (optional, default asset duration)
+            n = int(params.get("duration", asset.duration))
+            if duration is None:
+                duration = n
+            elif duration != n:
+                error = ErrorFactory.create(
+                    "ERR_VIDEO_001",
+                    message=f"duration mismatch on multiple assets: {duration} != {n}",
+                    caller=self,
+                    severity=ErrorSeverity.WARNING
+                )
+                error.log(logger, as_json=False)
+                return error
+
+            # Extract start parameter (optional, default 0) - can vary per asset
+            start = int(params.get("start", 0))
+            start_times.append(start)
+
+        # Calculate frame sampling interval
+        interval = duration / n_frames if n_frames > 0 else 0
+
+        # Setup MediaExtractor queues for each asset
         results_queue = Queue()
-        for asset in asset_list:
+        for asset, start_time in zip(asset_list, start_times):
             asset.lock()
-            interval = duration / (n_frames * n_chunks) if n_frames > 0  else 0
             chunk = MediaChunk(
                 asset.path,
-                start_pts=start,
+                start_pts=start_time,
                 duration=duration if duration else -1,
                 interval=interval if interval else 0
             )
             qs.append(self._media_extractor.append(chunk))
+
+        # Submit frame collection task to thread pool
         self._frame_collector.submit(
-            self._collect_frames_from_queue, asset_list, qs, n_frames, n_chunks, results_queue
+            self._collect_frames_from_queue, asset_list, qs, n_frames, results_queue
         )
         return results_queue
 
@@ -662,10 +791,12 @@ class VideoFrameSamplingDataFlow(DataFlow):
         return all([n in collected for n in self._video_tensor_names])
 
     def stop(self):
+        logger.info(f"VideoFrameSamplingDataFlow: shutting down frame collector")
         super().stop()
         self._media_extractor.__del__()
         self._media_extractor = None
         self._frame_collector.shutdown(wait=True)
+        logger.info(f"VideoFrameSamplingDataFlow: frame collector shut down")
 
 
 class ImageInputDataFlow(DataFlow):
@@ -807,7 +938,7 @@ class ImageInputDataFlow(DataFlow):
 inbound_dataflow_mapping = {
     "TYPE_CUSTOM_IMAGE_BASE64": ImageInputDataFlow,
     "TYPE_CUSTOM_IMAGE_ASSETS": ImageInputDataFlow,
-    "TYPE_CUSTOM_VIDEO_ASSETS": VideoInputDataFlow,
+    "TYPE_CUSTOM_LONG_VIDEO_ASSETS": VideoInputDataFlow,
     "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": VideoFrameSamplingDataFlow
 }
 class ModelBackend(ABC):
@@ -1039,6 +1170,7 @@ class MultiFlowCollector(Collector):
         self._stop_event.set()
         for data_flow in self._data_flows:
             data_flow.stop()
+        logger.info(f"MultiFlowCollector data flows stopped")
         self._executor.shutdown(wait=True)
         self._queue.put(Stop("Shutdown"))
         logger.info(f"MultiFlowCollector destructed")
@@ -1095,18 +1227,27 @@ class AsyncDispatcher:
                 continue
 
             # For this consumer queue, keep collecting until Stop/Error is received
+            logger.debug(f"[AsyncDispatcher] Starting collection loop for new async_queue")
+            collect_attempts = 0
             while not self._stop_event.is_set():
                 try:
+                    logger.debug(f"[AsyncDispatcher] Attempting to collect (attempt #{collect_attempts})")
                     data = self._collector.collect()
+                    logger.debug(f"[AsyncDispatcher] Collected data: {type(data).__name__}")
                 except Empty:
+                    collect_attempts += 1
+                    if collect_attempts % 100 == 0:
+                        logger.debug(f"[AsyncDispatcher] Still waiting for data after {collect_attempts} attempts")
                     continue
                 except Exception as e:
                     logger.exception(e)
                     data = Error(str(e))
                 try:
+                    logger.debug(f"[AsyncDispatcher] Putting data into async_queue")
                     async def _async_put(q, item):
                         await q.put(item)
                     asyncio.run_coroutine_threadsafe(_async_put(async_queue, data), self._loop)
+                    logger.debug(f"[AsyncDispatcher] Successfully put data into async_queue")
                 except Exception as e:
                     logger.exception(e)
                     continue
@@ -1350,7 +1491,7 @@ class ModelOperator:
                     caller=self,
                     category=ErrorCategory.BACKEND if "backend" in str(e).lower() else ErrorCategory.INTERNAL,
                     model_name=self._model_name,
-                    dataflow_names=[o.in_names for o in self._out],
+                    dataflow_names=[name for o in self._out for name in o.in_names],
                     input_data={
                         "data_keys": list(data.keys()) if 'data' in locals() and isinstance(data, dict) else []
                     },

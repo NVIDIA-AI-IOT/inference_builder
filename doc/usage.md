@@ -83,13 +83,13 @@ Breakdown of the configuration:
   - media_url: the path or URL to the input media.
   - mime: the media type (e.g., "video/mp4" or "image/jpeg").
 - The pipeline supports batch processing with up to 4 media items at a time as indicated by max_batch_size, and the number can be adjusted to suit the capabilities of the hardware platform and the requirements of the model.
-- The output is a custom DeepStream metadata object, which carries information about the detected bounding boxes and labels for detection models.
+- The output is a custom DeepStream metadata dictionary (`TYPE_CUSTOM_DS_METADATA`), which carries per-frame information such as detected bounding boxes, confidence scores, labels, segmentation maps, tracking IDs, and timestamps. The structure is flexible and returned as a dictionary with fields like `shape`, `bboxes`, `probs`, `labels`, `seg_maps`, `objects`, and `timestamp`. For complete structure details, see the [DeepStream-Specific Types section in schemas/README.md](../schemas/README.md#type_custom_ds_metadata).
 
 ### Input and Output Definition
 
 Input and output definitions are required at the model level, and in some cases also at the top level of the pipeline. Each definition specifies the name, data type, dimensions, and optional flags for tensors flowing through the pipeline.
 
-For complete documentation on input/output specifications, supported data types (including custom types like TYPE_CUSTOM_IMAGE_BASE64, TYPE_CUSTOM_VIDEO_ASSETS, etc.), and field descriptions, see the [Data Types section in schemas/README.md](../schemas/README.md#data-types).
+For complete documentation on input/output specifications, supported data types (including custom types like TYPE_CUSTOM_IMAGE_BASE64, TYPE_CUSTOM_LONG_VIDEO_ASSETS, etc.), and field descriptions, see the [Data Types section in schemas/README.md](../schemas/README.md#data-types).
 
 ### Model Definition
 

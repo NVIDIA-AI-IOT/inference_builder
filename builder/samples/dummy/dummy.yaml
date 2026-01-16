@@ -37,7 +37,7 @@ input:
     optional: true
   # a list of asset ids for video files
   - name: "video_assets"
-    data_type: TYPE_CUSTOM_VIDEO_ASSETS
+    data_type: TYPE_CUSTOM_LONG_VIDEO_ASSETS
     dims: [ -1 ]
     optional: true
 

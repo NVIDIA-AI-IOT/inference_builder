@@ -50,14 +50,14 @@
     },
     "preprocessors": {
       "type": "array",
-      "description": "Preprocessors for this model",
+      "description": "Ordered list of preprocessors applied to this model's inputs before inference. Each preprocessor transforms or derives tensors from existing ones (for example, tokenization or image normalization) and is executed in sequence. Typically used to adapt data from top-level inputs or previous models into the format and shape expected by this model's inputs.",
       "items": {
         "$ref": "preprocessors.schema.json"
       }
     },
     "postprocessors": {
       "type": "array",
-      "description": "Postprocessors for this model",
+      "description": "Ordered list of postprocessors applied to this model's outputs after inference. Each postprocessor can transform, filter, or aggregate output tensors (for example, masking, decoding, or embedding processing) and is executed in sequence. Commonly used to convert raw model outputs into the tensors or objects expected by downstream models or top-level outputs.",
       "items": {
         "$ref": "postprocessors.schema.json"
       }

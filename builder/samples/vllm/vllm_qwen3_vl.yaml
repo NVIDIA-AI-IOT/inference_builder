@@ -98,6 +98,7 @@ models:
         dims: [ -1 ]
     parameters:
       max_num_tokens: 19200
+      async_mode: true
     preprocessors:
       - kind: "custom"
         name: "qwen3-vl-loader"

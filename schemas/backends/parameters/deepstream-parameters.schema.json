@@ -8,14 +8,14 @@
   "properties": {
     "infer_config_path": {
       "type": "array",
-      "description": "Paths to nvinfer configuration files, refer to https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvinfer.html#gst-nvinfer-file-configuration-specifications for more details",
+      "description": "Paths (inside the model repository) to DeepStream nvinfer runtime configuration files (for example, nvdsinfer_config.yaml). If these file are not in the model repository folder, they must be created and copied into the model repository before deployment and are used by the DeepStream nvinfer plugin at runtime. Refer to https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvinfer.html#gst-nvinfer-file-configuration-specifications for more details.",
       "items": {
         "type": "string"
       }
     },
     "preprocess_config_path": {
       "type": "array",
-      "description": "Paths to nvdspreprocess configuration files for preprocessing operations before inference, refer to https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvdspreprocess.html for more details",
+      "description": "Paths (inside the model repository) to DeepStream nvdspreprocess runtime configuration files (for example, nvdspreprocess_config*.yaml). These files define preprocessing operations that run before inference and are required when non-image tensors must be injected into the pipeline. They must already be copied into the model repository before deployment. Refer to https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvdspreprocess.html for more details.",
       "items": {
         "type": "string"
       }
@@ -28,7 +28,7 @@
     "inference_timeout": {
       "type": "integer",
       "minimum": 0,
-      "description": "Inference timeout in seconds"
+      "description": "Inference timeout in seconds, absence of this field means no timeout is enforced"
     },
     "tracker_config": {
       "type": "object",

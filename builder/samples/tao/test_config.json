@@ -24,9 +24,6 @@
       "volumes": {
         "/tmp/model-repo": "/workspace/.cache/model-repo"
       },
-      "ports": {
-        "8000": "8000"
-      },
       "auto_validation": "./validation/gdino",
       "prerequisite_script": null,
       "models": {
@@ -63,9 +60,6 @@
       },
       "volumes": {
         "/tmp/model-repo": "/workspace/.cache/model-repo"
-      },
-      "ports": {
-        "8000": "8000"
       },
       "auto_validation": "./validation/citysemsegformer",
       "prerequisite_script": null,
@@ -104,9 +98,6 @@
       "volumes": {
         "/tmp/model-repo": "/workspace/.cache/model-repo"
       },
-      "ports": {
-        "8000": "8000"
-      },
       "auto_validation": "./validation/rtdetr",
       "prerequisite_script": null,
       "models": {
@@ -144,9 +135,6 @@
       },
       "volumes": {
         "/tmp/model-repo": "/workspace/.cache/model-repo"
-      },
-      "ports": {
-        "8000": "8000"
       },
       "auto_validation": "./validation/mgdino",
       "prerequisite_script": null,
