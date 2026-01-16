@@ -218,7 +218,7 @@ These arguments allow custom paths for code generation (useful for complex test 
       "frame_sampling/models": "/workspace/models"
     },
     "cmd": [
-      "--video-streams", "fcf490e3-a64b-4dc9-95db-dcdba90032b3?frames=10&duration=1000000000"
+      "--video-streams", "fcf490e3-a64b-4dc9-95db-dcdba90032b3?frames=10&interval=100000000&chunks=100"
     ],
     "error_detection": {
       "enabled": false

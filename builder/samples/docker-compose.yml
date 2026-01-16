@@ -96,7 +96,7 @@ services:
     ipc: host
     # init: true
     ports:
-      - "8800:8000"
+      - "8800-8803:8000-8003"
     deploy:
       resources:
         reservations:

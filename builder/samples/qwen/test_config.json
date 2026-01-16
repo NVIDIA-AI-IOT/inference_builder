@@ -17,13 +17,11 @@
       "env": {
         "MODEL_REPO": "/workspace/model-repo",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
-        "HF_MODEL_NAME": "Qwen/Qwen2.5-VL-3B-Instruct"
+        "HF_MODEL_NAME": "Qwen/Qwen2.5-VL-3B-Instruct",
+        "HTTP_PORT": "8888"
       },
       "volumes": {
         "/tmp/model-repo": "/workspace/model-repo"
-      },
-      "ports": {
-        "8000": "8000"
       },
       "test_requests": [
         {
@@ -63,13 +61,11 @@
       "env": {
         "MODEL_REPO": "/workspace/model-repo",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
-        "HF_MODEL_NAME": "Qwen/Qwen2.5-VL-3B-Instruct"
+        "HF_MODEL_NAME": "Qwen/Qwen2.5-VL-3B-Instruct",
+        "HTTP_PORT": "8889"
       },
       "volumes": {
         "/tmp/model-repo": "/workspace/model-repo"
-      },
-      "ports": {
-        "8000": "8000"
       },
       "test_requests": [
         {
@@ -109,13 +105,11 @@
       "env": {
         "MODEL_REPO": "/workspace/model-repo",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
-        "HF_MODEL_NAME": "Qwen/Qwen2.5-VL-3B-Instruct"
+        "HF_MODEL_NAME": "Qwen/Qwen2.5-VL-3B-Instruct",
+        "HTTP_PORT": "8890"
       },
       "volumes": {
         "/tmp/model-repo": "/workspace/model-repo"
-      },
-      "ports": {
-        "8000": "8000"
       },
       "test_requests": [
         {

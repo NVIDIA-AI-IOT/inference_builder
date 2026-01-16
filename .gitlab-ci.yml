@@ -168,6 +168,9 @@ test:report:
     - job: test:tao_cv
       artifacts: true
       optional: true
+    - job: test:changenet
+      artifacts: true
+      optional: true
 
   script:
     - echo "Generating test report summary..."
@@ -183,6 +186,8 @@ test:report:
         REPORT_PATH="builder/tests/qwen_report.json"
       elif [ -f "builder/tests/tao_cv_report.json" ]; then
         REPORT_PATH="builder/tests/tao_cv_report.json"
+      elif [ -f "builder/tests/changenet_report.json" ]; then
+        REPORT_PATH="builder/tests/changenet_report.json"
       elif [ -f "builder/tests/quick_test_report.json" ]; then
         REPORT_PATH="builder/tests/quick_test_report.json"
       fi
@@ -236,6 +241,8 @@ test:report:
       - builder/tests/qwen_logs/
       - builder/tests/tao_cv_report.json
       - builder/tests/tao_cv_logs/
+      - builder/tests/changenet_report.json
+      - builder/tests/changenet_logs/
     when: always
     expire_in: 1 week
   rules:
@@ -536,6 +543,76 @@ test:tao_cv:
     paths:
       - builder/tests/tao_cv_logs/
       - builder/tests/tao_cv_report.json
+    when: always
+    expire_in: 1 week
+  timeout: 3h
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+  tags:
+    - os/linux
+    - type/docker
+    - gpu
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  allow_failure: true
+
+# ------------------------------
+# ChangeNet Test (manual)
+# ------------------------------
+test:changenet:
+  stage: test
+  image: python:3.12-slim
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: unix:///var/run/docker.sock
+    DOCKER_BUILDKIT: "1"
+    NGC_CLI_VERSION: "3.50.0"
+    MODEL_REPO: "/tmp/model-repo"
+  before_script:
+    # Install build dependencies for Python packages
+    - apt-get update && apt-get install -y --no-install-recommends python3-dev python3-pip bash gcc g++ make cmake libssl-dev ffmpeg file net-tools
+    # Setup Docker with BuildKit support
+    - *setup_docker_buildkit
+    # Setup NGC CLI
+    - *setup_ngc_cli
+    # Install OpenAPI Generator CLI dependencies (Java + Node.js)
+    - apt-get install -y --no-install-recommends default-jre-headless nodejs npm || apt-get install -y --no-install-recommends openjdk-17-jre-headless nodejs npm
+    - java -version
+    - npm install -g @openapitools/openapi-generator-cli
+    # Setup Python dependencies
+    - python3 --version
+    - pip3 install --upgrade pip --break-system-packages || pip3 install --upgrade pip
+    - |-
+      if [ -f requirements.txt ]; then
+        pip install -r <(grep -v '^opencv-python' requirements.txt) --break-system-packages || pip install -r requirements.txt
+      else
+        echo "No requirements.txt found, skipping"
+      fi
+    # Create model repository directory
+    - mkdir -p "$MODEL_REPO"
+  script:
+    - echo "Running ChangeNet tests with automatic model download..."
+    - cd builder/tests
+    - export PATH="/opt/ngc-cli:$PATH"
+    - chmod +x run_tests.sh
+    - ./run_tests.sh --config ../samples/changenet/test_config.json --log-dir changenet_logs --output changenet_report.json
+    - echo "ChangeNet tests completed"
+  after_script:
+    - echo "Cleaning up Docker images..."
+    - docker images | grep test-inference_builder | awk '{print $3}' | xargs -r docker rmi -f || true
+    - echo "Cleaning up downloaded models..."
+    - rm -rf /tmp/model-repo || true
+    - echo "Cleanup completed"
+  artifacts:
+    name: "changenet-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - builder/tests/changenet_logs/
+      - builder/tests/changenet_report.json
     when: always
     expire_in: 1 week
   timeout: 3h

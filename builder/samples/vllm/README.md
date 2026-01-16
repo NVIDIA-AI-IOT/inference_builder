@@ -4,32 +4,32 @@ This example demonstrates how to build an inference pipeline with Nvidia Deepstr
 
 ## Prerequisites
 
-The sample models including `Cosmos-Reason1-7B` and `Qwen3-VL-30B-A3B-Instruct` can all be downloaded from huggingface (Be sure to have git-lfs installed):
+The sample models including `Cosmos-Reason2-2B` and `Qwen3-VL-2B-Instruct` can all be downloaded from huggingface (Be sure to have git-lfs installed):
 
 ```bash
-git clone https://huggingface.co/nvidia/Cosmos-Reason1-7B ~/.cache/model-repo/Cosmos
+git clone https://huggingface.co/nvidia/Cosmos-Reason2-2B ~/.cache/model-repo/Cosmos
 ```
 
 or
 
 ```bash
-git clone https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct ~/.cache/model-repo/Qwen3-VL
+git clone https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct ~/.cache/model-repo/Qwen3-VL
 ```
 
 ## Generate the Inference Package
 
 
-### Cosmos-Reason1-7B
+### Cosmos-Reason2-2B
 
 ```bash
-python builder/main.py builder/samples/vllm/vllm_nvdec_cosmos.yaml --api-spec builder/samples/qwen/openapi.yaml \
+python builder/main.py builder/samples/vllm/vllm_nvdec_cosmos.yaml --api-spec builder/samples/vllm/openapi.yaml \
 -o builder/samples/vllm/ -c builder/samples/qwen/processors.py -t
 ```
 
-### Qwen3-VL-30B-A3B-Instruct
+### Qwen3-VL-2B-Instruct
 
 ```bash
-python builder/main.py builder/samples/vllm/vllm_nvdec_qwen3_vl.yaml --api-spec builder/samples/qwen/openapi.yaml \
+python builder/main.py builder/samples/vllm/vllm_nvdec_qwen3_vl.yaml --api-spec builder/samples/vllm/openapi.yaml \
 -o builder/samples/vllm/ -c builder/samples/qwen/processors.py -t
 ```
 
@@ -75,14 +75,34 @@ You'll get a response 200 with a json body:
   }
 }
 
-Run the client.py with the returned video path:
+Similarly, for live stream input, you need to first add a live stream as an asset.
+
+**⚠️ Important:** **replace the placeholder <your_stream> in below command with an actual RTSP address**.
+
+```bash
+export LIVE_STREAM=<your_stream>
+curl -X "POST" \
+  "http://localhost:8800/v1/streams" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d "{\"url\": \"$LIVE_STREAM\", \"name\": \"my-stream\"}"
+```
+
+Run the client.py with the returned asset id and specify the frames per chunk and number of chunks to extract:
 
 ```bash
 cd builder/samples/qwen
-python client.py --videos 577a9f11-2b24-4db8-82c8-2601e0c2b6e4?frames=8
+python client.py --videos "577a9f11-2b24-4db8-82c8-2601e0c2b6e4?frames=8&chunks=1"
 ```
 
-For testing long videos with automatic chunking, you must use raw json payload with curl by setting accept to "application/x-ndjson":
+You can also optionally specify the frame interval and scaling parameters:
+
+```bash
+# Extract 1 chunk with 8 frames at the interval of 0.5s, and resize it to 640x260, then do summarization
+python client.py --videos "577a9f11-2b24-4db8-82c8-2601e0c2b6e4?frames=8&chunks=1&interval=500000000&scaling=640x360"
+```
+
+Or use raw json payload with curl to get the result of all the chunks using "x-ndjson":
 
 ```bash
 curl -X 'POST' \
@@ -90,24 +110,22 @@ curl -X 'POST' \
   -H 'accept: application/x-ndjson' \
   -H 'Content-Type: application/json' \
   -d '{
-  "model": "cosmos_v1",
+  "model": "qwen3_vl",
   "messages": [
     {
       "role": "user",
       "content": [
         {
           "type": "text",
-          "text": "Please describe the image in detail."
+          "text": "Please describe the video in detail."
         },
         {
           "type": "video",
-          "video": {
-            "url": "577a9f11-2b24-4db8-82c8-2601e0c2b6e4?frames=8&chunks=8"
-          }
+          "video": "f7de6b95-f960-4f7f-9a0b-e0cf61f807f2?frames=8"
         }
       ]
     }
   ],
   "max_tokens": 200
-}' -N
+}'
 ```

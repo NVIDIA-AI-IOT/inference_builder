@@ -22,9 +22,6 @@
       "volumes": {
         "/tmp/model-repo": "/workspace/model-repo"
       },
-      "ports": {
-        "8000": "8000"
-      },
       "test_requests": [
         {
           "payload_path": "payloads/images.jsonl",
@@ -77,9 +74,6 @@
       },
       "volumes": {
         "/tmp/model-repo": "/workspace/model-repo"
-      },
-      "ports": {
-        "8000": "8000"
       },
       "test_requests": [
         {
@@ -136,13 +130,10 @@
       "env": {
         "MODEL_REPO": "/workspace/model-repo",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
-        "HF_MODEL_NAME": "nvidia/Cosmos-Reason1-7B"
+        "HF_MODEL_NAME": "nvidia/Cosmos-Reason2-2B"
       },
       "volumes": {
         "/tmp/model-repo": "/workspace/model-repo"
-      },
-      "ports": {
-        "8000": "8000"
       },
       "test_requests": [
         {
@@ -197,9 +188,6 @@
       "volumes": {
         "/tmp/model-repo": "/workspace/model-repo"
       },
-      "ports": {
-        "8000": "8000"
-      },
       "test_requests": [
         {
           "payload_path": "payloads/images.jsonl",
@@ -232,7 +220,7 @@
         "Cosmos": {
           "source": "HF",
           "target": "/tmp/model-repo",
-          "path": "nvidia/Cosmos-Reason1-7B"
+          "path": "nvidia/Cosmos-Reason2-2B"
         }
       }
     }

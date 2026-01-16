@@ -16,7 +16,7 @@
         "frame_sampling/models": "/workspace/models"
       },
       "cmd": [
-        "--video-files", "file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=10&chunks=10"
+        "--video-files", "file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=10&start=0&duration=10000000000"
       ],
       "prerequisite_script": null
     }
@@ -38,7 +38,7 @@
         "frame_sampling/models": "/workspace/models"
       },
       "cmd": [
-        "--video-streams", "rtsp://localhost:8554/test?frames=10&duration=1000000000"
+        "--video-streams", "rtsp://localhost:8554/test?frames=10&interval=100000000&chunks=3&scale=640x360"
       ],
       "prerequisite_script": "./setup_rtsp_server.sh frame.jpg -m test -f 30 --daemon"
     }
@@ -361,8 +361,8 @@
       "expected_error": "ERR_VIDEO_001",
       "cmd": [
         "--video-chunk",
-        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=10&chunks=10",
-        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=10&chunks=1"
+        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=10&duration=10000000000",
+        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=10&duration=20000000000"
       ]
     }
   },
@@ -384,8 +384,8 @@
       "expected_error": "ERR_VIDEO_001",
       "cmd": [
         "--video-chunk",
-        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=10&chunks=10",
-        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=1&chunks=10"
+        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=10&duration=10000000000",
+        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h265.mp4?frames=1&duration=10000000000"
       ]
     }
   },
@@ -445,6 +445,60 @@
       },
       "expected_error": "ERR_DF_006",
       "cmd": []
+    }
+  },
+  {
+    "name": "live_stream_graceful_deletion_test",
+    "description": "Test graceful deletion of RTSP stream during processing",
+    "build_args": {
+      "TEST_APP_NAME": "asset_management",
+      "CACHE_BUSTER": "live_stream_deletion",
+      "SERVER_TYPE": "fastapi",
+      "OPENAPI_SPEC": "builder/tests/asset_management/openapi.yaml"
+    },
+    "test_config": {
+      "default_enable": false,
+      "timeout": 120,
+      "env": {
+        "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
+        "DEBUG": "0",
+        "HTTP_PORT": "8000"
+      },
+      "volumes": {
+        "asset_management/models": "/workspace/models"
+      },
+      "ports": {
+        "8000": "8000"
+      },
+      "assets": [
+        {
+          "assetId": "00000000-0000-4000-8000-000000000001",
+          "path": "rtsp://localhost:8554/test",
+          "fileName": "",
+          "mimeType": "",
+          "duration": 0,
+          "username": "",
+          "password": "",
+          "description": "Test RTSP stream for graceful deletion",
+          "size": 0,
+          "live": true
+        }
+      ],
+      "test_requests": [
+        {
+          "scheduled_time": 10,
+          "method": "POST",
+          "endpoint": "/v1/inference",
+          "payload_path": "asset_management/payloads/start_stream.jsonl",
+          "async": true
+        },
+        {
+          "scheduled_time": 15,
+          "method": "DELETE",
+          "endpoint": "/v1/live-streams/00000000-0000-4000-8000-000000000001"
+        }
+      ],
+      "prerequisite_script": "./setup_rtsp_server.sh frame.jpg -m test -f 30 --daemon"
     }
   }
 ]

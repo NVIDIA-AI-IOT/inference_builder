@@ -50,6 +50,8 @@ server:
             "usage": { "num_images": 1},
             "model": "nvidia/changenet"
           }
+    healthy_ready:
+      operation: health_ready_v1_health_ready_get
 
 models:
 - name: visual_changenet
