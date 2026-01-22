@@ -110,6 +110,8 @@ This enables the following features:
    - `generate_nvinfer_config`: Generate DeepStream nvinfer runtime configuration files
 
 - Explore available resources:
+   - `docs://README.md`: Project documentation
+   - `docs://mcp/README-MCP.md`: MCP integration documentation
    - `schema://config.schema.json`: Configuration schema
    - `samples://config/*`: Sample pipeline configurations
    - `samples://dockerfile/*`: Sample Dockerfiles

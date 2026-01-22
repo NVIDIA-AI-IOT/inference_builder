@@ -17,11 +17,13 @@
 from .utils import get_logger
 import os
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, TYPE_CHECKING
 import json
 import uuid
-from fastapi import UploadFile
 import shutil
+
+if TYPE_CHECKING:
+    from fastapi import UploadFile
 from pyservicemaker.utils import MediaInfo
 import tempfile
 from urllib.parse import urlparse
@@ -151,7 +153,7 @@ class AssetManager:
         }
         self._initialized = True
 
-    def save_file(self, file: UploadFile, file_name: str, mime_type: str) -> Asset | None:
+    def save_file(self, file: "UploadFile", file_name: str, mime_type: str) -> Asset | None:
         asset_id = str(uuid.uuid4())
         while asset_id in self._asset_map:
             asset_id = str(uuid.uuid4())
