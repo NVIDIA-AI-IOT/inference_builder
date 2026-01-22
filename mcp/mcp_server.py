@@ -159,6 +159,38 @@ class InferenceBuilderMCPServer:
                         ),
                         mimeType="application/json"
                     ),
+                    # Documentation resources
+                    Resource(
+                        uri="docs://README.md",
+                        name="Project README",
+                        description=(
+                            "Main project documentation for Inference Builder. "
+                            "Includes overview, getting started guide, installation instructions, "
+                            "and links to examples and detailed documentation."
+                        ),
+                        mimeType="text/markdown"
+                    ),
+                    Resource(
+                        uri="docs://mcp/README-MCP.md",
+                        name="MCP Integration Documentation",
+                        description=(
+                            "Detailed documentation for MCP server integration. "
+                            "Includes tool reference with parameters, resource navigation guide, "
+                            "usage examples, workflow integration, and troubleshooting."
+                        ),
+                        mimeType="text/markdown"
+                    ),
+                    Resource(
+                        uri="docs://usage.md",
+                        name="Usage Documentation",
+                        description=(
+                            "Comprehensive usage guide for Inference Builder. "
+                            "Covers command line arguments, configuration file format, "
+                            "model definitions, preprocessors/postprocessors, server configuration, "
+                            "routing, and runtime environment variables."
+                        ),
+                        mimeType="text/markdown"
+                    ),
                 ]
                 self.logger.info("Created %d base_resources objects", len(base_resources))
                 for i, res in enumerate(base_resources):
@@ -385,8 +417,24 @@ class InferenceBuilderMCPServer:
             schema_dir = Path(__file__).parent.parent / "schemas"
             samples_dir = Path(__file__).parent.parent / "builder" / "samples"
 
+            # Handle docs:// URIs for documentation files
+            if uri.startswith("docs://"):
+                project_root = Path(__file__).parent.parent
+                docs_mappings = {
+                    "docs://README.md": project_root / "README.md",
+                    "docs://mcp/README-MCP.md": project_root / "mcp" / "README-MCP.md",
+                    "docs://usage.md": project_root / "doc" / "usage.md",
+                }
+                if uri in docs_mappings:
+                    file_path = docs_mappings[uri]
+                else:
+                    raise ValueError(
+                        f"Unknown docs resource URI: {uri}. "
+                        f"Available: docs://README.md, docs://mcp/README-MCP.md, docs://usage.md"
+                    )
+
             # Handle schema:// URIs
-            if uri.startswith("schema://"):
+            elif uri.startswith("schema://"):
                 # Static schema mappings
                 uri_to_file = {
                     "schema://config.schema.json": schema_dir / "config.schema.json",
@@ -461,7 +509,7 @@ class InferenceBuilderMCPServer:
             else:
                 raise ValueError(
                     f"Unknown resource URI scheme: {uri}. "
-                    f"Supported schemes: schema://, samples://"
+                    f"Supported schemes: docs://, schema://, samples://"
                 )
 
             if not file_path.exists():
@@ -879,7 +927,8 @@ class InferenceBuilderMCPServer:
                         "precision mode, network type, input dimensions, and custom parsers. "
                         "The generated file should be referenced via 'infer_config_path' in the DeepStream "
                         "backend parameters. See 'samples://runtime_config/*' resources for examples."
-                        "Do not generate a new configuration if it already exists in the model repository alongside the model file."
+                        "Before generating the config file, first download the model and search for any existing parameters or information needed for this configuration. The correct settings depend on the model architecture, how the model was trained and how you plan to perform inference."
+                        "If you cannot find all required information in the repository, fill in the parameters based on what you know about the model architecture and inference requirements. For instance, consider whether a custom C++ parser library or raw tensor outputs for a Python post-processor is needed."
                     ),
                     inputSchema={
                         "type": "object",
@@ -945,6 +994,7 @@ class InferenceBuilderMCPServer:
                                 "description": (
                                     "Symbol name of the custom parsing function in the custom parser library. "
                                     "Required when using custom_lib_path for network types 0 (detection), "
+                                    "1 (classification), "
                                     "2 (segmentation), or 3 (instance_segmentation). "
                                     "Not required for network_type 100 (custom). "
                                     "Example: 'NvDsInferParseCustomYOLO' for YOLO models, "
@@ -1761,12 +1811,13 @@ class InferenceBuilderMCPServer:
             if custom_parse_func:
                 if network_type == 0:  # detection
                     config["property"]["parse-bbox-func-name"] = custom_parse_func
+                elif network_type == 1:  # classification
+                    config["property"]["parse-classifier-func-name"] = custom_parse_func
                 elif network_type == 2:  # segmentation
                     config["property"]["parse-segmentation-func-name"] = custom_parse_func
                 elif network_type == 3:  # instance_segmentation
                     config["property"]["parse-bbox-instance-mask-func-name"] = custom_parse_func
                 # network_type 100 (custom) doesn't need a parse function name
-                # network_type 1 (classification) doesn't use custom parse functions
 
         # Generate YAML content with header
         header = """# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.

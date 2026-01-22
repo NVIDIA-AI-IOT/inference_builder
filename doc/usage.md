@@ -145,3 +145,59 @@ The routes definition is a map where each entry specifies a connection between a
 - Tensor lists are optional and specified as JSON arrays (e.g., `["tensor1", "tensor2"]`).
 
 For detailed examples and explanation of routing logic, see the [Routes section in schemas/README.md](../schemas/README.md#routes).
+
+## Runtime Environment Variables
+
+The following environment variables can be used to control runtime behavior of the generated inference pipelines.
+
+### Logging & Debugging
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DEBUG` | `0` | Enable debug mode (sets log level to DEBUG when non-zero) |
+| `LOG_LEVEL` | `INFO` | Log verbosity level: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
+
+### Inference Performance
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `N_CODEC_INSTANCES` | `1` | Number of video codec instances for parallel decoding. Increase for higher throughput when processing multiple video streams. |
+| `MAX_BATCH_SIZE` | `16` | Maximum batch size for live stream frame collection. Controls memory usage vs throughput trade-off. |
+
+### Server Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HTTP_PORT` | `8000` | HTTP port for FastAPI server when using `fastapi` server type. |
+
+### Testing & Validation
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TEST_HOST` | `http://127.0.0.1:8800` | Target host URL for the test runner to connect to. |
+| `TEST_TOLERANCE` | `1e-5` | Numerical tolerance for floating-point comparisons in test assertions. |
+| `ERROR_EXPORT_PATH` | `/tmp/inference_errors.json` | File path to export collected errors for test validation and debugging. |
+
+### Dynamic Configuration Override
+
+The generated configuration module (`config.py`) supports dynamic environment variable substitution using the pattern `$ENV_VAR|default_value`. This allows any configuration value to be overridden at runtime.
+
+**Format:** `$VARIABLE_NAME|default_value`
+
+**Example configuration:**
+```yaml
+models:
+- name: my_model
+  parameters:
+    batch_size: $MODEL_BATCH_SIZE|8
+    precision: $MODEL_PRECISION|fp16
+```
+
+In this example:
+- `batch_size` will use the value of `MODEL_BATCH_SIZE` environment variable if set, otherwise defaults to `8`
+- `precision` will use `MODEL_PRECISION` if set, otherwise defaults to `fp16`
+
+Type conversion is automatic based on the default value:
+- `"true"`/`"false"` → boolean
+- Numeric strings → int or float
+- Everything else → string
