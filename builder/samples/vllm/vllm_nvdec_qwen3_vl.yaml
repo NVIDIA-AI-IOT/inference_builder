@@ -9,10 +9,10 @@ input:
   - name: "messages"
     data_type: TYPE_STRING
     dims: [ -1 ]
-  - name : "videos"
-    # This custom data type automatically converts the video chunk to a list of image Tensors
-    data_type: TYPE_CUSTOM_VIDEO_CHUNK_ASSETS
-    dims: [ -1 ]
+    # This custom data type chunks and samples long videos or live streams and converts them to image tensors
+  - name: "videos"
+    data_type: TYPE_CUSTOM_LONG_VIDEO_ASSETS
+    dims: [-1]
     optional: true
   - name: "images"
     data_type: TYPE_CUSTOM_IMAGE_BASE64
@@ -21,6 +21,18 @@ input:
   - name: "max_tokens"
     data_type: TYPE_INT32
     dims: [ 1 ]
+  - name: "temperature"
+    data_type: TYPE_FP32
+    dims: [1]
+    optional: true
+  - name: "top_p"
+    data_type: TYPE_FP32
+    dims: [1]
+    optional: true
+  - name: "top_k"
+    data_type: TYPE_INT32
+    dims: [1]
+    optional: true
 output:
   - name: "outputs"
     data_type: TYPE_CUSTOM_OBJECT
@@ -44,6 +56,15 @@ server:
             {% if 'max_tokens' in request %}
             , "max_tokens": {{ request.max_tokens }}
             {% endif %}
+            {% if 'temperature' in request %}
+            , "temperature": {{ request.temperature }}
+            {% endif %}
+            {% if 'top_p' in request %}
+            , "top_p": {{ request.top_p }}
+            {% endif %}
+            {% if 'top_k' in request %}
+            , "top_k": {{ request.top_k }}
+            {% endif %}
           }
       responses:
         NIMLLMChatCompletionResponse: >
@@ -60,7 +81,7 @@ server:
                 {% if not loop.last %}, {% endif %}
                 {% endfor %}
               ],
-            "model": "Qwen3-VL-30B-A3B-Instruct",
+            "model": "Qwen3-VL",
             "usage": {"completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0}
           }
     add_file:
@@ -97,8 +118,52 @@ server:
               } {% if not loop.last %}, {% endif %} {% endfor %}
             ]
           }
+    add_live_stream:
+      operation: add_live_stream
+      requests:
+        AddStreamRequest: >
+          {
+            "url": {{ request.url|tojson }},
+            "description": {{ request.name|default("")|tojson }},
+            "username": "",
+            "password": ""
+          }
+      responses:
+        AddStreamResponse: >
+          {
+            "data": {
+              "id": {{ response.id|tojson }},
+              "url": {{ response.url|default(response.path|default(request.url))|tojson }},
+              "status": "active"
+            }
+          }
+    del_live_stream:
+      operation: delete_live_stream
+      responses:
+        DeleteStreamResponse: >
+          {
+            "deleted": {{ response.status|tojson }}
+          }
+
+    list_live_streams:
+      operation: list_live_streams
+      responses:
+        ListStreamsResponse: >
+          {
+            "data": [
+              {% for item in response.assets %} {
+                "id": {{ item.id|tojson }},
+                "url": {{ item.path|tojson }},
+                "status": "active"
+              } {% if not loop.last %}, {% endif %} {% endfor %}
+            ]
+          }
+
+    healthy_ready:
+      operation: health_ready_v1_health_ready_get
+
 models:
-  - name: "Qwen3-VL-30B-A3B-Instruct"
+  - name: "Qwen3-VL"
     backend: "vllm"
     input:
       - name: "inputs"
@@ -107,12 +172,25 @@ models:
       - name: "max_tokens"
         data_type: TYPE_INT32
         dims: [ 1 ]
+      - name: "temperature"
+        data_type: TYPE_FP32
+        dims: [1]
+        optional: true
+      - name: "top_p"
+        data_type: TYPE_FP32
+        dims: [1]
+        optional: true
+      - name: "top_k"
+        data_type: TYPE_INT32
+        dims: [1]
+        optional: true
     output:
       - name: "outputs"
         data_type: TYPE_STRING
         dims: [ -1 ]
     parameters:
       max_num_tokens: 19200
+      async_mode: true
     preprocessors:
       - kind: "custom"
         name: "qwen3-vl-video-coordinator"
@@ -125,7 +203,7 @@ models:
 # The explicit routes are used to separate the data flow for video and image,
 # so that they can be processed by different hardware decoders
 routes: {
-  ':["images", "messages", "max_tokens", "temperature", "top_p", "top_k"]': 'Qwen3-VL-30B-A3B-Instruct',
-  ':["videos", "messages", "max_tokens", "temperature", "top_p", "top_k"]': 'Qwen3-VL-30B-A3B-Instruct',
-  'Qwen3-VL-30B-A3B-Instruct:["outputs"]': ':'
+  ':["images", "messages", "max_tokens", "temperature", "top_p", "top_k"]': 'Qwen3-VL',
+  ':["videos", "messages", "max_tokens", "temperature", "top_p", "top_k"]': 'Qwen3-VL',
+  'Qwen3-VL:["outputs"]': ':'
 }

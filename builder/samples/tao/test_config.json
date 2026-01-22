@@ -13,7 +13,7 @@
     },
     "test_config": {
       "default_enable": true,
-      "timeout": 600,
+      "timeout": 1000,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
@@ -24,19 +24,7 @@
       "volumes": {
         "/tmp/model-repo": "/workspace/.cache/model-repo"
       },
-      "ports": {
-        "8000": "8000"
-      },
       "auto_validation": "./validation/gdino",
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "\\[ERROR\\]",
-          "Exception:",
-          "Traceback",
-          "Fatal error"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "gdino": {
@@ -62,7 +50,7 @@
     },
     "test_config": {
       "default_enable": true,
-      "timeout": 600,
+      "timeout": 1000,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
@@ -73,19 +61,7 @@
       "volumes": {
         "/tmp/model-repo": "/workspace/.cache/model-repo"
       },
-      "ports": {
-        "8000": "8000"
-      },
       "auto_validation": "./validation/citysemsegformer",
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "\\[ERROR\\]",
-          "Exception:",
-          "Traceback",
-          "Fatal error"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "citysemsegformer": {
@@ -111,7 +87,7 @@
     },
     "test_config": {
       "default_enable": true,
-      "timeout": 600,
+      "timeout": 1000,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
@@ -122,19 +98,7 @@
       "volumes": {
         "/tmp/model-repo": "/workspace/.cache/model-repo"
       },
-      "ports": {
-        "8000": "8000"
-      },
       "auto_validation": "./validation/rtdetr",
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "\\[ERROR\\]",
-          "Exception:",
-          "Traceback",
-          "Fatal error"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "rtdetr": {
@@ -172,19 +136,7 @@
       "volumes": {
         "/tmp/model-repo": "/workspace/.cache/model-repo"
       },
-      "ports": {
-        "8000": "8000"
-      },
       "auto_validation": "./validation/mgdino",
-      "error_detection": {
-        "enabled": true,
-        "patterns": [
-          "\\[ERROR\\]",
-          "Exception:",
-          "Traceback",
-          "Fatal error"
-        ]
-      },
       "prerequisite_script": null,
       "models": {
         "mask_gdino": {

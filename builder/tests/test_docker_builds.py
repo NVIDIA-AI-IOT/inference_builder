@@ -323,6 +323,53 @@ def validate_env_var_value(value: str) -> bool:
     return True
 
 
+def validate_http_method(method: str) -> bool:
+    """Validate HTTP method."""
+    if not isinstance(method, str):
+        return False
+
+    # Allow common HTTP methods
+    allowed_methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
+    return method.upper() in allowed_methods
+
+
+def validate_http_header_name(name: str) -> bool:
+    """Validate HTTP header name."""
+    if not isinstance(name, str) or not name:
+        return False
+
+    # Header names should be alphanumeric with hyphens
+    # Follow RFC 7230 field-name = token
+    if not re.match(r'^[a-zA-Z0-9!#$%&\'*+\-.^_`|~]+$', name):
+        return False
+
+    # Prevent excessively long header names
+    if len(name) > 256:
+        return False
+
+    return True
+
+
+def validate_http_header_value(value: str) -> bool:
+    """Validate HTTP header value."""
+    if not isinstance(value, str):
+        return False
+
+    # Check for null bytes and control characters (except tab and space)
+    if '\x00' in value or any(ord(c) < 32 for c in value if c not in ['\t', ' ']):
+        return False
+
+    # Check for newlines that could cause header injection
+    if '\n' in value or '\r' in value:
+        return False
+
+    # Prevent excessively long header values
+    if len(value) > 8192:
+        return False
+
+    return True
+
+
 def validate_volume_path(path: str) -> bool:
     """Validate volume mount path to prevent injection attacks.
 
@@ -500,13 +547,74 @@ def validate_test_config(test_config: dict) -> Tuple[bool, str]:
             return False, "auto_validation must be a string path"
         if not validate_safe_path(test_config["auto_validation"]):
             return False, f"Invalid auto_validation path: {test_config['auto_validation']}"
-    # Validate payloads_path
-    if "payloads_path" in test_config:
-        payloads_path = test_config["payloads_path"]
-        if not isinstance(payloads_path, str):
-            return False, "payloads_path must be a string"
-        if not validate_safe_path(payloads_path):
-            return False, f"Invalid payloads_path: {payloads_path}"
+    # Validate test_requests (must be a list of objects with optional payload_path, method, headers)
+    if "test_requests" in test_config:
+        test_requests = test_config["test_requests"]
+        if not isinstance(test_requests, list):
+            return False, "test_requests must be a list"
+
+        for item in test_requests:
+            # Must be dict format with payload_path (optional), method (optional), and headers (optional)
+            if not isinstance(item, dict):
+                return False, "test_requests items must be dictionaries"
+
+            # Validate payload_path if present (optional for GET requests without body)
+            if "payload_path" in item:
+                payload_path = item["payload_path"]
+                if not isinstance(payload_path, str):
+                    return False, "test_requests 'payload_path' must be a string"
+                if not validate_safe_path(payload_path):
+                    return False, f"Invalid test_requests payload_path: {payload_path}"
+
+            # Validate method if specified (optional, defaults to POST)
+            if "method" in item:
+                method = item["method"]
+                if not validate_http_method(method):
+                    return False, f"Invalid HTTP method in payload_config: {method}"
+
+            # Validate headers if specified (optional)
+            if "headers" in item:
+                headers = item["headers"]
+                if not isinstance(headers, dict):
+                    return False, "payload_config headers must be a dictionary"
+                for header_name, header_value in headers.items():
+                    if not validate_http_header_name(header_name):
+                        return False, f"Invalid HTTP header name in payload_config: {header_name}"
+                    if not validate_http_header_value(str(header_value)):
+                        return False, f"Invalid HTTP header value in payload_config for {header_name}: {header_value}"
+
+            # Validate scheduled_time if specified (optional, for sequential execution)
+            if "scheduled_time" in item:
+                if not isinstance(item["scheduled_time"], (int, float)) or item["scheduled_time"] < 0:
+                    return False, "test_requests 'scheduled_time' must be a non-negative number"
+
+            # Validate async if specified (optional, for non-blocking requests)
+            if "async" in item:
+                if not isinstance(item["async"], bool):
+                    return False, "test_requests 'async' must be a boolean"
+
+    # Validate endpoint
+    if "endpoint" in test_config:
+        endpoint = test_config["endpoint"]
+        if not isinstance(endpoint, str):
+            return False, "endpoint must be a string"
+        # Basic validation for endpoint path format
+        if not endpoint.startswith("/"):
+            return False, "endpoint must start with /"
+        # Check for dangerous characters
+        if any(char in endpoint for char in ['<', '>', '"', '{', '}', '|', '\\', '^', '`', ' ']):
+            return False, f"Invalid characters in endpoint: {endpoint}"
+
+    # Validate expected_error for negative tests
+    if "expected_error" in test_config:
+        expected_error = test_config["expected_error"]
+        if not isinstance(expected_error, str):
+            return False, "expected_error must be a string"
+        if not expected_error:
+            return False, "expected_error cannot be empty"
+        # Basic validation - should be an error code pattern (e.g., ERR_ROUTE_001)
+        if len(expected_error) > 100:
+            return False, "expected_error is too long (max 100 characters)"
 
     return True, ""
 
@@ -537,10 +645,104 @@ class DockerBuildTester:
         for model_name, model_info in models_config.items():
             try:
                 source = model_info.get("source", "NGC")
+
+                if source == "HF":
+                    # Handle Hugging Face model download
+                    target_dir = Path(model_info["target"]).expanduser()
+                    model_path = model_info["path"]  # e.g., "Qwen/Qwen2.5-VL-3B-Instruct"
+
+                    # Final destination
+                    final_model_dir = target_dir / model_name
+
+                    # Check if model already exists
+                    if final_model_dir.exists():
+                        logger.info(f"✅ Model '{model_name}' already exists at {final_model_dir}, skipping download")
+                        continue
+
+                    logger.info(f"📥 Downloading model '{model_name}' from Hugging Face...")
+                    logger.info(f"   HF path: {model_path}")
+                    logger.info(f"   Target: {final_model_dir}")
+
+                    # Create target directory
+                    target_dir.mkdir(parents=True, exist_ok=True)
+
+                    # Ensure git-lfs is installed
+                    logger.info("   Setting up git-lfs...")
+                    lfs_result = subprocess.run(
+                        ["git", "lfs", "install"],
+                        capture_output=True,
+                        text=True,
+                        timeout=30
+                    )
+                    if lfs_result.returncode != 0:
+                        logger.warning(f"⚠️  git-lfs install warning: {lfs_result.stderr}")
+
+                    # Clone from Hugging Face
+                    hf_url = f"https://huggingface.co/{model_path}"
+                    clone_cmd = ["git", "clone", hf_url, str(final_model_dir)]
+                    logger.info(f"   Running: {' '.join(clone_cmd)}")
+
+                    result = subprocess.run(
+                        clone_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=1800  # 30 minute timeout for large model download
+                    )
+
+                    if result.returncode != 0:
+                        error_msg = f"Failed to download model '{model_name}' from HF: {result.stderr}"
+                        logger.error(f"❌ {error_msg}")
+                        return False, error_msg
+
+                    # Set permissions
+                    try:
+                        os.chmod(final_model_dir, 0o777)
+                        logger.info(f"   Set permissions: chmod 777 {final_model_dir}")
+                    except Exception as e:
+                        logger.warning(f"⚠️  Failed to set permissions on {final_model_dir}: {e}")
+
+                    # Execute post-script if specified (for HF models)
+                    post_script = model_info.get("post_script")
+                    if post_script:
+                        logger.info(f"🔧 Executing post-script for '{model_name}': {post_script}")
+                        try:
+                            script_result = subprocess.run(
+                                post_script,
+                                shell=True,
+                                capture_output=True,
+                                text=True,
+                                cwd=str(final_model_dir),
+                                timeout=600
+                            )
+                            if script_result.returncode == 0:
+                                logger.info(f"✅ Post-script executed successfully for '{model_name}'")
+                                if script_result.stdout.strip():
+                                    logger.info(f"   Output: {script_result.stdout.strip()}")
+                            else:
+                                error_msg = (
+                                    f"Post-script failed for '{model_name}' "
+                                    f"(exit code {script_result.returncode}): "
+                                    f"{script_result.stderr.strip()}"
+                                )
+                                logger.error(f"❌ {error_msg}")
+                                return False, error_msg
+                        except subprocess.TimeoutExpired:
+                            error_msg = f"Post-script timed out for '{model_name}' after 600 seconds"
+                            logger.error(f"❌ {error_msg}")
+                            return False, error_msg
+                        except Exception as e:
+                            error_msg = f"Failed to execute post-script for '{model_name}': {str(e)}"
+                            logger.error(f"❌ {error_msg}")
+                            return False, error_msg
+
+                    logger.info(f"✅ Successfully downloaded model '{model_name}' from Hugging Face")
+                    continue
+
                 if source != "NGC":
                     logger.warning(f"⚠️  Unsupported model source '{source}' for {model_name}, skipping")
                     continue
 
+                # NGC model download logic
                 target_dir = Path(model_info["target"]).expanduser()
                 model_path = model_info["path"]
                 version = model_info["version"]
@@ -619,6 +821,40 @@ class DockerBuildTester:
                         logger.info(f"   ✅ Copied config files")
                     else:
                         logger.warning(f"⚠️  Config path not found: {source_configs}")
+
+                # Execute post-script if specified
+                post_script = model_info.get("post_script")
+                if post_script:
+                    logger.info(f"🔧 Executing post-script for '{model_name}': {post_script}")
+                    try:
+                        script_result = subprocess.run(
+                            post_script,
+                            shell=True,
+                            capture_output=True,
+                            text=True,
+                            cwd=str(final_model_dir),
+                            timeout=600
+                        )
+                        if script_result.returncode == 0:
+                            logger.info(f"✅ Post-script executed successfully for '{model_name}'")
+                            if script_result.stdout.strip():
+                                logger.info(f"   Output: {script_result.stdout.strip()}")
+                        else:
+                            error_msg = (
+                                f"Post-script failed for '{model_name}' "
+                                f"(exit code {script_result.returncode}): "
+                                f"{script_result.stderr.strip()}"
+                            )
+                            logger.error(f"❌ {error_msg}")
+                            return False, error_msg
+                    except subprocess.TimeoutExpired:
+                        error_msg = f"Post-script timed out for '{model_name}' after 600 seconds"
+                        logger.error(f"❌ {error_msg}")
+                        return False, error_msg
+                    except Exception as e:
+                        error_msg = f"Failed to execute post-script for '{model_name}': {str(e)}"
+                        logger.error(f"❌ {error_msg}")
+                        return False, error_msg
 
                 logger.info(f"✅ Successfully downloaded and setup model '{model_name}'")
 
@@ -1152,8 +1388,15 @@ class DockerBuildTester:
 
             return False, error_msg
 
-    def test_image(self, image_name: str, test_config: Dict, test_id: int) -> Tuple[bool, str, str]:
-        """Test the built image by running it and capture logs."""
+    def test_image(self, image_name: str, test_config: Dict, test_id: int, gpus: str = "all") -> Tuple[bool, str, str]:
+        """Test the built image by running it and capture logs.
+
+        Args:
+            image_name: Name of the Docker image to test
+            test_config: Test configuration dictionary
+            test_id: Unique test identifier
+            gpus: GPU devices to use (default: 'all')
+        """
         log_file = self.log_dir / f"test_{test_id}_{image_name.replace(':', '_')}.log"
 
         # Validate image name to prevent command injection
@@ -1194,10 +1437,39 @@ class DockerBuildTester:
 
             # Detect server type to choose test strategy
             server_type = test_config.get("SERVER_TYPE", "serverless")
+            is_serverless = server_type == "serverless"
+
+            # Prepare assets if specified
+            asset_ids = []
+            asset_temp_dir = None
+            if "assets" in test_config:
+                import tempfile
+
+                assets_config = test_config["assets"]
+                logger.info(f"📦 Preparing {len(assets_config)} asset(s)...")
+
+                # Create temp directory for asset info.json files
+                asset_temp_dir = Path(tempfile.mkdtemp(prefix=f"test_assets_{test_id}_"))
+
+                for idx, asset_data in enumerate(assets_config):
+                    # Use the provided assetId
+                    asset_id = asset_data["assetId"]
+                    asset_ids.append(asset_id)
+
+                    # Create asset directory structure
+                    asset_dir = asset_temp_dir / asset_id
+                    asset_dir.mkdir(parents=True)
+
+                    # Write asset data to info.json inside the directory
+                    info_file = asset_dir / "info.json"
+                    with info_file.open("w") as f:
+                        json.dump(asset_data, f, indent=2)
+
+                    logger.info(f"✅ Created asset {idx}: {asset_id} ({asset_data['path']})")
 
             # Run the container with test configuration
             # Use host network for serverless; use port mapping for non-serverless to avoid port conflicts
-            cmd = ["docker", "run", "--gpus", "all"]
+            cmd = ["docker", "run", "--gpus", gpus]
 
             # Add environment variables if specified
             if "env" in test_config:
@@ -1209,11 +1481,23 @@ class DockerBuildTester:
                         return False, error_msg, ""
                     cmd.extend(["-e", f"{key}={value}"])
 
+            # Get the test config directory for resolving relative paths
+            config_dir = Path(test_config.get("_config_dir", ".")).resolve()
+
+            # Automatically add ERROR_EXPORT_PATH for error file collection
+            # Use unique error file names for different test cases
+            error_export_dir = Path("/tmp/error")
+            error_export_dir.mkdir(parents=True, exist_ok=True)
+            error_filename = f"inference_errors_{test_id}_{int(time.time())}.json"
+            error_export_file = error_export_dir / error_filename
+            container_error_path = f"/tmp/error/{error_filename}"
+            cmd.extend(["-e", f"ERROR_EXPORT_PATH={container_error_path}"])
+            cmd.extend(["-v", f"{error_export_dir}:{error_export_dir}"])
+            logger.info(f"📄 Error export: {error_export_file} -> {container_error_path}")
+
             # Add volume mounts if specified
             if "volumes" in test_config:
                 logger.info(f"📁 Processing volumes: {test_config['volumes']}")
-                # Get the test config directory for resolving relative paths
-                config_dir = Path(test_config.get("_config_dir", ".")).resolve()
 
                 for host_path, container_path in test_config["volumes"].items():
                     # Double-check validation to prevent injection
@@ -1244,10 +1528,16 @@ class DockerBuildTester:
                     cmd.extend(["-v", volume_arg])
                     logger.info(f"📁 Adding volume mount: {volume_arg}")
             else:
-                logger.info("📁 No volumes specified in test config")
+                logger.info("📁 No additional volumes specified in test config")
+
+            # Give the container a name for logging/cleanup purposes
+            expected_error = test_config.get("expected_error")
+            container_name = f"test-{test_id}-{int(time.time())}"
+            cmd.extend(["--name", container_name])
+            logger.info(f"🏷️  Container name: {container_name}")
 
             # For FastAPI (or any non-serverless), run detached on host network (DinD friendly)
-            if server_type != "serverless":
+            if not is_serverless:
                 cmd.insert(2, "--network=host")
                 cmd.insert(2, "-d")  # run detached
             else:
@@ -1257,13 +1547,15 @@ class DockerBuildTester:
 
             # Add command arguments if specified (serverless only)
             if server_type == "serverless" and "cmd" in test_config:
+                cmd_args = test_config["cmd"]
+
                 # Double-check validation for each command argument
-                for arg in test_config["cmd"]:
+                for arg in cmd_args:
                     if not validate_docker_arg(str(arg)):
                         error_msg = f"Invalid command argument: {arg}"
                         logger.error(f"❌ {error_msg}")
                         return False, error_msg, ""
-                cmd.extend(test_config["cmd"])
+                cmd.extend(cmd_args)
 
             logger.info(f"Testing image: {image_name}")
             logger.info(f"Command: {' '.join(cmd)}")
@@ -1274,73 +1566,107 @@ class DockerBuildTester:
             logger.info("🔍 Complete docker run command:")
             logger.info(f"   {' '.join(cmd)}")
 
-            # Check if error detection is enabled
-            error_detection_config = test_config.get("error_detection", {})
-            error_detection_enabled = error_detection_config.get("enabled", False)
-
-            if server_type == "serverless":
-                if error_detection_enabled:
-                    # Capture output for error detection
-                    logger.info("🔍 Error detection enabled - capturing output for analysis")
+            if is_serverless:
+                # For serverless with assets, we need to start detached, copy assets, then wait
+                if asset_temp_dir:
+                    # Insert -d flag to run detached
+                    cmd.insert(2, "-d")
+                    logger.info("🔍 Starting container in detached mode to copy assets...")
                     result = subprocess.run(
                         cmd,
                         capture_output=True,
                         text=True,
-                        timeout=timeout  # Use configurable timeout
+                        timeout=30
+                    )
+                    if result.returncode != 0:
+                        logger.error(f"❌ Failed to start container: {result.stderr}")
+                        return False, f"Container start failed: {result.stderr}", ""
+
+                    # Container ID is in stdout
+                    container_id = result.stdout.strip()
+                    logger.info(f"✅ Container started: {container_id[:12]}")
+
+                    # Create /tmp/assets directory in container
+                    logger.info("📁 Creating /tmp/assets directory in container...")
+                    mkdir_result = subprocess.run(
+                        ["docker", "exec", container_name, "mkdir", "-p", "/tmp/assets"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    if mkdir_result.returncode != 0:
+                        logger.error(f"❌ Failed to create /tmp/assets: {mkdir_result.stderr}")
+                        subprocess.run(["docker", "stop", container_name], capture_output=True, timeout=10)
+                        subprocess.run(["docker", "rm", container_name], capture_output=True, timeout=10)
+                        return False, f"Failed to create /tmp/assets: {mkdir_result.stderr}", ""
+
+                    # Copy assets into container
+                    for idx, asset_id in enumerate(asset_ids):
+                        src_path = asset_temp_dir / asset_id
+                        dest_path = f"{container_name}:/tmp/assets/{asset_id}"
+
+                        logger.info(f"📦 Copying asset {idx} to container: {asset_id}")
+                        copy_result = subprocess.run(
+                            ["docker", "cp", str(src_path), dest_path],
+                            capture_output=True,
+                            text=True,
+                            timeout=30
+                        )
+                        if copy_result.returncode != 0:
+                            logger.error(f"❌ Failed to copy asset: {copy_result.stderr}")
+                            subprocess.run(["docker", "stop", container_name], capture_output=True, timeout=10)
+                            subprocess.run(["docker", "rm", container_name], capture_output=True, timeout=10)
+                            return False, f"Asset copy failed: {copy_result.stderr}", ""
+                        logger.info(f"✅ Asset {idx} copied successfully")
+
+                    # Now wait for container to complete
+                    logger.info("⏳ Waiting for container to complete...")
+                    wait_result = subprocess.run(
+                        ["docker", "wait", container_name],
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout
+                    )
+
+                    # Get logs
+                    logs_result = subprocess.run(
+                        ["docker", "logs", container_name],
+                        capture_output=True,
+                        text=True,
+                        timeout=30
+                    )
+                    stdout_output = logs_result.stdout
+                    stderr_output = logs_result.stderr
+
+                    # Clean up the temp asset directory
+                    import shutil as shutil_module
+                    shutil_module.rmtree(asset_temp_dir, ignore_errors=True)
+                    logger.info("🧹 Cleaned up temporary asset directory")
+                else:
+                    # Run container normally and capture output
+                    logger.info("🔍 Running container and capturing output...")
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout
                     )
                     stdout_output = result.stdout
                     stderr_output = result.stderr
+
+                # Clean up the container
+                subprocess.run(["docker", "rm", container_name], capture_output=True, text=True, timeout=10)
+
+                # Check if error export file was created
+                error_copy_failed = False
+                error_copy_msg = ""
+                if error_export_file.exists():
+                    file_size = error_export_file.stat().st_size
+                    logger.info(f"📄 Found error export file: {error_export_file} (size: {file_size} bytes)")
                 else:
-                    # Stream output to host stdout in real-time
-                    logger.info("📺 Error detection disabled - streaming output to host stdout")
-                    logger.info("=" * 80)
-                    logger.info(f"CONTAINER OUTPUT FOR: {image_name}")
-                    logger.info("=" * 80)
-
-                    # Run container and stream output to host stdout in real-time
-                    process = subprocess.Popen(
-                        cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,  # Redirect stderr to stdout
-                        text=True,
-                        bufsize=1,  # Line buffered
-                        universal_newlines=True
-                    )
-
-                    # Collect output while streaming to stdout
-                    stdout_output = ""
-                    try:
-                        while True:
-                            output = process.stdout.readline()
-                            if output == '' and process.poll() is not None:
-                                break
-                            if output:
-                                print(output, end='', flush=True)
-                                stdout_output += output
-
-                        # Wait for process to complete and get return code
-                        return_code = process.poll()
-                        stderr_output = ""
-
-                    except KeyboardInterrupt:
-                        process.terminate()
-                        process.wait()
-                        return_code = process.poll()
-                        stderr_output = ""
-                        logger.info("\n⚠️  Process interrupted by user")
-
-                    # Create result object for consistency
-                    class Result:
-                        def __init__(self, returncode, stdout, stderr):
-                            self.returncode = returncode
-                            self.stdout = stdout
-                            self.stderr = stderr
-
-                    result = Result(return_code, stdout_output, stderr_output)
-
-                    logger.info("=" * 80)
-                    logger.info(f"END CONTAINER OUTPUT FOR: {image_name}")
-                    logger.info("=" * 80)
+                    error_copy_failed = True
+                    error_copy_msg = f"Error export file not found: {error_export_file}"
+                    logger.warning(f"⚠️  {error_copy_msg}")
             else:
                 # FastAPI-like server flow: start container detached, poll readiness, run client, then stop and collect logs
                 logger.info("🚀 Starting server container in detached mode")
@@ -1356,11 +1682,53 @@ class DockerBuildTester:
                 container_id = start_proc.stdout.strip()
                 logger.info(f"🆔 Container ID: {container_id}")
 
+                # Copy assets into container if specified
+                if asset_temp_dir:
+                    # Create /tmp/assets directory in container
+                    logger.info("📁 Creating /tmp/assets directory in container...")
+                    mkdir_result = subprocess.run(
+                        ["docker", "exec", container_name, "mkdir", "-p", "/tmp/assets"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    if mkdir_result.returncode != 0:
+                        logger.error(f"❌ Failed to create /tmp/assets: {mkdir_result.stderr}")
+                        subprocess.run(["docker", "stop", container_name], capture_output=True, timeout=10)
+                        subprocess.run(["docker", "rm", container_name], capture_output=True, timeout=10)
+                        return False, f"Failed to create /tmp/assets: {mkdir_result.stderr}", ""
+
+                    for idx, asset_id in enumerate(asset_ids):
+                        src_path = asset_temp_dir / asset_id
+                        dest_path = f"{container_name}:/tmp/assets/{asset_id}"
+
+                        logger.info(f"📦 Copying asset {idx} to container: {asset_id}")
+                        copy_result = subprocess.run(
+                            ["docker", "cp", str(src_path), dest_path],
+                            capture_output=True,
+                            text=True,
+                            timeout=30
+                        )
+                        if copy_result.returncode != 0:
+                            logger.error(f"❌ Failed to copy asset: {copy_result.stderr}")
+                            subprocess.run(["docker", "stop", container_name], capture_output=True, timeout=10)
+                            subprocess.run(["docker", "rm", container_name], capture_output=True, timeout=10)
+                            return False, f"Asset copy failed: {copy_result.stderr}", ""
+                        logger.info(f"✅ Asset {idx} copied successfully")
+
+                    # Clean up the temp asset directory
+                    import shutil as shutil_module
+                    shutil_module.rmtree(asset_temp_dir, ignore_errors=True)
+                    logger.info("🧹 Cleaned up temporary asset directory")
+
                 # Readiness probe
                 ready = False
+                http_error_status = None  # Track if we got an HTTP error
                 ready_deadline = time.time() + max(1, timeout)
                 service_host = self.get_service_host()
-                health_url = f"http://{service_host}:8000/v1/health/ready"
+                # Get HTTP port from test config env, default to 8000
+                http_port = test_config.get("env", {}).get("HTTP_PORT", "8000")
+                health_url = f"http://{service_host}:{http_port}/v1/health/ready"
                 logger.info(f"🔎 Probing readiness: {health_url}")
                 while time.time() < ready_deadline:
                     try:
@@ -1371,7 +1739,9 @@ class DockerBuildTester:
                             else:
                                 logger.info(f"Health probe returned non-200 status: {resp.status}")
                     except urllib.error.HTTPError as e:
-                        logger.warning(f"Health probe HTTPError: status={e.code}")
+                        http_error_status = e.code
+                        logger.error(f"❌ Health probe HTTPError: status={e.code} - server returned error, stopping retry")
+                        break  # No retry on HTTP errors - server is responding but not healthy
                     except urllib.error.URLError as e:
                         if isinstance(e.reason, socket.timeout):
                             logger.warning("Health probe request timed out")
@@ -1384,7 +1754,10 @@ class DockerBuildTester:
                 client_rc = 1
 
                 if not ready:
-                    logger.error("❌ Server did not become ready within timeout")
+                    if http_error_status:
+                        logger.error(f"❌ Server health check failed with HTTP error {http_error_status}")
+                    else:
+                        logger.error("❌ Server did not become ready within timeout")
                     # Collect logs to see what went wrong during initialization
                     logger.info("📋 Collecting container logs for failed readiness...")
                     logs_proc = subprocess.run(["docker", "logs", container_id], capture_output=True, text=True)
@@ -1436,8 +1809,8 @@ class DockerBuildTester:
 
                                     # Add service host for validation script to connect to server
                                     # The validation script expects TEST_HOST environment variable
-                                    # Include port 8000 (the server's actual port, not from config)
-                                    validation_env["TEST_HOST"] = f"http://{service_host}:8000"
+                                    # Use HTTP_PORT from test config env, default to 8000
+                                    validation_env["TEST_HOST"] = f"http://{service_host}:{http_port}"
 
                                     # Run validation script with Python
                                     validation_proc = subprocess.run(
@@ -1474,67 +1847,316 @@ class DockerBuildTester:
                             client_stderr = str(e)
                     else:
                         logger.info("✅ Server is ready. Launching concurrent curl requests...")
-                        # Read a single NDJSON file and launch curl for each line
-                        # Get payloads_path from test_config, with a default fallback based on app name
+                        # Read NDJSON files and launch curl for each line
+                        # Get test_requests from test_config, with a default fallback based on app name
                         test_app_name = test_config.get("TEST_APP_NAME") or None
-                        default_payloads_path = f"{test_app_name}/payloads/payloads.jsonl"
-                        payloads_path_str = test_config.get("payloads_path", default_payloads_path)
-                        payloads_path = Path(payloads_path_str)
+                        default_test_requests = [{"payload_path": f"{test_app_name}/payloads/payloads.jsonl"}]
+                        test_requests_list = test_config.get("test_requests", default_test_requests)
 
-                        if not payloads_path.exists():
-                            logger.error(f"❌ Payloads file not found: {payloads_path}")
+                        # Ensure test_requests is a list
+                        if not isinstance(test_requests_list, list):
+                            logger.error(f"❌ test_requests must be a list, got: {type(test_requests_list)}")
+                            client_rc = 1
+                            client_stdout = ""
+                            client_stderr = "test_requests must be a list"
                         else:
-                            with payloads_path.open("r") as f:
-                                payload_lines = [line.strip() for line in f if line.strip()]
+                            # Check if any request has scheduled_time (for sequential execution)
+                            has_scheduled = any("scheduled_time" in item for item in test_requests_list)
 
-                            procs: List[subprocess.Popen] = []
-                            for line in payload_lines:
-                                procs.append(subprocess.Popen(
-                                    [
-                                        "curl", "-sS", "-X", "POST", "-w",
-                                        "%{http_code}",
-                                        "-H", "Content-Type: application/json",
-                                        "--data", line,
-                                        f"http://{service_host}:8000/v1/inference"
-                                    ],
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE,
-                                    text=True
-                                ))
+                            # Resolve payloads_path relative to config directory
+                            config_dir = Path(test_config.get("_config_dir", ".")).resolve()
 
-                            outs: List[str] = []
-                            errs: List[str] = []
-                            client_rc = 0
-                            http_status_errors = []
-                            for i, p in enumerate(procs):
-                                out, err = p.communicate(timeout=max(5, timeout))
-                                outs.append(out or "")
-                                errs.append(err or "")
-                                if p.returncode != 0:
-                                    client_rc = p.returncode
-                                else:
-                                    # For non-serverless, check HTTP status is 200
-                                    # curl -w "%{http_code}" appends status to stdout
-                                    if out and len(out) >= 3:
-                                        # Extract last 3 chars as HTTP status code
-                                        http_status = out[-3:]
-                                        if http_status != "200":
-                                            http_status_errors.append(
-                                                f"Request {i+1}: HTTP {http_status}"
+                            # Get endpoint from test_config, default to /v1/inference
+                            endpoint = test_config.get("endpoint", "/v1/inference")
+                            logger.info(f"🎯 Using endpoint: {endpoint}")
+
+                            if has_scheduled:
+                                # Sequential execution with timing
+                                logger.info("⏰ Using sequential execution with scheduled times")
+
+                                # Sort requests by scheduled_time
+                                sorted_requests = sorted(test_requests_list, key=lambda x: x.get("scheduled_time", 0))
+
+                                start_time = time.time()
+                                all_succeeded = True
+                                async_processes = []  # Track async processes for later status check
+
+                                for request_item in sorted_requests:
+                                    scheduled_time = request_item.get("scheduled_time", 0)
+                                    elapsed = time.time() - start_time
+
+                                    # Wait until scheduled time
+                                    if scheduled_time > elapsed:
+                                        wait_time = scheduled_time - elapsed
+                                        logger.info(f"⏳ Waiting {wait_time:.1f}s until scheduled time {scheduled_time}s...")
+                                        time.sleep(wait_time)
+
+                                    # Extract request config
+                                    http_method = request_item.get("method", "POST").upper()
+                                    http_headers = request_item.get("headers", {"Content-Type": "application/json"})
+                                    request_endpoint = request_item.get("endpoint", endpoint)
+
+                                    # Get payload
+                                    payload_data = None
+                                    if "payload_path" in request_item:
+                                        payload_path = (config_dir / request_item["payload_path"]).resolve()
+                                        if payload_path.exists():
+                                            with payload_path.open("r") as f:
+                                                first_line = f.readline().strip()
+                                                if first_line:
+                                                    payload_data = first_line
+                                        else:
+                                            logger.error(f"❌ Payload file not found: {payload_path}")
+                                            all_succeeded = False
+                                            continue
+
+                                    # Build curl command
+                                    url = f"http://{service_host}:{http_port}{request_endpoint}"
+                                    curl_cmd = ["curl", "-sS", "-X", http_method, "-w", "\\n%{http_code}"]
+
+                                    for header_name, header_value in http_headers.items():
+                                        curl_cmd.extend(["-H", f"{header_name}: {header_value}"])
+
+                                    if payload_data and http_method in ["POST", "PUT", "PATCH", "DELETE"]:
+                                        curl_cmd.extend(["-d", payload_data])
+
+                                    curl_cmd.append(url)
+
+                                    logger.info(f"🌐 [{scheduled_time}s] {http_method} {request_endpoint}")
+                                    if payload_data:
+                                        logger.info(f"📦 Payload: {payload_data[:200]}{'...' if len(payload_data) > 200 else ''}")
+
+                                    # Check if this is an async request
+                                    is_async = request_item.get("async", False)
+
+                                    if is_async:
+                                        # Launch async request without waiting for response
+                                        logger.info(f"🚀 Launching async request")
+                                        try:
+                                            proc = subprocess.Popen(
+                                                curl_cmd,
+                                                stdout=subprocess.PIPE,
+                                                stderr=subprocess.PIPE,
+                                                text=True
                                             )
-                                            client_rc = 1  # Mark as failed
+                                            async_processes.append((proc, http_method, request_endpoint))
+                                            logger.info(f"✅ Async request launched (PID: {proc.pid})")
+                                        except Exception as e:
+                                            logger.error(f"❌ Failed to launch async request: {e}")
+                                            all_succeeded = False
+                                    else:
+                                        # Execute synchronous request
+                                        try:
+                                            result = subprocess.run(curl_cmd, capture_output=True, text=True, timeout=30)
+                                            response_output = result.stdout.strip()
 
-                            client_stdout = "\n".join(outs)
-                            client_stderr = "\n".join(errs)
+                                            # Split response body and status code
+                                            lines = response_output.split('\n')
+                                            status_code = int(lines[-1]) if lines and lines[-1].isdigit() else 0
+                                            response_body = '\n'.join(lines[:-1]) if len(lines) > 1 else ""
 
-                            # Log HTTP status errors for non-serverless
-                            if http_status_errors:
-                                error_msg = (
-                                    f"Non-serverless server returned non-200 status "
-                                    f"codes: {'; '.join(http_status_errors)}"
-                                )
-                                logger.error("❌ %s", error_msg)
-                                client_stderr += f"\n{error_msg}"
+                                            logger.info(f"📡 Status: {status_code}")
+                                            if response_body:
+                                                logger.info(f"✅ Response: {response_body[:300]}{'...' if len(response_body) > 300 else ''}")
+
+                                            if status_code < 200 or status_code >= 300:
+                                                logger.error(f"❌ Request failed with status {status_code}")
+                                                all_succeeded = False
+                                        except subprocess.TimeoutExpired:
+                                            logger.error(f"❌ Request timed out")
+                                            all_succeeded = False
+                                        except Exception as e:
+                                            logger.error(f"❌ Request failed: {e}")
+                                            all_succeeded = False
+
+                                # Wait for async processes and check their results
+                                if async_processes:
+                                    logger.info(f"\n⏳ Waiting for {len(async_processes)} async request(s) to complete...")
+                                    for proc, method, endpoint in async_processes:
+                                        try:
+                                            stdout, stderr = proc.communicate(timeout=30)
+                                            response_output = stdout.strip()
+
+                                            # Split response body and status code
+                                            lines = response_output.split('\n')
+                                            status_code = int(lines[-1]) if lines and lines[-1].isdigit() else 0
+                                            response_body = '\n'.join(lines[:-1]) if len(lines) > 1 else ""
+
+                                            logger.info(f"📡 Async {method} {endpoint} - Status: {status_code}")
+                                            if response_body:
+                                                logger.info(f"   Response: {response_body[:200]}{'...' if len(response_body) > 200 else ''}")
+
+                                            if status_code < 200 or status_code >= 300:
+                                                logger.error(f"❌ Async request failed with status {status_code}")
+                                                all_succeeded = False
+                                        except subprocess.TimeoutExpired:
+                                            logger.error(f"❌ Async {method} {endpoint} timed out")
+                                            proc.kill()
+                                            all_succeeded = False
+                                        except Exception as e:
+                                            logger.error(f"❌ Async {method} {endpoint} failed: {e}")
+                                            all_succeeded = False
+
+                                # Set final result
+                                if all_succeeded:
+                                    logger.info("\n✅ All scheduled requests completed successfully")
+                                    client_rc = 0
+                                    client_stdout = "All requests succeeded"
+                                    client_stderr = ""
+                                else:
+                                    logger.error("\n❌ Some requests failed")
+                                    client_rc = 1
+                                    client_stdout = ""
+                                    client_stderr = "One or more requests failed"
+                            else:
+                                # Parallel execution (existing logic)
+                                logger.info("🚀 Using parallel execution")
+
+                                # Collect all payload lines from all files with their configs
+                                # Each entry: (payload_line, method, headers)
+                                all_payloads = []
+                                for request_item in test_requests_list:
+                                    # Parse test request (must be dict)
+                                    if not isinstance(request_item, dict):
+                                        logger.error(f"❌ Invalid test_requests item (must be dict): {request_item}")
+                                        continue
+
+                                    # Extract config with defaults
+                                    http_method = request_item.get("method", "POST").upper()
+                                    http_headers = request_item.get("headers", {"Content-Type": "application/json"})
+
+                                    # Check if payload_path is provided
+                                    if "payload_path" not in request_item:
+                                        # No payload_path - single request with no payload (useful for GET)
+                                        logger.info(f"📄 No payload file specified")
+                                        logger.info(f"   Method: {http_method}, Headers: {http_headers}")
+                                        all_payloads.append(("", http_method, http_headers))
+                                    else:
+                                        # Path provided - load payloads from file
+                                        payload_path_str = request_item["payload_path"]
+                                        payload_path = (config_dir / payload_path_str).resolve()
+                                        logger.info(f"📄 Resolved payload path: {payload_path_str} -> {payload_path}")
+                                        logger.info(f"   Method: {http_method}, Headers: {http_headers}")
+
+                                        if not payload_path.exists():
+                                            logger.error(f"❌ Payload file not found: {payload_path}")
+                                        else:
+                                            with payload_path.open("r") as f:
+                                                payload_lines = [line.strip() for line in f if line.strip()]
+                                                # Associate each payload with its method and headers
+                                                for line in payload_lines:
+                                                    all_payloads.append((line, http_method, http_headers))
+                                                logger.info(f"📋 Loaded {len(payload_lines)} payloads from {payload_path.name}")
+
+                                if not all_payloads:
+                                    logger.error(f"❌ No payloads found in any file")
+                                    client_rc = 1
+                                    client_stdout = ""
+                                    client_stderr = "No payloads found"
+                                else:
+                                    logger.info(f"📋 Total payloads to process: {len(all_payloads)}")
+
+                                    procs: List[subprocess.Popen] = []
+                                    for payload_line, method, headers in all_payloads:
+                                        # Check if this is a multipart/form-data upload
+                                        content_type = headers.get("Content-Type", "").lower()
+                                        is_multipart = "multipart/form-data" in content_type
+
+                                        # Build curl command with method and headers from payload config
+                                        curl_cmd = ["curl", "-sS", "-X", method, "-w", "%{http_code}"]
+
+                                        if is_multipart and method in ["POST", "PUT", "PATCH"] and payload_line:
+                                            # Multipart upload: parse JSON to get file field and use -F
+                                            try:
+                                                payload_data = json.loads(payload_line)
+
+                                                # Add non-Content-Type headers (curl -F sets Content-Type automatically)
+                                                for header_name, header_value in headers.items():
+                                                    if header_name.lower() != "content-type":
+                                                        curl_cmd.extend(["-H", f"{header_name}: {header_value}"])
+
+                                                # Add form fields with -F
+                                                for field_name, field_value in payload_data.items():
+                                                    if isinstance(field_value, str):
+                                                        # Try to resolve as a file path (relative to config dir)
+                                                        file_path = Path(field_value)
+                                                        if not file_path.is_absolute():
+                                                            # Try relative to config dir
+                                                            resolved_path = (config_dir / field_value).resolve()
+                                                        else:
+                                                            # Already absolute
+                                                            resolved_path = file_path.resolve()
+
+                                                        # Check if the resolved path exists and is a file
+                                                        if resolved_path.exists() and resolved_path.is_file():
+                                                            # Use @ prefix for file upload
+                                                            curl_cmd.extend(["-F", f"{field_name}=@{resolved_path}"])
+                                                            logger.info(f"   📎 Uploading file: {field_name}={resolved_path}")
+                                                        else:
+                                                            # Not a valid file path, send as string value
+                                                            curl_cmd.extend(["-F", f"{field_name}={field_value}"])
+                                                            if field_value:
+                                                                logger.debug(f"   📝 Form field: {field_name}={field_value}")
+                                                    else:
+                                                        # Non-string value (number, bool, etc.)
+                                                        curl_cmd.extend(["-F", f"{field_name}={field_value}"])
+                                            except json.JSONDecodeError as e:
+                                                logger.error(f"❌ Failed to parse payload as JSON for multipart upload: {e}")
+                                                logger.error(f"   Payload: {payload_line}")
+                                                continue
+                                        else:
+                                            # Regular JSON request
+                                            # Add headers
+                                            for header_name, header_value in headers.items():
+                                                curl_cmd.extend(["-H", f"{header_name}: {header_value}"])
+
+                                            # Add data for methods that support body (only if payload is not empty)
+                                            if method in ["POST", "PUT", "PATCH"] and payload_line:
+                                                curl_cmd.extend(["--data", payload_line])
+
+                                        # Add URL
+                                        curl_cmd.append(f"http://{service_host}:{http_port}{endpoint}")
+
+                                        procs.append(subprocess.Popen(
+                                            curl_cmd,
+                                            stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE,
+                                            text=True
+                                        ))
+
+                                    outs: List[str] = []
+                                    errs: List[str] = []
+                                    client_rc = 0
+                                    http_status_errors = []
+                                    for i, p in enumerate(procs):
+                                        out, err = p.communicate(timeout=max(5, timeout))
+                                        outs.append(out or "")
+                                        errs.append(err or "")
+                                        if p.returncode != 0:
+                                            client_rc = p.returncode
+                                        else:
+                                            # For non-serverless, check HTTP status is 200
+                                            # curl -w "%{http_code}" appends status to stdout
+                                            if out and len(out) >= 3:
+                                                # Extract last 3 chars as HTTP status code
+                                                http_status = out[-3:]
+                                                if http_status != "200":
+                                                    http_status_errors.append(
+                                                        f"Request {i+1}: HTTP {http_status}"
+                                                    )
+                                                    client_rc = 1  # Mark as failed
+
+                                    client_stdout = "\n".join(outs)
+                                    client_stderr = "\n".join(errs)
+
+                                    # Log HTTP status errors for non-serverless
+                                    if http_status_errors:
+                                        error_msg = (
+                                            f"Non-serverless server returned non-200 status "
+                                            f"codes: {'; '.join(http_status_errors)}"
+                                        )
+                                        logger.error("❌ %s", error_msg)
+                                        client_stderr += f"\n{error_msg}"
 
                 # Always attempt to stop and collect logs
                 logger.info("🛑 Stopping server container")
@@ -1545,6 +2167,17 @@ class DockerBuildTester:
                 server_logs = logs_proc.stdout
                 if logs_proc.stderr:
                     server_logs += "\n=== STDERR ===\n" + logs_proc.stderr
+
+                # Check if error export file was created
+                error_copy_failed = False
+                error_copy_msg = ""
+                if error_export_file.exists():
+                    file_size = error_export_file.stat().st_size
+                    logger.info(f"📄 Found error export file: {error_export_file} (size: {file_size} bytes)")
+                else:
+                    error_copy_failed = True
+                    error_copy_msg = f"Error export file not found: {error_export_file}"
+                    logger.warning(f"⚠️  {error_copy_msg}")
 
                 # Now stop and remove container
                 subprocess.run(["docker", "stop", container_id], capture_output=True, text=True)
@@ -1562,7 +2195,11 @@ class DockerBuildTester:
                     "\n=== CLIENT STDOUT ===\n", client_stdout or "",
                 ])
                 combined_stderr = client_stderr or ""
-                result = Result(0 if (ready and client_rc == 0) else 1, combined_stdout, combined_stderr)
+                # For non-serverless flows, we care about HTTP responses and validation status,
+                # not the container's own exit code. Track client failure separately and
+                # keep Result.returncode neutral (0) so final status can branch by server type.
+                client_failed = not (ready and client_rc == 0)
+                result = Result(0, combined_stdout, combined_stderr)
 
             # Save logs to file
             with open(log_file, 'w') as f:
@@ -1571,7 +2208,7 @@ class DockerBuildTester:
                 f.write(f"Command: {' '.join(cmd)}\n")
                 f.write(f"Return Code: {result.returncode}\n")
                 f.write(f"Timeout: {timeout} seconds\n")
-                f.write(f"Error Detection: {'Enabled' if error_detection_enabled else 'Disabled'}\n")
+                f.write("Error Detection: Enabled (via JSON export)\n")
                 f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write("\n=== STDOUT ===\n")
                 f.write(result.stdout)
@@ -1579,79 +2216,133 @@ class DockerBuildTester:
                 f.write(result.stderr)
                 f.write("\n=== END LOG ===\n")
 
-            # Check for ERROR patterns in the output only if error detection is enabled
-            if error_detection_enabled:
-                error_patterns = error_detection_config.get("patterns", [
-                    "ERROR",
-                    "Error",
-                    "error",
-                    "CRITICAL",
-                    "Critical",
-                    "critical",
-                    "FATAL",
-                    "Fatal",
-                    "fatal",
-                    "Exception:",
-                    "exception:",
-                    "Traceback",
-                    "traceback"
-                ])
-
-                has_errors = False
-                error_lines = []
-
-                # Check stdout for errors
-                for line in result.stdout.split('\n'):
-                    for pattern in error_patterns:
-                        if pattern in line:
-                            has_errors = True
-                            error_lines.append(f"STDOUT: {line.strip()}")
-                            break
-
-                # Check stderr for errors
-                for line in result.stderr.split('\n'):
-                    for pattern in error_patterns:
-                        if pattern in line:
-                            has_errors = True
-                            error_lines.append(f"STDERR: {line.strip()}")
-                            break
-
-                if result.returncode == 0 and not has_errors:
-                    logger.info(f"✅ Successfully tested image: {image_name}")
-                    logger.info(f"📄 Logs saved to: {log_file}")
-                    return True, result.stdout, str(log_file)
-                elif has_errors:
-                    error_msg = (
-                        f"Test failed due to ERROR logs detected in image: {image_name}"
-                    )
+            # Check for expected_error (negative test) using exported error JSON
+            expected_error = test_config.get("expected_error")
+            if expected_error:
+                # This is a negative test - fail immediately if error file not found
+                if error_copy_failed or error_export_file is None:
+                    error_msg = f"Negative test FAILED: Could not find error export file: {error_copy_msg}"
                     logger.error(f"❌ {error_msg}")
-                    logger.error("Error lines found:")
-                    for error_line in error_lines:
-                        logger.error(f"  {error_line}")
                     logger.info(f"📄 Logs saved to: {log_file}")
                     return False, error_msg, str(log_file)
+
+                # Try to read the exported error file
+                matched_error = None  # Will hold the error that matches expected_error exactly
+
+                if error_export_file.exists():
+                    try:
+                        with open(error_export_file, 'r') as f:
+                            error_data = json.load(f)
+
+                        total_errors = error_data.get("total_errors", 0)
+                        errors = error_data.get("errors", [])
+                        collected_codes = [err.get("error_code") for err in errors]
+
+                        # Search for EXACT match of expected error code
+                        for err in errors:
+                            if err.get("error_code") == expected_error:
+                                matched_error = err
+                                break
+
+                        if matched_error is not None:
+                            # EXACT match found - test passes
+                            logger.info(f"✅ Negative test PASSED: Error code '{expected_error}' matches exactly")
+                            logger.info(f"   Error message: {matched_error.get('message', 'N/A')[:200]}")
+                            logger.info(f"   Component: {matched_error.get('component', 'N/A')}")
+                            logger.info(f"   Operation: {matched_error.get('operation', 'N/A')}")
+                            logger.info(f"   Total errors collected: {total_errors}")
+                            logger.info(f"📄 Logs saved to: {log_file}")
+                            return True, result.stdout, str(log_file)
+                        else:
+                            # No exact match - test fails
+                            error_msg = f"Negative test FAILED: Expected error '{expected_error}' not found"
+                            logger.error(f"❌ {error_msg}")
+                            logger.error(f"   Collected error codes: {collected_codes}")
+                            logger.error(f"   Total errors: {total_errors}")
+                            logger.info(f"📄 Logs saved to: {log_file}")
+                            return False, error_msg, str(log_file)
+                    except json.JSONDecodeError as e:
+                        error_msg = f"Negative test FAILED: Failed to parse error export file: {e}"
+                        logger.error(f"❌ {error_msg}")
+                        logger.info(f"📄 Logs saved to: {log_file}")
+                        return False, error_msg, str(log_file)
+                    except Exception as e:
+                        error_msg = f"Negative test FAILED: Failed to read error export file: {e}"
+                        logger.error(f"❌ {error_msg}")
+                        logger.info(f"📄 Logs saved to: {log_file}")
+                        return False, error_msg, str(log_file)
                 else:
-                    logger.warning(
-                        f"⚠️  Test completed with non-zero return code for image: {image_name}"
-                    )
-                    logger.warning(f"Return code: {result.returncode}")
-                    logger.warning(f"Output: {result.stdout}")
-                    logger.warning(f"Error: {result.stderr}")
+                    # Error export file doesn't exist
+                    error_msg = f"Negative test FAILED: Error export file not found: {error_export_file}"
+                    logger.error(f"❌ {error_msg}")
                     logger.info(f"📄 Logs saved to: {log_file}")
-                    return False, f"Container exited with code {result.returncode}", str(log_file)
+                    return False, error_msg, str(log_file)
+
+            # Check for errors using the exported error JSON file (if ERROR_EXPORT_PATH was configured)
+            has_errors = False
+            error_details = []
+
+            if error_export_file and error_export_file.exists():
+                try:
+                    with open(error_export_file, 'r') as f:
+                        error_data = json.load(f)
+
+                    total_errors = error_data.get("total_errors", 0)
+                    errors = error_data.get("errors", [])
+
+                    if total_errors > 0:
+                        has_errors = True
+                        for err in errors:
+                            error_details.append({
+                                "code": err.get("error_code", "UNKNOWN"),
+                                "message": err.get("message", "N/A"),
+                                "severity": err.get("severity", "unknown"),
+                                "component": err.get("component", "N/A")
+                            })
+                except json.JSONDecodeError as e:
+                    logger.warning(f"⚠️  Failed to parse error export file: {e}")
+                except Exception as e:
+                    logger.warning(f"⚠️  Failed to read error export file: {e}")
+
+            # Determine overall success:
+            # - For serverless flows, rely on container return code and error exports.
+            # - For non-serverless HTTP server flows, rely on HTTP/client status (client_failed)
+            #   and error exports; ignore the container's own exit code.
+            if is_serverless:
+                rc_failed = result.returncode < 0
             else:
-                # When error detection is disabled, only check return code
-                if result.returncode == 0:
-                    logger.info(f"✅ Successfully tested image: {image_name}")
-                    logger.info(f"📄 Logs saved to: {log_file}")
-                    return True, result.stdout, str(log_file)
-                else:
-                    logger.warning(
-                        f"⚠️  Test completed with non-zero return code for image: {image_name}"
+                # client_failed is only set in non-serverless branch; default to False otherwise
+                rc_failed = 'client_failed' in locals() and client_failed
+
+            if not rc_failed and not has_errors:
+                logger.info(f"✅ Successfully tested image: {image_name}")
+                logger.info(f"📄 Logs saved to: {log_file}")
+                return True, result.stdout, str(log_file)
+            elif has_errors:
+                error_msg = f"Test failed: {len(error_details)} error(s) detected in image: {image_name}"
+                logger.error(f"❌ {error_msg}")
+                logger.error("Errors found:")
+                for err in error_details[:10]:  # Show first 10 errors
+                    logger.error(f"  [{err['severity'].upper()}] {err['code']}: {err['message'][:100]}")
+                if len(error_details) > 10:
+                    logger.error(f"  ... and {len(error_details) - 10} more errors")
+                logger.info(f"📄 Logs saved to: {log_file}")
+                logger.info(f"📄 Error export: {error_export_file}")
+                return False, error_msg, str(log_file)
+            else:
+                if is_serverless:
+                    logger.error(
+                        f"❌ Test failed with negative return code for image: {image_name}"
                     )
-                    logger.warning(f"Return code: {result.returncode}")
-                    logger.info(f"📄 Logs saved to: {log_file}")
-                    return False, f"Container exited with code {result.returncode}", str(log_file)
+                    logger.error(f"Return code: {result.returncode}")
+                    failure_reason = f"Test failed with negative return code {result.returncode}"
+                else:
+                    logger.error(
+                        f"❌ Test failed due to client/HTTP errors for image: {image_name}"
+                    )
+                    failure_reason = "Test failed due to client/HTTP errors"
+                logger.info(f"📄 Logs saved to: {log_file}")
+                return False, failure_reason, str(log_file)
 
         except subprocess.TimeoutExpired as timeout_ex:
             error_msg = f"Test timed out after {timeout} seconds for image: {image_name}"
@@ -1806,8 +2497,16 @@ class DockerBuildTester:
             logger.warning(f"⚠️  Exception during cleanup: {str(e)}")
             return False
 
-    def run_test_suite(self, test_configs: List[Dict], cleanup: bool = True, gitlab_token: Optional[str] = None, force_full_flow: bool = False) -> Dict:
-        """Run a suite of tests with different configurations."""
+    def run_test_suite(self, test_configs: List[Dict], cleanup: bool = True, gitlab_token: Optional[str] = None, force_full_flow: bool = False, gpus: str = "all") -> Dict:
+        """Run a suite of tests with different configurations.
+
+        Args:
+            test_configs: List of test configurations
+            cleanup: Whether to cleanup Docker images after testing
+            gitlab_token: GitLab token for authentication
+            force_full_flow: Force full build+test flow even for disabled tests
+            gpus: GPU devices to use (default: 'all')
+        """
         results = {
             "total_tests": len(test_configs),
             "passed": 0,
@@ -1833,10 +2532,37 @@ class DockerBuildTester:
             # Note: auto_validation is passed directly to build_image via test_config
             # No need to add it to build_args
 
-            # Download models if specified in test config
+            # Debug logging for flow decision
+            default_enable = test_cfg.get("default_enable", True)
+            logger.info(f"🔍 Test flow decision: default_enable={default_enable}, force_full_flow={force_full_flow}")
+
+            # If default_enable is False, skip Docker build/test but run codegen,
+            # unless full flow is forced by selection (e.g., --test-case provided)
+            if not default_enable and not force_full_flow:
+                logger.info("⚙️  Test disabled via default_enable=false. Running code generation only (skipping model download)...")
+                codegen_success, codegen_output = self.generate_inference_code(build_args, test_cfg)
+
+                status = "SKIPPED"
+                test_result = {
+                    "test_id": i,
+                    "config": config,
+                    "status": status,
+                    "build_success": False,
+                    "test_success": False,
+                    "build_output": codegen_output,
+                    "test_output": "",
+                    "log_file": "",
+                    "image_name": image_name
+                }
+                results["results"].append(test_result)
+                logger.info(f"Test {i} result: {status} (codegen_only)")
+                # Do not increment passed/failed counters for skipped tests
+                continue
+
+            # Download models if specified in test config (only for full build+test flow)
             models_config = test_cfg.get("models", {})
             if models_config:
-                logger.info(f"📦 Checking and downloading models...")
+                logger.info(f"📦 Checking and downloading models (full build+test flow)...")
                 config_dir = Path(config.get("_config_dir", "."))
                 download_success, download_msg = self.download_models(models_config, config_dir)
                 if not download_success:
@@ -1857,29 +2583,6 @@ class DockerBuildTester:
                     logger.info(f"Test {i} result: FAILED (model download)")
                     continue
 
-            # If default_enable is False, skip Docker build/test but run codegen,
-            # unless full flow is forced by selection (e.g., --test-case provided)
-            if not test_cfg.get("default_enable", True) and not force_full_flow:
-                logger.info("⚙️  Test disabled via default_enable=false. Running code generation only...")
-                codegen_success, codegen_output = self.generate_inference_code(build_args, test_cfg)
-
-                status = "SKIPPED"
-                test_result = {
-                    "test_id": i,
-                    "config": config,
-                    "status": status,
-                    "build_success": False,
-                    "test_success": False,
-                    "build_output": codegen_output,
-                    "test_output": "",
-                    "log_file": "",
-                    "image_name": image_name
-                }
-                results["results"].append(test_result)
-                logger.info(f"Test {i} result: {status} (codegen_only)")
-                # Do not increment passed/failed counters for skipped tests
-                continue
-
             # Build image with resolved dockerfile and base_dir
             dockerfile_to_use = config.get("_resolved_dockerfile")
             base_dir_to_use = config.get("_resolved_base_dir")
@@ -1898,7 +2601,8 @@ class DockerBuildTester:
                 test_success, test_output, log_file = self.test_image(
                     image_name,
                     test_config,
-                    i
+                    i,
+                    gpus=gpus
                 )
 
                 if test_success:
@@ -1965,13 +2669,28 @@ class DockerBuildTester:
         logger.info(f"Failed: {results['failed']}")
         logger.info(f"Success rate: {report['summary']['success_rate']}")
 
-        # Print log file locations
+        # Print test results with log file locations
         logger.info(f"\n{'='*60}")
-        logger.info("LOG FILES")
+        logger.info("TEST RESULTS")
         logger.info(f"{'='*60}")
         for result in results["results"]:
-            if result.get("log_file"):
-                logger.info(f"Test {result['test_id']}: {result['log_file']}")
+            test_name = result["config"].get("name", f"Test {result['test_id']}")
+            status = result.get("status", "UNKNOWN")
+            log_file = result.get("log_file", "")
+
+            if status == "PASSED":
+                status_icon = "✅"
+            elif status == "FAILED":
+                status_icon = "❌"
+            elif status == "SKIPPED":
+                status_icon = "⏭️"
+            else:
+                status_icon = "❓"
+
+            if log_file:
+                logger.info(f"{status_icon} [{result['test_id']}] {test_name}: {log_file}")
+            else:
+                logger.info(f"{status_icon} [{result['test_id']}] {test_name}")
 
         return report
 
@@ -1986,6 +2705,7 @@ def main():
     parser.add_argument("--no-cleanup", action="store_true", help="Don't cleanup images after testing")
     parser.add_argument("--gitlab-token", help="GitLab token for authentication")
     parser.add_argument("--test-case", help="Run only the test case with this name (partial match supported). Supplying this forces full flow (build+test) even if disabled.")
+    parser.add_argument("--gpus", default="all", help="GPU devices to use for Docker containers (default: 'all'). Examples: 'all', 'device=0', 'device=0,1', '\"device=0,1\"'")
 
     # Parse arguments with security validation
     try:
@@ -2193,9 +2913,11 @@ def main():
     try:
         logger.info(f"Starting test suite with {len(test_configs)} configurations")
         logger.info(f"Logs will be saved to: {args.log_dir}")
+        logger.info(f"Using GPU devices: {args.gpus}")
         # Force full flow if --test-case provided (including "*")
         force_full_flow = args.test_case is not None and len(args.test_case) > 0
-        results = tester.run_test_suite(test_configs, cleanup=not args.no_cleanup, gitlab_token=args.gitlab_token, force_full_flow=force_full_flow)
+        logger.info(f"🔍 Test suite settings: test_case={args.test_case}, force_full_flow={force_full_flow}")
+        results = tester.run_test_suite(test_configs, cleanup=not args.no_cleanup, gitlab_token=args.gitlab_token, force_full_flow=force_full_flow, gpus=args.gpus)
     except Exception as e:
         logger.error(f"❌ Test suite execution failed: {str(e)}")
         sys.exit(1)

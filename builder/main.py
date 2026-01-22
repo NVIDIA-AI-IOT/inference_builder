@@ -29,9 +29,19 @@ from omegaconf.errors import ConfigKeyError
 from jinja2 import Environment, FileSystemLoader
 import ast
 import os
+import sys
 import subprocess
 import validate
 import re
+import json
+import sys
+
+# Import schema validation functions
+try:
+    from jsonschema import Draft7Validator
+except ImportError:
+    Draft7Validator = None
+    logging.warning("jsonschema not installed. Schema validation will be skipped. Install with: pip install jsonschema")
 
 """
 Inference Builder Main Module
@@ -158,6 +168,65 @@ def validate_directory_path(dir_path: str) -> bool:
 def validate_server_type(server_type: str) -> bool:
     """Validate server type against allowed values."""
     return server_type in ALLOWED_SERVER
+
+
+def validate_config_against_schema(config_dict: Dict, schema_dir: Path = None) -> bool:
+    """Validate configuration against JSON schema.
+
+    Args:
+        config_dict: Configuration dictionary to validate
+        schema_dir: Directory containing schema files (default: ../schemas from this file)
+
+    Returns:
+        True if valid, False otherwise
+    """
+    if Draft7Validator is None:
+        logger.warning("Skipping schema validation (jsonschema not installed)")
+        return True
+
+    # Determine schema directory
+    if schema_dir is None:
+        schema_dir = Path(__file__).parent.parent / "schemas"
+
+    if not schema_dir.exists():
+        logger.warning(f"Schema directory not found: {schema_dir}. Skipping schema validation.")
+        return True
+
+    # Load main schema
+    schema_path = schema_dir / "config.schema.json"
+    try:
+        with open(schema_path, 'r') as f:
+            schema = json.load(f)
+    except FileNotFoundError:
+        logger.warning(f"Schema file not found: {schema_path}. Skipping schema validation.")
+        return True
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid schema file: {e}")
+        return False
+
+    # Validate configuration
+    try:
+        validator = Draft7Validator(schema)
+        errors = list(validator.iter_errors(config_dict))
+
+        if not errors:
+            logger.info("✓ Configuration schema validation passed")
+            return True
+
+        logger.error(f"✗ Configuration validation failed with {len(errors)} error(s):")
+        for i, error in enumerate(errors, 1):
+            path = '.'.join(str(p) for p in error.path) if error.path else 'root'
+            logger.error(f"  Error {i} at '{path}': {error.message}")
+
+            if error.context:
+                for ctx_error in error.context:
+                    logger.error(f"    - {ctx_error.message}")
+
+        return False
+
+    except Exception as e:
+        logger.error(f"Error during schema validation: {e}")
+        return False
 
 
 def build_args(parser):
@@ -348,8 +417,12 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
     api_tpl_dir = get_resource_path(f"templates/api_server/{server_type}/route")
 
     # Use safer subprocess call with argument list instead of shell string interpolation
+    # Find fastapi-codegen in the same directory as the current Python executable
+    python_dir = Path(sys.executable).parent
+    fastapi_codegen = python_dir / "fastapi-codegen"
+    
     command = [
-        "fastapi-codegen",
+        str(fastapi_codegen),
         "--input", api_spec.name,
         "--output", str(output_dir),
         "--output-model-type", "pydantic_v2.BaseModel",
@@ -464,7 +537,18 @@ def main(args):
             if not validate_file_path(module.name):
                 raise ValueError(f"Invalid custom module file path: {module.name}")
 
+    # Load configuration
+    logger.info(f"Loading configuration from: {args.config}")
     config = OmegaConf.load(args.config)
+
+    # Validate configuration against JSON schema
+    logger.info("Validating configuration against JSON schema...")
+    config_dict = OmegaConf.to_container(config, resolve=True)
+
+    if not validate_config_against_schema(config_dict):
+        logger.error("Configuration validation failed. Fix the errors above and try again.")
+        sys.exit(1)
+
     with tempfile.TemporaryDirectory() as temp_dir:
         tree = build_tree(args.server_type, config, temp_dir)
         if args.server_type == "serverless":

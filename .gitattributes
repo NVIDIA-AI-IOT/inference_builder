@@ -1,2 +1,3 @@
 builder/boilerplates/nim/** merge=ours
 templates/api_server/nim/** merge=ours
+.gitlab-ci.yml merge=ours

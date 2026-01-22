@@ -79,8 +79,11 @@ server:
               } {% if not loop.last %}, {% endif %} {% endfor %}
             ]
           }
+    healthy_ready:
+      operation: health_ready_v1_health_ready_get
+
 models:
-  - name: "Qwen3-VL-30B-A3B-Instruct"
+  - name: "Qwen3-VL"
     backend: "vllm"
     input:
       - name: "inputs"
@@ -95,6 +98,7 @@ models:
         dims: [ -1 ]
     parameters:
       max_num_tokens: 19200
+      async_mode: true
     preprocessors:
       - kind: "custom"
         name: "qwen3-vl-loader"

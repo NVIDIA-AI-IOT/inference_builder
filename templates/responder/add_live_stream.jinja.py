@@ -27,6 +27,6 @@
                 stream_info["password"])
         except Exception as e:
             return 500, str(e)
-        response = self.process_response("{{ name }}", request, asdict(asset))
+        response = self.process_response("{{ name }}", request, asset.to_dict())
         return 200, response
 

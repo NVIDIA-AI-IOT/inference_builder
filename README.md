@@ -76,6 +76,49 @@ Compared to manually crafting inference source code, Inference Builder offers de
 - Streaming support: Provides built-in support for streaming protocols such as RTSP with minimal configuration.
 - Standardized testing: Automates and standardizes test case generation to simplify validation and evaluation workflows.
 
+## MCP Integration
+
+Inference Builder now includes MCP (Model Context Protocol) integration, allowing you to use the tool directly within Cursor and other MCP-compatible clients.
+
+### Quick Start
+
+1. Install MCP dependencies and the server:
+   ```bash
+   pip install -r mcp/requirements-mcp.txt
+   python3 mcp/setup_mcp.py
+   ```
+
+2. Configure Cursor to use the MCP server (see `mcp/cursor-mcp-config.json` for an example)
+
+In Cursor, navigate to File > Preferences > Cursor Settings, where you should see the following screen:
+
+![MCP Server](mcp.png)
+
+3. Use the MCP tool in Cursor
+
+Once the `deepstream-inference-builder` MCP server is successfully loaded by Cursor (indicated by a green status icon), you can create your new project and invoke the tool by mentioning it in your prompt. For example, type phrases like:
+- *"Use the deepstream-inference-builder tool to generate an inference pipeline for the latest PeopleNet model from Nvidia"*
+- *"Leverage deepstream-inference-builder to build a Docker image for my project"*
+
+This enables the following features:
+
+- Use the available tools in Cursor:
+   - `generate_inference_pipeline`: Generate inference pipelines from YAML configs
+   - `build_docker_image`: Build Docker images from generated pipelines
+   - `docker_run_image`: Run Docker images for testing and troubleshooting
+   - `prepare_model_repository`: Download models from NGC/HuggingFace and prepare model repositories
+   - `generate_nvinfer_config`: Generate DeepStream nvinfer runtime configuration files
+
+- Explore available resources:
+   - `docs://README.md`: Project documentation
+   - `docs://mcp/README-MCP.md`: MCP integration documentation
+   - `schema://config.schema.json`: Configuration schema
+   - `samples://config/*`: Sample pipeline configurations
+   - `samples://dockerfile/*`: Sample Dockerfiles
+   - `samples://processor/*`: Sample preprocessors/postprocessors
+
+For detailed MCP integration documentation, see [mcp/README-MCP.md](mcp/README-MCP.md).
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a PR.

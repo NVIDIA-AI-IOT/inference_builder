@@ -26,11 +26,11 @@ import torch
 import jinja2
 import json
 from queue import Queue, Full, Empty
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import Future
 import threading
 
 kDebug = int(os.getenv("DEBUG", "0"))
-PACKAGE_NAME = "NIM"
+PACKAGE_NAME = "ib"
 
 class NumpyFlatEncoder(json.JSONEncoder):
     def default(self, obj):

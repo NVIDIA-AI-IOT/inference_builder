@@ -106,6 +106,25 @@ class TritonBackend(ModelBackend):
         self._model_name = model_config["name"]
         self._input_names = [i['name'] for i in model_config['input']]
         self._output_names = [o['name'] for o in model_config['output']]
+
+        # Wait for Triton server to be ready
+        max_retries = 60
+        retry_interval = 1
+        for attempt in range(max_retries):
+            try:
+                with httpclient.InferenceServerClient("localhost:8000") as client:
+                    if client.is_server_ready():
+                        logger.info(f"Triton server is ready after {attempt + 1} attempt(s)")
+                        break
+            except Exception as e:
+                logger.debug(f"Attempt {attempt + 1}/{max_retries}: Triton server not ready yet - {e}")
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(retry_interval)
+        else:
+            logger.error(f"Triton server did not become ready after {max_retries} attempts")
+            raise RuntimeError("Triton server is not ready")
+
         logger.debug(f"TritonBackend created for {self._model_name} with inputs {self._input_names} and outputs {self._output_names}")
 
     def __call__(self, *args, **kwargs):

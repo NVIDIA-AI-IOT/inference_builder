@@ -29,7 +29,22 @@ info:
 tags:
   - name: "NVIDIA CHANGENET API"
     description: Get a segmentation representation for the difference between two pictures.
+  - name: "Health"
+    description: Health check endpoints
 paths:
+  "/v1/health/ready":
+    get:
+      tags:
+        - Health
+      summary: Health Ready
+      description: Provide your implementation of readiness to know when container ready to accept traffic
+      operationId: health_ready_v1_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
   "/v1/infer":
     post:
       tags:

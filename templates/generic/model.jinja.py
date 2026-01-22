@@ -19,6 +19,7 @@
 from config import global_config
 from lib.inference import *
 from lib.utils import *
+from lib.errors import ErrorFactory
 from omegaconf import OmegaConf
 import json
 import os
@@ -61,12 +62,22 @@ class GenericInference(InferenceBase):
         """ execute a list of requests"""
         if self._async_dispatcher is None:
             self._async_dispatcher = AsyncDispatcher(self._collector, loop=asyncio.get_running_loop())
-        async_queue = asyncio.Queue()
-        self._async_dispatcher.append_async_queue(async_queue)
 
         logger.debug(f"Received request {request}")
-        self._inject_tensors(request)
+        if not self._inject_tensors(request):
+            error = ErrorFactory.create(
+                "ERR_DF_006",
+                caller=self,
+                input_data={"request_keys": list(request.keys())},
+                tensor_names=[n for i in self._inputs for n in i.in_names]
+            )
+            error.log(logger)
+            InferenceBase._export_errors()
+            yield error
+            return
 
+        async_queue = asyncio.Queue()
+        self._async_dispatcher.append_async_queue(async_queue)
         # Wait for all the results from one inference request
         while not self._stop_event.is_set():
             try:
@@ -76,21 +87,34 @@ class GenericInference(InferenceBase):
                     logger.info(f"Got Stop: {result.reason}")
                     return
                 if isinstance(result, Error):
-                    logger.warning(f"Got Error: {result.message}")
-                    continue
-                logger.debug(f"Got result: {result}")
-                # post-process the data
-                result = self._post_process(result)
+                    InferenceBase._export_errors()
+                else:
+                    logger.debug(f"Got result: {result}")
+                    # post-process the data
+                    result = self._post_process(result)
+                # Yield control to allow other requests to be processed
+                await asyncio.sleep(0)
                 yield result
             except Exception as e:
-                logger.exception(e)
+                error = ErrorFactory.from_exception(e, caller=self)
+                error.log(logger)
+                yield error
 
     def exec_sync(self, request):
         """ execute a list of requests synchronously"""
         from queue import Empty
 
         logger.debug(f"Received request {request}")
-        self._inject_tensors(request)
+        if not self._inject_tensors(request):
+            error = ErrorFactory.create(
+                "ERR_DF_006",
+                caller=self,
+                input_data={"request_keys": list(request.keys())},
+                tensor_names=[n for i in self._inputs for n in i.in_names]
+            )
+            error.log(logger)
+            yield error
+            return
 
         # Wait for all the results from one inference request
         while not self._stop_event.is_set():
@@ -101,41 +125,41 @@ class GenericInference(InferenceBase):
                     logger.info(f"Got Stop: {result.reason}")
                     return
                 if isinstance(result, Error):
-                    logger.warning(f"Got Error: {result.message}")
-                    continue
-                logger.debug(f"Got result: {result}")
-                # post-process the data
-                result = self._post_process(result)
+                    InferenceBase._export_errors()
+                else:
+                    logger.debug(f"Got result: {result}")
+                    # post-process the data
+                    result = self._post_process(result)
                 yield result
             except Empty:
                 continue
             except Exception as e:
-                logger.exception(e)
+                error = ErrorFactory.from_exception(e, caller=self)
+                error.log(logger)
+                yield error
 
     def finalize(self):
         self._stop_event.set()
         super().finalize()
 
-    def _inject_tensors(self, request: Dict):
-        matched = [[n for n in i.in_names if n in request] for i in self._inputs]
+    def _inject_tensors(self, request: Dict) -> bool:
+        """Inject tensors into the input flows"""
+        injected = False
+        matched = [[n for n in i.in_names if n in request and request[n]] for i in self._inputs]
         reshuffled = sorted(range(len(matched)), key=lambda x: len(matched[x]), reverse=True)
         for i in reshuffled:
             input_flow = self._inputs[i]
-            # select the tensors for the input
-            tensors = { n: request[n] for n in input_flow.in_names if n in request and request[n]}
-
-            # the tensors need to be transformed to generic type
-            for name in tensors:
-                tensor = tensors[name]
-                config = next((c for c in self._input_config if c['name'] == name), None)
-                if config is None:
-                    logger.warning(f"Invalid input parsed: {name}")
-                    continue
-                tensors[name] = np.array(tensor)
+            tensors = {}
+            # select and transform the tensors for the input
+            for n in matched[i]:
+                if n in request:
+                    tensors[n] = np.array(request.pop(n))
             if tensors:
                 logger.debug(f"Injecting tensors {tensors}")
                 input_flow.put(tensors)
                 input_flow.put(Stop(reason="end"))
+                injected = True
+        return injected
 
     def _post_process(self, data: Dict):
         processed = {k: v for k, v in data.items()}
