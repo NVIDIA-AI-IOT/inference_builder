@@ -96,7 +96,7 @@ cache:
 # ------------------------------
 test:standard:
   stage: test
-  image: docker:24
+  image: docker:27
   variables:
     DOCKER_TLS_CERTDIR: ""      # disable TLS inside DinD
     DOCKER_HOST: unix:///var/run/docker.sock
@@ -255,7 +255,7 @@ test:report:
 # ------------------------------
 test:quick:
   stage: test
-  image: docker:24
+  image: docker:27
   variables:
     DOCKER_TLS_CERTDIR: ""
     DOCKER_HOST: unix:///var/run/docker.sock
