@@ -167,7 +167,7 @@ The generated code can be:
 
 **MCP Server Not Found**
 - Ensure the MCP server is running
-- Check that the path in Cursor configuration is correct
+- Check that the path in your MCP client configuration is correct
 - Verify Python environment has required dependencies
 
 **Configuration Validation Errors**
