@@ -8,7 +8,7 @@
   "properties": {
     "infer_config_path": {
       "type": "array",
-      "description": "Paths (inside the model repository) to DeepStream nvinfer runtime configuration files (for example, nvdsinfer_config.yaml). If these file are not in the model repository folder, they must be created and copied into the model repository before deployment and are used by the DeepStream nvinfer plugin at runtime. Refer to https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvinfer.html#gst-nvinfer-file-configuration-specifications for more details.",
+      "description": "Paths (inside the model repository) to DeepStream nvinfer runtime configuration files (for example, nvdsinfer_config.yaml). These files are used by the DeepStream nvinfer plugin at runtime. **Creating or locating config files:** (1) The configuration file typically accompanies the ONNX model from the remote model repository (NGC) as a YAML or TXT file containing all required inference parameters - always prefer using this provided configuration when available. (2) If no configuration file is provided with the model, one must be created based on the model architecture, inference implementation details, and post-processing approaches specific to the model. (3) The config file must be copied into the model repository before deployment. Refer to https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvinfer.html#gst-nvinfer-file-configuration-specifications for the complete configuration specification.",
       "items": {
         "type": "string"
       }
