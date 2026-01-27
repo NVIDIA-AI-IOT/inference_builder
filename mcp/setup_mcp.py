@@ -2,9 +2,22 @@
 """
 Setup script for Inference Builder MCP Integration
 
-This script helps install dependencies and configure the MCP integration.
+This script helps install dependencies and configure the MCP integration
+for use with MCP-compatible clients such as Cursor and Claude Code.
+
+Usage:
+    python setup_mcp.py [CONFIG_PATH]
+
+Arguments:
+    CONFIG_PATH  Path to the MCP config file (default: ~/.cursor/mcp.json)
+
+Examples:
+    Cursor (global):    python setup_mcp.py ~/.cursor/mcp.json
+    Cursor (project):   python setup_mcp.py /path/to/project/.cursor/mcp.json
+    Claude Code:        python setup_mcp.py ~/.claude/.mcp.json
 """
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -69,16 +82,27 @@ def test_integration():
 
     return True
 
-def create_cursor_config():
-    """Create or update Cursor MCP configuration"""
-    print("\nSetting up Cursor configuration...")
+def create_mcp_config(config_path=None):
+    """Create or update MCP configuration file
 
-    cursor_dir = Path.home() / ".cursor"
-    if not cursor_dir.exists():
-        cursor_dir.mkdir(parents=True, exist_ok=True)
-        print(f"✓ Created Cursor directory: {cursor_dir}")
+    Args:
+        config_path: Optional path to the MCP config file.
+                     Defaults to ~/.cursor/mcp.json if not specified.
+    """
+    print("\nSetting up MCP configuration...")
 
-    config_file = cursor_dir / "mcp.json"
+    if config_path:
+        config_file = Path(config_path).expanduser().resolve()
+        config_dir = config_file.parent
+        if not config_dir.exists():
+            config_dir.mkdir(parents=True, exist_ok=True)
+            print(f"✓ Created directory: {config_dir}")
+    else:
+        default_dir = Path.home() / ".cursor"
+        if not default_dir.exists():
+            default_dir.mkdir(parents=True, exist_ok=True)
+            print(f"✓ Created directory: {default_dir}")
+        config_file = default_dir / "mcp.json"
 
     # Create the correct configuration with absolute paths
     correct_config = {
@@ -105,7 +129,7 @@ def create_cursor_config():
             # Check if the config is already correct
             if (existing_config.get("mcpServers", {}).get("deepstream-inference-builder", {}).get("cwd") == str(Path.cwd()) and
                 existing_config.get("mcpServers", {}).get("deepstream-inference-builder", {}).get("command") == str(Path(sys.executable))):
-                print(f"✓ Cursor MCP config already exists and is correct: {config_file}")
+                print(f"✓ MCP config already exists and is correct: {config_file}")
                 return True
             else:
                 print(f"⚠️  Existing config found but needs updating: {config_file}")
@@ -118,16 +142,43 @@ def create_cursor_config():
     try:
         with open(config_file, 'w') as f:
             json.dump(correct_config, f, indent=2)
-        print(f"✓ Created/updated Cursor MCP config: {config_file}")
-        print("Note: You may need to restart Cursor for the configuration to take effect.")
+        print(f"✓ Created/updated MCP config: {config_file}")
+        print("Note: You may need to restart your MCP client for the configuration to take effect.")
         return True
     except Exception as e:
-        print(f"✗ Failed to create/update Cursor config: {e}")
-        print("Please manually copy cursor-mcp-config.json to your Cursor configuration directory.")
+        print(f"✗ Failed to create/update MCP config: {e}")
+        print("Please manually create the MCP configuration file.")
         return False
 
-def main():
-    """Main setup function"""
+def parse_args():
+    """Parse command-line arguments"""
+    parser = argparse.ArgumentParser(
+        description="Setup script for Inference Builder MCP Integration",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    python setup_mcp.py                                  # Default: ~/.cursor/mcp.json
+    python setup_mcp.py ~/.cursor/mcp.json               # Cursor (global)
+    python setup_mcp.py .cursor/mcp.json                 # Cursor (project-specific)
+    python setup_mcp.py ~/.claude/.mcp.json              # Claude Code (global)
+    python setup_mcp.py .mcp.json                        # Claude Code (project-specific)
+        """
+    )
+    parser.add_argument(
+        "config_path",
+        nargs="?",
+        default=None,
+        help="Path to the MCP config file (default: ~/.cursor/mcp.json)"
+    )
+    return parser.parse_args()
+
+
+def main(config_path=None):
+    """Main setup function
+
+    Args:
+        config_path: Optional path to the MCP config file.
+    """
     print("Inference Builder MCP Integration Setup")
     print("=" * 50)
 
@@ -146,22 +197,24 @@ def main():
         print("\n❌ Setup failed: Integration tests failed")
         return False
 
-    # Setup Cursor config
-    create_cursor_config()
+    # Setup MCP config
+    create_mcp_config(config_path)
 
     print("\n" + "=" * 50)
     print("🎉 Setup completed successfully!")
     print("\nNext steps:")
-    print("1. Restart Cursor if you're using it")
-    print("2. The MCP server should now be available in Cursor")
+    print("1. Restart your MCP client (Cursor, Claude Code, etc.)")
+    print("2. Verify the 'deepstream-inference-builder' MCP server is connected")
     print("3. Try using the tools:")
     print("   - 'Show me what sample configurations are available'")
     print("   - 'Generate a DeepStream object detection pipeline'")
-    print("\nFor more information, see README-MCP.md")
+    print("\nFor more information, see mcp/README-MCP.md")
 
     return True
 
+
 if __name__ == "__main__":
-    success = main()
+    args = parse_args()
+    success = main(args.config_path)
     sys.exit(0 if success else 1)
 

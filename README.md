@@ -78,46 +78,92 @@ Compared to manually crafting inference source code, Inference Builder offers de
 
 ## MCP Integration
 
-Inference Builder now includes MCP (Model Context Protocol) integration, allowing you to use the tool directly within Cursor and other MCP-compatible clients.
+Inference Builder includes MCP (Model Context Protocol) integration, enabling AI-assisted pipeline generation directly within Cursor or Claude Code. With MCP, you can use natural language to generate inference pipelines, build Docker images, and explore sample configurations.
 
-### Quick Start
+For detailed tool reference and advanced usage, see [mcp/README-MCP.md](mcp/README-MCP.md).
 
-1. Install MCP dependencies and the server:
+### Prerequisites
+
+Before setting up MCP, ensure you have completed the [Getting Started](#getting-started) steps above, then install the MCP dependencies:
+
+```bash
+pip install -r mcp/requirements-mcp.txt
+```
+
+### Setting Up for Cursor
+
+1. **Generate the MCP configuration:**
+
+   For a global configuration (available across all projects):
    ```bash
-   pip install -r mcp/requirements-mcp.txt
-   python3 mcp/setup_mcp.py
+   python3 mcp/setup_mcp.py ~/.cursor/mcp.json
    ```
 
-2. Configure Cursor to use the MCP server (see `mcp/cursor-mcp-config.json` for an example)
+   For a project-specific configuration:
+   ```bash
+   python3 mcp/setup_mcp.py /path/to/your_project/.cursor/mcp.json
+   ```
 
-In Cursor, navigate to File > Preferences > Cursor Settings, where you should see the following screen:
+2. **Verify the MCP server is loaded:**
 
-![MCP Server](mcp.png)
+   In Cursor, navigate to **File > Preferences > Cursor Settings > MCP**. You should see:
 
-3. Use the MCP tool in Cursor
+   ![MCP Server](mcp.png)
 
-Once the `deepstream-inference-builder` MCP server is successfully loaded by Cursor (indicated by a green status icon), you can create your new project and invoke the tool by mentioning it in your prompt. For example, type phrases like:
-- *"Use the deepstream-inference-builder tool to generate an inference pipeline for the latest PeopleNet model from Nvidia"*
-- *"Leverage deepstream-inference-builder to build a Docker image for my project"*
+   A green status icon next to `deepstream-inference-builder` indicates the server is connected.
 
-This enables the following features:
+3. **Start using the MCP tools:**
 
-- Use the available tools in Cursor:
-   - `generate_inference_pipeline`: Generate inference pipelines from YAML configs
-   - `build_docker_image`: Build Docker images from generated pipelines
-   - `docker_run_image`: Run Docker images for testing and troubleshooting
-   - `prepare_model_repository`: Download models from NGC/HuggingFace and prepare model repositories
-   - `generate_nvinfer_config`: Generate DeepStream nvinfer runtime configuration files
+   In any Cursor chat or composer, invoke the tools by mentioning them in your prompt:
+   - *"Use deepstream-inference-builder to generate an inference pipeline for PeopleNet"*
+   - *"Build a Docker image for my detection pipeline"*
 
-- Explore available resources:
-   - `docs://README.md`: Project documentation
-   - `docs://mcp/README-MCP.md`: MCP integration documentation
-   - `schema://config.schema.json`: Configuration schema
-   - `samples://config/*`: Sample pipeline configurations
-   - `samples://dockerfile/*`: Sample Dockerfiles
-   - `samples://processor/*`: Sample preprocessors/postprocessors
+### Setting Up for Claude Code
 
-For detailed MCP integration documentation, see [mcp/README-MCP.md](mcp/README-MCP.md).
+1. **Generate the MCP configuration:**
+
+   For a global configuration:
+   ```bash
+   python3 mcp/setup_mcp.py ~/.claude/.mcp.json
+   ```
+
+   For a project-specific configuration:
+   ```bash
+   python3 mcp/setup_mcp.py /path/to/your_project/.mcp.json
+   ```
+
+2. **Verify the MCP server is connected:**
+
+   Run `/mcp` in the Claude Code console. You should see:
+   ```
+   ❯ deepstream-inference-builder · ✔ connected
+   ```
+
+3. **Start using the MCP tools:**
+
+   Simply ask Claude Code to perform tasks like generating pipelines or building images.
+
+### Available MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `generate_inference_pipeline` | Generate inference pipelines from YAML configuration files |
+| `build_docker_image` | Build Docker images from generated pipelines |
+| `docker_run_image` | Run Docker images for testing and troubleshooting |
+| `prepare_model_repository` | Download models from NGC or HuggingFace and prepare repositories |
+| `generate_nvinfer_config` | Generate DeepStream nvinfer runtime configuration files |
+
+### Available MCP Resources
+
+| Resource | Description |
+|----------|-------------|
+| `docs://README.md` | Project documentation |
+| `docs://mcp/README-MCP.md` | MCP integration documentation |
+| `schema://config.schema.json` | Configuration schema reference |
+| `samples://config/*` | Sample pipeline configurations |
+| `samples://dockerfile/*` | Sample Dockerfiles |
+| `samples://processor/*` | Sample preprocessors and postprocessors |
+
 
 ## Contributing
 
