@@ -89,6 +89,8 @@ def create_mcp_config(config_path=None):
         config_path: Optional path to the MCP config file.
                      Defaults to ~/.cursor/mcp.json if not specified.
     """
+    import json
+
     print("\nSetting up MCP configuration...")
 
     if config_path:
@@ -104,50 +106,62 @@ def create_mcp_config(config_path=None):
             print(f"✓ Created directory: {default_dir}")
         config_file = default_dir / "mcp.json"
 
-    # Create the correct configuration with absolute paths
-    correct_config = {
-        "mcpServers": {
-            "deepstream-inference-builder": {
-                "command": str(Path(sys.executable)),
-                "args": [str(Path.cwd() / "mcp"/ "mcp_server.py")],
-                "cwd": str(Path.cwd()),
-                "env": {
-                    "PYTHONPATH": str(Path.cwd() / "mcp")
-                }
-            }
+    # Define the server configuration for this project
+    server_name = "deepstream-inference-builder"
+    server_config = {
+        "command": str(Path(sys.executable)),
+        "args": [str(Path.cwd() / "mcp" / "mcp_server.py")],
+        "cwd": str(Path.cwd()),
+        "env": {
+            "PYTHONPATH": str(Path.cwd() / "mcp")
         }
     }
 
-    import json
-
-    # Check if existing config needs updating
+    # Load existing config or start with empty structure
+    existing_config = {"mcpServers": {}}
     if config_file.exists():
         try:
             with open(config_file, 'r') as f:
                 existing_config = json.load(f)
-
-            # Check if the config is already correct
-            if (existing_config.get("mcpServers", {}).get("deepstream-inference-builder", {}).get("cwd") == str(Path.cwd()) and
-                existing_config.get("mcpServers", {}).get("deepstream-inference-builder", {}).get("command") == str(Path(sys.executable))):
-                print(f"✓ MCP config already exists and is correct: {config_file}")
-                return True
-            else:
-                print(f"⚠️  Existing config found but needs updating: {config_file}")
-                print("Updating with correct paths...")
+            # Ensure mcpServers key exists
+            if "mcpServers" not in existing_config:
+                existing_config["mcpServers"] = {}
+            print(f"✓ Found existing config with {len(existing_config['mcpServers'])} server(s)")
+        except json.JSONDecodeError as e:
+            print(f"⚠️  Existing config is not valid JSON: {e}")
+            print("Creating new configuration (existing file will be overwritten)...")
+            existing_config = {"mcpServers": {}}
         except Exception as e:
-            print(f"⚠️  Existing config found but could not be read: {e}")
+            print(f"⚠️  Could not read existing config: {e}")
             print("Creating new configuration...")
+            existing_config = {"mcpServers": {}}
 
-    # Create or update the config
+    # Check if the server is already correctly configured
+    existing_server = existing_config["mcpServers"].get(server_name, {})
+    if (existing_server.get("cwd") == server_config["cwd"] and
+        existing_server.get("command") == server_config["command"]):
+        print(f"✓ MCP server '{server_name}' already exists and is correct: {config_file}")
+        return True
+
+    # Update or add the server configuration (preserving other servers)
+    if server_name in existing_config["mcpServers"]:
+        print(f"⚠️  Updating existing '{server_name}' server configuration...")
+    else:
+        print(f"Adding '{server_name}' server to configuration...")
+
+    existing_config["mcpServers"][server_name] = server_config
+
+    # Write the merged config back
     try:
         with open(config_file, 'w') as f:
-            json.dump(correct_config, f, indent=2)
-        print(f"✓ Created/updated MCP config: {config_file}")
+            json.dump(existing_config, f, indent=2)
+        print(f"✓ Updated MCP config: {config_file}")
+        print(f"  Total servers configured: {len(existing_config['mcpServers'])}")
         print("Note: You may need to restart your MCP client for the configuration to take effect.")
         return True
     except Exception as e:
-        print(f"✗ Failed to create/update MCP config: {e}")
-        print("Please manually create the MCP configuration file.")
+        print(f"✗ Failed to update MCP config: {e}")
+        print("Please manually update the MCP configuration file.")
         return False
 
 def parse_args():
