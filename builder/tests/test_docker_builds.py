@@ -2234,7 +2234,8 @@ class DockerBuildTester:
                         with open(error_export_file, 'r') as f:
                             error_data = json.load(f)
 
-                        total_errors = error_data.get("total_errors", 0)
+                        stats = error_data.get("stats", {})
+                        total_errors = stats.get("total_errors", 0)
                         errors = error_data.get("errors", [])
                         collected_codes = [err.get("error_code") for err in errors]
 
@@ -2287,7 +2288,8 @@ class DockerBuildTester:
                     with open(error_export_file, 'r') as f:
                         error_data = json.load(f)
 
-                    total_errors = error_data.get("total_errors", 0)
+                    stats = error_data.get("stats", {})
+                    total_errors = stats.get("total_errors", 0)
                     errors = error_data.get("errors", [])
 
                     if total_errors > 0:

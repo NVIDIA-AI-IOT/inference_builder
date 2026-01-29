@@ -2003,14 +2003,8 @@ class InferenceBase:
             collector = get_global_error_collector()
             if collector:
                 stats = collector.get_stats(include_recent=100)
-                if stats["total_errors"] > 0:
-                    collector.export_to_json(error_export_path, include_stack_traces=False)
-                    logger.info(f"Exported {stats['total_errors']} errors to {error_export_path}")
-                else:
-                    # Write empty stats file to indicate no errors
-                    with open(error_export_path, 'w') as f:
-                        json.dump({"total_errors": 0, "errors": []}, f)
-                    logger.info(f"No errors to export, wrote empty file to {error_export_path}")
+                collector.export_to_json(error_export_path, include_stack_traces=False)
+                logger.info(f"Exported {stats['total_errors']} errors to {error_export_path}")
         except Exception as e:
             logger.warning(f"Failed to export errors: {e}")
 

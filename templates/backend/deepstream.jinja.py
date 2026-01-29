@@ -412,7 +412,7 @@ class BulkVideoInputPool(TensorInputPool):
                        rtsp_port=self._render_config.rtsp_port,
                        sync=False)
 
-        seg_mask_config = dict(self._render_config.seg_mask_config) if self._render_config.seg_mask_config else None
+        seg_mask_config = dict(self._render_config.seg_mask_config) if self._render_config.seg_mask_config and self._render_config.enable_display else None
         flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
                     enable_osd=self._render_config.enable_osd, seg_mask_config=seg_mask_config, sync=False)
 
@@ -937,6 +937,16 @@ class DeepstreamBackend(ModelBackend):
                     f"got {media} and {current_media}"
                 )
                 return
+
+        # validate the media type
+        if media not in self._in_pools:
+            if media == "image":
+                logger.error("TYPE_CUSTOM_DS_IMAGE input must be added to the pipeline for image support")
+            elif media == "video":
+                logger.error("TYPE_CUSTOM_BINARY_URLS input must be added to the pipeline for video suppport")
+            else:
+                logger.error("Unknown media type : ", media)
+            return
 
         # submit the data to the pipeline which supports the media type
         indices = self._in_pools[media].submit(in_data_list)
