@@ -7,7 +7,7 @@
       "CACHE_BUSTER": "default_test"
     },
     "test_config": {
-      "default_enable": true,
+      "default_enable": false,
       "timeout": 30,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes"

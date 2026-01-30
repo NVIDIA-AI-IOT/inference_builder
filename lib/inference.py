@@ -176,10 +176,10 @@ class DataFlow:
         processed = tensor
         if self._inbound:
             if data_type == "TYPE_CUSTOM_BINARY_URLS":
-                logger.debug(f"DataFlow _process_custom_data: {data_type}")
+                logger.debug("DataFlow _process_custom_data: %s", data_type)
                 processed = [input for input in tensor]
             elif data_type == "TYPE_CUSTOM_BINARY_BASE64":
-                logger.debug(f"DataFlow _process_custom_data: {data_type}")
+                logger.debug("DataFlow _process_custom_data: %s", data_type)
                 processed = []
                 for input in tensor:
                     if not isinstance(input, np.str_):
@@ -209,7 +209,7 @@ class DataFlow:
 
     def _is_collected_valid(self, collected: Dict):
         if not collected:
-            logger.info(f"No data collected from the dataflow: {self.in_names}")
+            logger.info("No data collected from the dataflow: %s", self.in_names)
             return False
         # check output data integrity
         if self._outbound:
@@ -238,7 +238,7 @@ class DataFlow:
         return next((config for config in self._configs if config["name"] == name), None)
 
     def put(self, item: Union[Dict, Error, Stop]):
-        logger.debug(f"[DataFlow.put] in_names={self.in_names}, o_names={self.o_names}, item_type={type(item).__name__}")
+        logger.debug("[DataFlow.put] in_names=%s, o_names=%s, item_type=%s", self.in_names, self.o_names, type(item).__name__)
         if not item:
             if self._queue_consumer is None:
                 # pass Error or Stop to the downstream
@@ -335,9 +335,9 @@ class DataFlow:
         return
 
     def get(self):
-        logger.debug(f"[DataFlow.get] Attempting get from queue: in_names={self.in_names}, o_names={self.o_names}, qsize={self._queue.qsize()}")
+        logger.debug("[DataFlow.get] Attempting get from queue: in_names=%s, o_names=%s, qsize=%s", self.in_names, self.o_names, self._queue.qsize())
         result = self._queue.get(timeout=self._timeout)
-        logger.debug(f"[DataFlow.get] Got result: in_names={self.in_names}, item_type={type(result).__name__}")
+        logger.debug("[DataFlow.get] Got result: in_names=%s, item_type=%s", self.in_names, type(result).__name__)
         return result
 
     def stop(self):
@@ -424,7 +424,7 @@ class VideoInputDataFlow(DataFlow):
                         # Check if this stream has reached its maximum chunks limit
                         max_chunks = chunk_params[idx].get("max_chunks")
                         if max_chunks is not None and chunks_yielded[idx] >= max_chunks:
-                            logger.info(f"Stream {idx} reached maximum chunks limit: {max_chunks}")
+                            logger.info("Stream %s reached maximum chunks limit: %s", idx, max_chunks)
                             eos_flags[idx] = True
                             continue
 
@@ -436,7 +436,7 @@ class VideoInputDataFlow(DataFlow):
                             try:
                                 frame = q.get(timeout=5.0)
                                 if frame is None:
-                                    logger.info(f"Frame extraction completed for stream {idx}")
+                                    logger.info("Frame extraction completed for stream %s", idx)
                                     eos_flags[idx] = True
                                     break
                                 frames.append(frame)
@@ -451,7 +451,7 @@ class VideoInputDataFlow(DataFlow):
                                     break  # Exit inner loop
 
                             except Empty:
-                                logger.info(f"EOS on live stream {idx}")
+                                logger.info("EOS on live stream %s", idx)
                                 eos_flags[idx] = True
                                 break
 
@@ -602,9 +602,9 @@ class VideoInputDataFlow(DataFlow):
     def stop(self):
         super().stop()
         if hasattr(self, '_frame_collector') and self._frame_collector:
-            logger.info(f"VideoInputDataFlow: shutting down frame collector")
+            logger.info("VideoInputDataFlow: shutting down frame collector")
             self._frame_collector.shutdown(wait=True)
-            logger.info(f"VideoInputDataFlow: frame collector shut down")
+            logger.info("VideoInputDataFlow: frame collector shut down")
             self._frame_collector = None
 
 
@@ -635,7 +635,7 @@ class VideoFrameSamplingDataFlow(DataFlow):
                 - np.ndarray: Fallback to parent processing
                 - EnhancedError: If asset not found or processing fails
         """
-        logger.debug(f"VideoFrameSamplingDataFlow._process_custom_data: {data_type}")
+        logger.debug("VideoFrameSamplingDataFlow._process_custom_data: %s", data_type)
         if data_type == self._video_tensor_type:
             return self._do_video_frame_sampling(tensor)
         else:
@@ -651,11 +651,11 @@ class VideoFrameSamplingDataFlow(DataFlow):
                 try:
                     frame = q.get(timeout=10.0)
                     if frame is None:
-                        logger.info(f"Frame extraction completed for stream {i}")
+                        logger.info("Frame extraction completed for stream %s", i)
                         break
                     total_frames[i].append(frame)
                 except Empty:
-                    logger.warning(f"Frame queue empty for stream {i}")
+                    logger.warning("Frame queue empty for stream %s", i)
                     break
 
         # Put the collected frames to results queue
@@ -793,11 +793,16 @@ class VideoFrameSamplingDataFlow(DataFlow):
     def stop(self):
         logger.info(f"VideoFrameSamplingDataFlow: shutting down frame collector")
         super().stop()
-        self._media_extractor.__del__()
-        self._media_extractor = None
-        self._frame_collector.shutdown(wait=True)
-        logger.info(f"VideoFrameSamplingDataFlow: frame collector shut down")
-
+        if self._media_extractor is not None:
+            logger.info(f"VideoFrameSamplingDataFlow: shutting down media extractor")
+            self._media_extractor.__del__()
+            self._media_extractor = None
+            logger.info(f"VideoFrameSamplingDataFlow: media extractor shut down")
+        if self._frame_collector is not None:
+            logger.info(f"VideoFrameSamplingDataFlow: shutting down frame collector")
+            self._frame_collector.shutdown(wait=True)
+            logger.info(f"VideoFrameSamplingDataFlow: frame collector shut down")
+            self._frame_collector = None
 
 class ImageInputDataFlow(DataFlow):
     """A data flow for image data"""
@@ -830,7 +835,7 @@ class ImageInputDataFlow(DataFlow):
             Returns EnhancedError (not raises) when decoder is not initialized,
             allowing the error to be propagated through the pipeline.
         """
-        logger.debug(f"ImageInputDataFlow._process_custom_data: {data_type}")
+        logger.debug("ImageInputDataFlow._process_custom_data: %s", data_type)
         if self._image_decoder is None:
             return ErrorFactory.create(
                 "ERR_IMG_003",
@@ -894,7 +899,7 @@ class ImageInputDataFlow(DataFlow):
                 return error
             tensor = as_tensor(np.frombuffer(data_payload, dtype=np.uint8).copy(), format)
             result.append(self._image_decoder.decode(tensor, format))
-        logger.debug(f"ImageInputDataFlow._process_base64_image generates {len(result)} tensors")
+        logger.debug("ImageInputDataFlow._process_base64_image generates %s tensors", len(result))
         return result
 
     def _process_image_assets(self, assets: np.ndarray):
@@ -1135,7 +1140,7 @@ class MultiFlowCollector(Collector):
         return data
 
     def _poll(self, index: int):
-        logger.info(f"Start polling data flow {self._data_flows[index].in_names}")
+        logger.info("Start polling data flow %s", self._data_flows[index].in_names)
         data_flow = self._data_flows[index]
         n_data = 0
         while not self._stop_event.is_set():
@@ -1157,7 +1162,7 @@ class MultiFlowCollector(Collector):
                 self._queue.put(data)
                 with self._condition:
                     if isinstance(data, Stop):
-                        logger.info(f"Data flow {data_flow.in_names} ended in: {data}")
+                        logger.info("Data flow %s ended in: %s", data_flow.in_names, data)
                         self._active_flow = -1
                         n_data = 0
                         self._condition.notify_all()
@@ -1227,33 +1232,33 @@ class AsyncDispatcher:
                 continue
 
             # For this consumer queue, keep collecting until Stop/Error is received
-            logger.debug(f"[AsyncDispatcher] Starting collection loop for new async_queue")
+            logger.debug("[AsyncDispatcher] Starting collection loop for new async_queue")
             collect_attempts = 0
             while not self._stop_event.is_set():
                 try:
-                    logger.debug(f"[AsyncDispatcher] Attempting to collect (attempt #{collect_attempts})")
+                    logger.debug("[AsyncDispatcher] Attempting to collect (attempt #%s)", collect_attempts)
                     data = self._collector.collect()
-                    logger.debug(f"[AsyncDispatcher] Collected data: {type(data).__name__}")
+                    logger.debug("[AsyncDispatcher] Collected data: %s", type(data).__name__)
                 except Empty:
                     collect_attempts += 1
                     if collect_attempts % 100 == 0:
-                        logger.debug(f"[AsyncDispatcher] Still waiting for data after {collect_attempts} attempts")
+                        logger.debug("[AsyncDispatcher] Still waiting for data after %s attempts", collect_attempts)
                     continue
                 except Exception as e:
                     logger.exception(e)
                     data = Error(str(e))
                 try:
-                    logger.debug(f"[AsyncDispatcher] Putting data into async_queue")
+                    logger.debug("[AsyncDispatcher] Putting data into async_queue")
                     async def _async_put(q, item):
                         await q.put(item)
                     asyncio.run_coroutine_threadsafe(_async_put(async_queue, data), self._loop)
-                    logger.debug(f"[AsyncDispatcher] Successfully put data into async_queue")
+                    logger.debug("[AsyncDispatcher] Successfully put data into async_queue")
                 except Exception as e:
                     logger.exception(e)
                     continue
 
                 if isinstance(data, Stop):
-                    logger.info(f"AsyncDispatcher delivered Stop message: {data}")
+                    logger.info("AsyncDispatcher delivered Stop message: %s", data)
                     break
 
         logger.info("AsyncDispatcher stopped")
@@ -1312,7 +1317,7 @@ class ModelOperator:
             # customized inbound data flow
             flow = inbound_dataflow_mapping[image_tensor_type](configs, tensor_names, image_tensor_type)
         self._in.append(flow)
-        logger.info(f"Data flow < {flow.in_names} -> {flow.o_names} > connected to model {self._model_name}")
+        logger.info("Data flow < %s -> %s > connected to model %s", flow.in_names, flow.o_names, self._model_name)
         return flow
 
     def bind_output(self, configs: List[Dict], sources: List[str]=[]):
@@ -1348,7 +1353,7 @@ class ModelOperator:
         if self._future_consumer is None:
             # pass the error or stop message downstream
             for out in self._out:
-                logger.debug(f"Passing error or stop message to {out.in_names}")
+                logger.debug("Passing error or stop message to %s", out.in_names)
                 out.put(data)
         else:
             f = Future()
@@ -1356,7 +1361,7 @@ class ModelOperator:
             self._future_consumer.append_future(f)
 
     def run(self):
-        logger.debug(f"Model operator for {self._model_name} started")
+        logger.debug("Model operator for %s started", self._model_name)
 
         # create preprocessors
         for kind, processors in [("preprocessors", self._preprocessors), ("postprocessors", self._postprocessors)]:
@@ -1395,7 +1400,7 @@ class ModelOperator:
                 if isinstance(data, Stop) or isinstance(data, Error):
                     self._pass_error_or_stop_downstream(data)
                     continue
-                logger.info(f"Input collected from {self._collector.__class__.__name__}: {data}")
+                logger.info("Input collected from %s: %s", self._collector.__class__.__name__, data)
 
                 # convert data to args and kwargs based on if explicit batching is required
                 args = []
@@ -1455,7 +1460,7 @@ class ModelOperator:
                     self._pass_error_or_stop_downstream(error)
                     continue
                 # execute inference backend and collect result
-                logger.debug(f"Model {self._model_name} invokes backend {self._backend.__class__.__name__} with {args if args else kwargs}")
+                logger.debug("Model %s invokes backend %s with %s", self._model_name, self._backend.__class__.__name__, args if args else kwargs)
                 rs = self._backend(*args, **kwargs)
                 if isinstance(rs, Future):
                     def on_future_result(result: Dict|Error|Stop, user_data: List):
@@ -1577,7 +1582,7 @@ class ModelOperator:
                         )
                         error.log(logger, as_json=False)
                         continue
-                logger.debug(f"ModelOperator of {self._model_name} deposits result: {output_data}")
+                logger.debug("ModelOperator of %s deposits result: %s", self._model_name, output_data)
                 out.put(output_data)
 
     def _preprocess(self, args: List):
@@ -1591,9 +1596,9 @@ class ModelOperator:
                 # trigger the preprocessor if all the input tensors are present
                 if all([i in data for i in preprocessor.input]):
                     input = [processed.pop(i) for i in preprocessor.input]
-                    logger.debug(f"{self._model_name} invokes preprocessor {preprocessor.name} with given input {input}")
+                    logger.debug("%s invokes preprocessor %s with given input %s", self._model_name, preprocessor.name, input)
                     output = preprocessor(*input)
-                    logger.debug(f"{self._model_name} preprocessor {preprocessor.name} generated output {output}")
+                    logger.debug("%s preprocessor %s generated output %s", self._model_name, preprocessor.name, output)
                     if len(output) != len(preprocessor.output):
                         error = ErrorFactory.create(
                             "ERR_PROC_001",
@@ -1627,7 +1632,7 @@ class ModelOperator:
                 value = data[key]
                 i_config = next((i for i in self._model_config['input'] if i["name"] == key), None)
                 if i_config is None:
-                    logger.info(f"{key} from preprocessed is not found in the model input config, adding it as a passthrough tensor")
+                    logger.info("%s from preprocessed is not found in the model input config, adding it as a passthrough tensor", key)
                     passthrough_tensor[key] = value
                 else:
                     data_type = i_config["data_type"]
@@ -1654,9 +1659,9 @@ class ModelOperator:
                     )
                 continue
             input = [processed.pop(i) for i in processor.input]
-            logger.debug(f"Post-processor {processor.name} invoked with given input {input}")
+            logger.debug("Post-processor %s invoked with given input %s", processor.name, input)
             output = processor(*input)
-            logger.debug(f"Post-processor generated output {output}")
+            logger.debug("Post-processor generated output %s", output)
             if len(output) != len(processor.output):
                 error = ErrorFactory.create(
                     "ERR_PROC_001",
@@ -1677,16 +1682,16 @@ class ModelOperator:
 
     def _create_collector(self):
         if len(self._in) == 1:
-            logger.info(f"Single data flow input detected, using single flow collector on model {self._model_name}")
+            logger.info("Single data flow input detected, using single flow collector on model %s", self._model_name)
             return SingleFlowCollector(self._in[0])
         else:
             outputs = [set(d.o_names) for d in self._in]
             intersection = set.intersection(*outputs)
             if len(intersection) == 0 and not any([d.optional for d in self._in]):
-                logger.info(f"Aggregation data flow input detected, using aggregation flow collector on model {self._model_name}")
+                logger.info("Aggregation data flow input detected, using aggregation flow collector on model %s", self._model_name)
                 return AggregationFlowCollector(self._in, timeout=1.0)
             else:
-                logger.info(f"Multi data flow input detected, using multi flow collector on model {self._model_name}")
+                logger.info("Multi data flow input detected, using multi flow collector on model %s", self._model_name)
                 return MultiFlowCollector(self._in, timeout=1.0)
 
 class InferenceBase:
@@ -1789,7 +1794,7 @@ class InferenceBase:
             # go through the routing table
             for k, v in global_config.routes.items():
                 route = parse_route(k, v)
-                logger.debug(f"Adding route {route}")
+                logger.debug("Adding route %s", route)
                 # neither source nor target model is specified.
                 if not route.model.source and not route.model.target:
                     # this is a direct passthrough in the top level, we can use a standalone dataflow
@@ -2004,9 +2009,9 @@ class InferenceBase:
             if collector:
                 stats = collector.get_stats(include_recent=100)
                 collector.export_to_json(error_export_path, include_stack_traces=False)
-                logger.info(f"Exported {stats['total_errors']} errors to {error_export_path}")
+                logger.info("Exported %s errors to %s", stats['total_errors'], error_export_path)
         except Exception as e:
-            logger.warning(f"Failed to export errors: {e}")
+            logger.warning("Failed to export errors: %s", e)
 
     def _create_backend(self, backend_spec: List[str], model_config: Dict, model_home: str) -> ModelBackend | None:
         raise NotImplementedError("Subclass must implement this method")
