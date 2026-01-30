@@ -791,13 +791,8 @@ class VideoFrameSamplingDataFlow(DataFlow):
         return all([n in collected for n in self._video_tensor_names])
 
     def stop(self):
-        logger.info(f"VideoFrameSamplingDataFlow: shutting down frame collector")
         super().stop()
-        if self._media_extractor is not None:
-            logger.info(f"VideoFrameSamplingDataFlow: shutting down media extractor")
-            self._media_extractor.__del__()
-            self._media_extractor = None
-            logger.info(f"VideoFrameSamplingDataFlow: media extractor shut down")
+        self._media_extractor = None
         if self._frame_collector is not None:
             logger.info(f"VideoFrameSamplingDataFlow: shutting down frame collector")
             self._frame_collector.shutdown(wait=True)
