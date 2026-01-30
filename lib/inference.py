@@ -892,7 +892,7 @@ class ImageInputDataFlow(DataFlow):
                     "ERR_DF_002",
                     message=f"Failed to decode base64 string for image data: {image}",
                     caller=self,
-                    input_data={"input": input},
+                    input_data={"input": image},
                     expected_data={"valid_encoding": "base64"}
                 )
                 error.log(logger, as_json=False)
