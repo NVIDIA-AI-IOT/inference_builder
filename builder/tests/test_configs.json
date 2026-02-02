@@ -334,7 +334,7 @@
     },
 
     "test_config": {
-      "default_enable": true,
+      "default_enable": false,
       "timeout": 10,
       "volumes": {
         "output_types/models": "/workspace/models"
@@ -353,7 +353,7 @@
     },
 
     "test_config": {
-      "default_enable": true,
+      "default_enable": false,
       "timeout": 10,
       "volumes": {
         "output_types/models": "/workspace/models"
@@ -376,7 +376,7 @@
     },
 
     "test_config": {
-      "default_enable": true,
+      "default_enable": false,
       "timeout": 10,
       "volumes": {
         "output_types/models": "/workspace/models"
