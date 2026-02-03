@@ -25,7 +25,6 @@ property:
   net-scale-factor: 0.0173520735728
   labelfile-path: labels.txt
   onnx-file: resnet50_peoplenet_transformer_op17.onnx
-  tlt-model-key: nvidia_tao
 
   # 0=FP32, 1=INT8, 2=FP16 mode
   network-mode: 2

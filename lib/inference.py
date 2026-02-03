@@ -584,7 +584,7 @@ class VideoInputDataFlow(DataFlow):
                 return error
 
         # Create results queue and submit background thread
-        results_queue = Queue()
+        results_queue = Queue(maxsize=32)
         for asset in asset_list:
             asset.lock()
 
