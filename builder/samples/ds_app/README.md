@@ -31,6 +31,7 @@ If you don't have NGC CLI installed, please download and install it from [this p
 
 ### RT-DETR Detector
 - **RT-DETR**: [TrafficCamNet Lite](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite)
+- **RT-DETR**: [PeopleNet Transformer](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/peoplenet_transformer)
 
 ## Getting Started
 
@@ -57,6 +58,16 @@ The core inference configuration that specifies the model and inference paramete
 parameters:
   infer_config_path:
     - nvdsinfer_config.yaml  # Path to the nvinfer configuration file
+```
+
+### Preprocess Configuration
+
+Used to define preprocessing operations that run before inference. This is required when non-image tensors must be injected into the pipeline (e.g., for models that require additional metadata or custom tensor inputs). Refer to [nvdspreprocess plugin documentation](https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvdspreprocess.html) for more details.
+
+```yaml
+parameters:
+  preprocess_config_path:
+    - nvdspreprocess_config.yaml  # Path to the nvdspreprocess configuration file
 ```
 
 ### Tracker Configuration
@@ -163,7 +174,7 @@ parameters:
 
 Batch timeout specifies the time in microseconds to wait for batched buffers to be sent out after the first buffer is available.
 
-- **Default value:** 33000 microseconds
+- **Default value:** `1000 * max_batch_size` microseconds
 - **Set to -1:** Wait infinitely for batch formation
 
 > **Warning:** If your `max_batch_size` in the models section is greater than the number of streams you're running, do not set the timeout to -1. This will cause the pipeline to wait infinitely for batch formation and become unresponsive. In such scenarios, set an appropriate timeout value.
