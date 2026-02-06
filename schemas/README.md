@@ -112,7 +112,7 @@ Used for DeepStream-based inference pipelines.
 **Backend Type**: `deepstream/nvinfer`
 
 **Parameters** (defined in `deepstream-parameters.schema.json`):
-- `infer_config_path`: Array of paths to nvdsinfer_config.yaml files (required)
+- `infer_config_path`: Array of paths to DeepStream nvinfer runtime configuration files (required). The configuration file typically accompanies the ONNX model from NGC as a YAML or TXT file - always prefer using this provided configuration when available. If no configuration file is provided with the model, one must be created based on the model architecture, inference implementation details, and post-processing approaches.
 - `preprocess_config_path`: Array of paths to nvdspreprocess configuration files (optional)
 - `batch_timeout`: Timeout in microseconds for batching multiple inputs
 - `inference_timeout`: Inference timeout in seconds
@@ -280,7 +280,7 @@ The following data types are supported:
 ### DeepStream-Specific Types
 
 #### TYPE_CUSTOM_DS_IMAGE
-DeepStream custom type for image buffer input. A 1-D uint8 tensor (or list of tensors) containing encoded JPEG/PNG image bytes that can be passed directly into DeepStream backends without additional decoding in the Python runtime.
+DeepStream custom type for image buffer input. A 1-D uint8 tensor (or list of tensors) containing encoded JPEG/PNG image bytes that can be passed directly into DeepStream backends without additional decoding in the Python runtime. **This input must be defined in the model configuration to enable the image decoder in the DeepStream pipeline.**
 
 #### TYPE_CUSTOM_DS_METADATA
 DeepStream custom type for metadata output, containing per-frame detection, classification, and segmentation results. The output is returned as a **dictionary** with the following structure (defined in `definitions/deepstreamMetadata`):

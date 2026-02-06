@@ -927,9 +927,8 @@ class InferenceBuilderMCPServer:
                         "precision mode, network type, input dimensions, and custom parsers. "
                         "The generated file should be referenced via 'infer_config_path' in the DeepStream "
                         "backend parameters. See 'samples://runtime_config/*' resources for examples."
-                        "Before generating the config file, first download the model and search for any existing parameters or information needed for this configuration. The correct settings depend on the model architecture, how the model was trained and how you plan to perform inference."
-                        "If you cannot find all required information in the repository, fill in the parameters based on what you know about the model architecture and inference requirements. For instance, consider whether a custom C++ parser library or raw tensor outputs for a Python post-processor is needed."
-                    ),
+                        "**IMPORTANT: Before generating a new config file, first call 'prepare_model_repository' to download the model and check for existing nvinfer configuration files.** "
+                        "Models from NGC typically include a configuration file (YAML or TXT) with all required inference parameters - always prefer using this provided configuration when available. "),
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -984,21 +983,21 @@ class InferenceBuilderMCPServer:
                             "custom_lib_path": {
                                 "type": "string",
                                 "description": (
-                                    "Path to custom parser library for post-processing model outputs. "
-                                    "Common values: '/opt/nvidia/deepstream/deepstream/lib/libnvds_infercustomparser_tao.so' "
-                                    "for TAO models, or a custom library path for specialized parsing."
+                                    "Path to a C++ shared library (.so) that provides custom output parsing functions. "
+                                    "Required for all models except classic ResNet when network_type is 0, 1, 2, or 3 (not required for network_type 100 which outputs raw tensors). "
+                                    "For TAO-trained models, build the library from https://github.com/NVIDIA-AI-IOT/deepstream_tao_apps/tree/master/post_processor. "
+                                    "For other models, provide the path to your own custom parser library."
                                 )
                             },
                             "custom_parse_func": {
                                 "type": "string",
                                 "description": (
-                                    "Symbol name of the custom parsing function in the custom parser library. "
-                                    "Required when using custom_lib_path for network types 0 (detection), "
-                                    "1 (classification), "
-                                    "2 (segmentation), or 3 (instance_segmentation). "
-                                    "Not required for network_type 100 (custom). "
-                                    "Example: 'NvDsInferParseCustomYOLO' for YOLO models, "
-                                    "'NvDsInferParseCustomTfSSD' for TF-SSD models."
+                                    "Symbol name of the custom parsing function exported by custom_lib_path. "
+                                    "Behavior varies by network_type: "
+                                    "(0) Detection - if omitted, the built-in parser assumes a ResNet model with 'bbox' and 'cov' output layers. "
+                                    "(1) Classification - if omitted, the built-in parser treats model output as a softmax layer. "
+                                    "(2) Segmentation, (3) Instance segmentation - no built-in parser available, custom_parse_func is required. "
+                                    "(100) Custom - not required, raw tensors are output directly for downstream processing."
                                 )
                             },
                             "num_classes": {

@@ -461,7 +461,7 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
             responders=responders,
             triton=triton_config
         )
-    elif server_type == "fastapi" or server_type == "nim":
+    elif server_type == "fastapi":
         output = svr_tpl.render(
             service_name=model_name,
             license=LICENSE_HEADER,

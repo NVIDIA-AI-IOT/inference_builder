@@ -40,6 +40,47 @@
       }
     }
   },
+    {
+    "name": "gdino_image_inference",
+    "description": "Test gdino inference application with image input",
+    "build_args": {
+      "TEST_APP_NAME": "deepstream-app",
+      "CACHE_BUSTER": "gdino_image_test",
+      "APP_YAML_PATH": "./gdino/ds_gdino.yaml",
+      "OUTPUT_DIR": ".",
+      "PROCESSORS_PATH": "../tao/processors.py",
+      "SERVER_TYPE": "serverless"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 600,
+      "env": {
+        "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
+        "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics"
+      },
+      "volumes": {
+        "/tmp/model-repo/gdino": "/workspace/models/gdino"
+      },
+      "cmd": [
+        "--media-url",
+        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_720p.jpg",
+        "--mime",
+        "image/jpeg",
+        "--text",
+        "car,person"
+      ],
+      "prerequisite_script": null,
+      "models": {
+        "gdino": {
+          "source": "NGC",
+          "target": "/tmp/model-repo",
+          "path": "nvidia/tao/grounding_dino",
+          "version": "grounding_dino_swin_tiny_commercial_deployable_v1.0",
+          "configs": "./gdino/gdino"
+        }
+      }
+    }
+  },
   {
     "name": "changenet_classification_inference",
     "description": "Test Visual ChangeNet classification application with image input",
@@ -132,7 +173,7 @@
     },
     "test_config": {
       "default_enable": true,
-      "timeout": 600,
+      "timeout": 1000,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
@@ -153,7 +194,7 @@
           "source": "NGC",
           "target": "/tmp/model-repo",
           "path": "nvidia/tao/citysemsegformer",
-          "version": "deployable_v1.0",
+          "version": "deployable_onnx_v1.0",
           "configs": "./segmentation/citysemsegformer"
         }
       }

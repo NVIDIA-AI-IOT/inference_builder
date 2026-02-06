@@ -6,14 +6,14 @@ For generating the inference code with the corresponding server implementation, 
 
 ```bash
 python builder/main.py -h
-usage: Inference Builder [-h] [--server-type [{triton,fastapi,nim,serverless}]] [-o [OUTPUT_DIR]] [-a [API_SPEC]] [-c [CUSTOM_MODULE ...]] [-x] [-t] [-v VALIDATION_DIR] [--no-docker] [--test-cases-abs-path] config
+usage: Inference Builder [-h] [--server-type [{triton,fastapi,serverless}]] [-o [OUTPUT_DIR]] [-a [API_SPEC]] [-c [CUSTOM_MODULE ...]] [-x] [-t] [-v VALIDATION_DIR] [--no-docker] [--test-cases-abs-path] config
 
 positional arguments:
   config                Path the the configuration
 
 options:
   -h, --help            show this help message and exit
-  --server-type [{triton,fastapi,nim,serverless}]
+  --server-type [{triton,fastapi,serverless}]
                         Choose the server type
   -o [OUTPUT_DIR], --output-dir [OUTPUT_DIR]
                         Output directory
