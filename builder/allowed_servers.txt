@@ -1,3 +1,5 @@
+triton
 fastapi
+nim
 serverless
 
