@@ -8,6 +8,8 @@ class FramePickerProcessor:
 
     def __init__(self, config):
         self.num_frames = config['num_frames']
+        # Eagerly initialize CUDA to avoid GIL deadlock with GStreamer threads
+        torch.cuda.init()
 
     def __call__(self, *args, **kwargs):
         if len(args) != 1:

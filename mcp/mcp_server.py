@@ -724,6 +724,10 @@ class InferenceBuilderMCPServer:
                         "'docker run' that can mount a prepared model repository "
                         "from the host into the container, set environment "
                         "variables, and pass command-line arguments. "
+                        "The container is started with --ipc=host so that "
+                        "PyTorch / TensorRT-LLM multiprocessing can share "
+                        "tensors via /dev/shm without hitting the default "
+                        "64 MB Docker limit. "
                         "Use this after 'prepare_model_repository' and "
                         "'build_docker_image' have completed."
                     ),
@@ -1207,10 +1211,6 @@ class InferenceBuilderMCPServer:
                 "DeepStream applications for object detection and "
                 "segmentation"
             ),
-            "vila": (
-                "VILA 1.5 multimodal vision-language model with "
-                "TensorRT LLM"
-            ),
             "qwen": "Qwen language models with various backends",
             "changenet": "Change detection models",
             "nvclip": "NVIDIA CLIP models for vision-language tasks",
@@ -1233,7 +1233,11 @@ class InferenceBuilderMCPServer:
         timeout = int(arguments.get("timeout", 300))
 
         # Base docker run command (no shell, argument list only)
-        cmd: list[str] = ["docker", "run", "--rm"]
+        # Use --ipc=host so the container shares the host's /dev/shm.
+        # Docker's default 64 MB /dev/shm is insufficient for
+        # PyTorch / TensorRT-LLM multiprocessing which shares tensors
+        # via shared memory, causing SIGBUS when /dev/shm is exhausted.
+        cmd: list[str] = ["docker", "run", "--rm", "--ipc=host"]
 
         # GPU configuration
         if gpus:

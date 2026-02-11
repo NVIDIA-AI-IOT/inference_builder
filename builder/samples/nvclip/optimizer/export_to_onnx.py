@@ -55,7 +55,8 @@ torch.onnx.export(model, (dummy_image, None),
           1: "text_batch_size",
       },
   },
-  verbose=True
+  verbose=True,
+  dynamo=False
 )
 
 
@@ -75,5 +76,6 @@ torch.onnx.export(model, (None, text),
           1: "image_batch_size",
       },
   },
-  verbose=True
+  verbose=True,
+  dynamo=False
 )

@@ -792,7 +792,10 @@ class VideoFrameSamplingDataFlow(DataFlow):
 
     def stop(self):
         super().stop()
-        self._media_extractor = None
+        if self._media_extractor:
+            # explicitly call __exit__ due to MediaExtractor internal threads holding the reference
+            self._media_extractor.__exit__()
+            self._media_extractor = None
         if self._frame_collector is not None:
             logger.info(f"VideoFrameSamplingDataFlow: shutting down frame collector")
             self._frame_collector.shutdown(wait=True)

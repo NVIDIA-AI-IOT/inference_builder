@@ -42,13 +42,13 @@ server:
             "data": [
               {% for item in response.output %} {
                 "index": {{loop.index0}},
-                "shape": {{item['shape']}},
-                "bboxes": {{item['bboxes']}},
-                "probs": {{item['probs']}},
-                "labels": {{item['labels']|tojson}},
-                "masks": [ {% for mask in item['seg_maps'] %} {{mask|tolist}} {% if not loop.last %}, {% endif %} {% endfor %} ],
-                "timestamp": {{item['timestamp']}}
-              } {% if not loop.last %}, {% endif %} {% endfor %} ],
+                "shape": {{item["shape"]}},
+                "bboxes": {{item["bboxes"]}},
+                "probs": {{item["probs"]}},
+                "labels": {{item["labels"]|tojson}},
+                "masks": {{item["seg_maps"]}}
+              } {% if not loop.last %}, {% endif %} {% endfor %}
+            ],
             "usage": { "num_images": 1},
             "model": "nvidia/nvdinov2"
           }

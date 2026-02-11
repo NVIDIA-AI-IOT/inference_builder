@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-FROM nvcr.io/nvidia/tritonserver:25.01-py3
+FROM nvcr.io/nvidia/tritonserver:26.01-py3
 
 WORKDIR /workspace/
 
@@ -22,6 +22,11 @@ WORKDIR /workspace/
 ENV PIP_NO_CACHE_DIR=off
 ENV CUDA_MODULE_LOADING=LAZY
 ENV PYTHONUNBUFFERED=1
+
+RUN apt update
+RUN apt-get install -y git
+RUN pip install open_clip_torch==3.2.0 onnx==1.20.1 onnxscript==0.1.0 transformers==4.48.1 tokenizers>=0.21
+RUN pip install --no-cache-dir --extra-index-url https://pypi.ngc.nvidia.com polygraphy
 
 # Copy files into the container
 COPY ./configs ./configs
@@ -36,9 +41,7 @@ ENV TEXT_LENGTH=77
 
 # Make the script executable
 RUN chmod +x /workspace/optimize.sh
-RUN apt update
-RUN apt-get install -y git
-RUN pip install open_clip_torch onnx transformers polygraphy
+
 
 # Set entrypoint to execute the installation script and then run optimize.sh
 ENTRYPOINT ["/bin/bash", "-c", "/workspace/optimize.sh"]

@@ -7,7 +7,7 @@
       "CACHE_BUSTER": "default_test"
     },
     "test_config": {
-      "default_enable": false,
+      "default_enable": true,
       "timeout": 30,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes"
@@ -334,7 +334,7 @@
     },
 
     "test_config": {
-      "default_enable": false,
+      "default_enable": true,
       "timeout": 10,
       "volumes": {
         "output_types/models": "/workspace/models"
@@ -353,7 +353,7 @@
     },
 
     "test_config": {
-      "default_enable": false,
+      "default_enable": true,
       "timeout": 10,
       "volumes": {
         "output_types/models": "/workspace/models"
@@ -376,7 +376,7 @@
     },
 
     "test_config": {
-      "default_enable": false,
+      "default_enable": true,
       "timeout": 10,
       "volumes": {
         "output_types/models": "/workspace/models"

@@ -18,6 +18,11 @@ import torch
 import numpy as np
 
 class QwenVLProcessor:
+    """
+    Preprocessor which uses qwen_vl_utils to process vision information.
+    Works with transformers as demonstrated in the official example:
+    https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct
+    """
     name = "qwen-vl-processor"
     def __init__(self, config):
         from qwen_vl_utils import process_vision_info
@@ -66,6 +71,9 @@ class QwenVLProcessor:
         )
 
 class QwenVLLoader(QwenVLProcessor):
+    """
+    Preprocessor for loading vllm compatible input for Qwen2.5-VL models.
+    """
     name = "qwen-vl-loader"
     def __init__(self, config):
         super().__init__(config)
@@ -85,6 +93,9 @@ class QwenVLLoader(QwenVLProcessor):
         }
 
 class Qwen3VLLoader(QwenVLProcessor):
+    """
+    Preprocessor for loading vllm compatible input for Qwen3-VL models.
+    """
     name = "qwen3-vl-loader"
     def __init__(self, config):
         super().__init__(config)
@@ -115,6 +126,10 @@ class Qwen3VLLoader(QwenVLProcessor):
         }
 
 class QwenVLVideoProcessor(QwenVLProcessor):
+    """
+    Preprocessor for loading video tensors to TensorRT-LLM
+    compatible input for Qwen2.5-VL models.
+    """
     name = "qwen-vl-video-processor"
     def __init__(self, config):
         super().__init__(config)
@@ -144,6 +159,10 @@ class QwenVLVideoProcessor(QwenVLProcessor):
 
 
 class QwenVLImageProcessor(QwenVLProcessor):
+    """
+    Preprocessor for loading image tensors to TensorRT-LLM
+    compatible input for Qwen2.5-VL models.
+    """
     name = "qwen-vl-image-processor"
     def __init__(self, config):
         super().__init__(config)
@@ -169,6 +188,10 @@ class QwenVLImageProcessor(QwenVLProcessor):
         return inputs
 
 class QwenVLImageCoordinator:
+    """
+    Preprocessor for loading image tensors to vLLM compatible input
+    for Qwen2.5-VL/Qwen3-VL models.
+    """
     name = "qwen-vl-image-coordinator"
     def __init__(self, config):
         model_home = config["model_home"]
@@ -189,6 +212,10 @@ class QwenVLImageCoordinator:
         }
 
 class QwenVLVideoCoordinator:
+    """
+    Preprocessor for loading video tensors to vLLM compatible input
+    for Qwen2.5-VL models.
+    """
     name = "qwen-vl-video-coordinator"
     def __init__(self, config):
         model_home = config["model_home"]
@@ -211,6 +238,10 @@ class QwenVLVideoCoordinator:
         }
 
 class Qwen3VLVideoCoordinator:
+    """
+    Preprocessor for loading video tensors to vLLM compatible input
+    for Qwen3-VL models.
+    """
     name = "qwen3-vl-video-coordinator"
     def __init__(self, config):
         model_home = config["model_home"]

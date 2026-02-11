@@ -1469,7 +1469,11 @@ class DockerBuildTester:
 
             # Run the container with test configuration
             # Use host network for serverless; use port mapping for non-serverless to avoid port conflicts
-            cmd = ["docker", "run", "--gpus", gpus]
+            # Use --ipc=host to share host's /dev/shm with the container;
+            # Docker's default 64MB /dev/shm is insufficient for PyTorch/TensorRT-LLM
+            # multiprocessing which shares tensors via shared memory, causing SIGBUS
+            # (Bus error: nonexistent physical address) when /dev/shm is exhausted.
+            cmd = ["docker", "run", "--ipc=host", "--gpus", gpus]
 
             # Add environment variables if specified
             if "env" in test_config:
