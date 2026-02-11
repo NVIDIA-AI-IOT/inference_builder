@@ -60,4 +60,4 @@ Some of the models for examples are from the NVIDIA GPU Cloud (NGC) repository, 
 | Name | Description | Models | Backend | Output |
 |------|-------------|---------|---------|---------|
 | [qwen](./qwen/) | example of building inference microservices with TensorRT-LLM backend for vlm models | Qwen 2.5 VL models | TensorRT-LLM, Pytorch | microservice |
-| [vila](./vila/) | example of building infernece microservices with TensorRT-LLM using the legacy flow (to be deprecated) | VILA models | TensorRT-LLM | microservice |
+

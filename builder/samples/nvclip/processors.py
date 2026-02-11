@@ -16,6 +16,7 @@
 import numpy as np
 import io
 from PIL import Image
+from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize, InterpolationMode
 
 class OpenclipTokenizer:
     name = "openclip-tokenizer"
@@ -30,8 +31,6 @@ class OpenclipTokenizer:
 class VisionPreprocessor:
     name = "nvclip-vision-preprocessor"
     def __init__(self, config):
-
-        from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize, InterpolationMode
         self._transform = Compose(
             [
                 Resize((224, 224), interpolation=InterpolationMode.BICUBIC),

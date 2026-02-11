@@ -160,3 +160,6 @@ if __name__ == '__main__':
 
     # Run tests
     result = runner.run(suite)
+
+    # Exit with appropriate code so the test framework detects failures
+    sys.exit(0 if result.wasSuccessful() else 1)

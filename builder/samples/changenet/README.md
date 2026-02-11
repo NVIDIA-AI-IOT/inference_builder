@@ -38,7 +38,7 @@ Run `ls $MODEL_REPO/visual_changenet -l`, be sure you have `changenet_768.onnx` 
 docker login nvcr.io
 docker run -it --rm --gpus all \
 -v ~/.cache/model-repo/visual_changenet/:/changenet \
-nvcr.io/nvidia/tensorrt-pb25h1:25.03.02-py3 \
+nvcr.io/nvidia/tensorrt:25.12-py3 \
 trtexec --onnx=/changenet/changenet_768.onnx --saveEngine=/changenet/model.plan --fp16
 ```
 
