@@ -17,26 +17,26 @@
 # DeepStream for hardware-accelerated video decoding and a
 # TensorRT backend for inference. This is a reference for this specific
 # sample, not a universal template for all deployments.em
-FROM "nvcr.io/nvidia/deepstream:8.0-triton-multiarch" AS ds_stage
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1_ER-ma" AS ds_stage
 
 # Final base image: Triton inference server where the TensorRT pipeline
 # and DeepStream components will run together.
-FROM "nvcr.io/nvidia/tritonserver:25.01-py3" AS builder_base
+FROM "nvcr.io/nvidia/tritonserver:25.12-py3" AS builder_base
 
 # Install dependencies of DeepStream SDK for h/w decoder support.
 RUN apt update && apt install -y --no-install-recommends gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
     libyaml-cpp-dev libgstrtspserver-1.0-0 libjsoncpp25 libgles2 pkg-config
 
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/lib /opt/nvidia/deepstream/deepstream-8.0/lib
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/bin /opt/nvidia/deepstream/deepstream-8.0/bin
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.sh /opt/nvidia/deepstream/deepstream-8.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.txt /opt/nvidia/deepstream/deepstream-8.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/README* /opt/nvidia/deepstream/deepstream-8.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/*.pdf /opt/nvidia/deepstream/deepstream-8.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-8.0/service-maker /opt/nvidia/deepstream/deepstream-8.0/service-maker
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/lib /opt/nvidia/deepstream/deepstream-9.0/lib
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/bin /opt/nvidia/deepstream/deepstream-9.0/bin
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.sh /opt/nvidia/deepstream/deepstream-9.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.txt /opt/nvidia/deepstream/deepstream-9.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/README* /opt/nvidia/deepstream/deepstream-9.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.pdf /opt/nvidia/deepstream/deepstream-9.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/service-maker /opt/nvidia/deepstream/deepstream-9.0/service-maker
 
-RUN /opt/nvidia/deepstream/deepstream-8.0/install.sh
-RUN ln -sf deepstream-8.0 /opt/nvidia/deepstream/deepstream || true
+RUN /opt/nvidia/deepstream/deepstream-9.0/install.sh
+RUN ln -sf deepstream-9.0 /opt/nvidia/deepstream/deepstream || true
 
 # Install Python dependencies required by THIS NVCLIP sample (CLIP
 # model, TensorRT bindings, FastAPI server, etc.). Versions are pinned
@@ -49,18 +49,15 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     aiohttp==3.11.0 \
     annotated-types==0.7.0 \
     python-magic==0.4.27 \
-    torch==2.4.0 \
-    torchvision==0.19.0 \
     Pillow==11.1.0 \
-    open_clip_torch==2.30.0 \
+    open_clip_torch==3.2.0 \
     numpy==1.26.4 \
     omegaconf==2.3.0 \
-    transformers==4.48.0 \
+    transformers==4.48.1 \
     fastapi==0.115.12 \
     uvicorn==0.29.0 \
-    tensorrt==10.8.0.43 --extra-index-url https://pypi.nvidia.com \
+    tensorrt==10.14.1.48.post1 --extra-index-url https://pypi.nvidia.com \
     polygraphy==0.49.24
-
 ENV TRANSFORMERS_CACHE=/tmp
 
 WORKDIR /workspace

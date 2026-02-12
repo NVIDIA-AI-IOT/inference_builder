@@ -121,7 +121,7 @@ curl -X 'POST' \
         },
         {
           "type": "video",
-          "video": "f7de6b95-f960-4f7f-9a0b-e0cf61f807f2?frames=8"
+          "video": "577a9f11-2b24-4db8-82c8-2601e0c2b6e4?frames=8"
         }
       ]
     }

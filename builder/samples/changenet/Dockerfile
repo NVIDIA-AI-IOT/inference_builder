@@ -17,7 +17,7 @@
 # accelerated ImageInputDataFlow and CVCUDA for pre-processing.
 
 # Pull the base image from Deepstream Triton multiarch image.
-FROM "nvcr.io/nvidia/deepstream:8.0-triton-multiarch" AS builder_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1_ER-ma" AS builder_base
 
 # Install the Python dependencies required by THIS changenet sample
 # backend. These versions are pinned for reproducibility and may be
@@ -45,9 +45,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # NOTE: These .deb files are built for x86_64 and specific CUDA/Python
 # versions. For different architectures or CUDA/Python versions you may
 # need to update these URLs to a compatible CVCUDA release.
-RUN wget https://github.com/CVCUDA/CV-CUDA/releases/download/v0.16.0/cvcuda-lib-0.16.0-cuda12-x86_64-linux.deb \
-    https://github.com/CVCUDA/CV-CUDA/releases/download/v0.16.0/cvcuda-dev-0.16.0-cuda12-x86_64-linux.deb \
-    https://github.com/CVCUDA/CV-CUDA/releases/download/v0.16.0/cvcuda-python3.12-0.16.0-cuda12-x86_64-linux.deb \
+RUN wget https://github.com/CVCUDA/CV-CUDA/releases/download/v0.16.0/cvcuda-lib-0.16.0-cuda13-x86_64-linux.deb \
+    https://github.com/CVCUDA/CV-CUDA/releases/download/v0.16.0/cvcuda-dev-0.16.0-cuda13-x86_64-linux.deb \
+    https://github.com/CVCUDA/CV-CUDA/releases/download/v0.16.0/cvcuda-python3.12-0.16.0-cuda13-x86_64-linux.deb \
     && dpkg -i *.deb
 
 ENV TRANSFORMERS_CACHE=/tmp

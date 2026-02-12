@@ -15,7 +15,7 @@
  limitations under the License.
 #}
 
-from pyservicemaker import Pipeline, Flow, BufferProvider, Buffer, RenderMode, BatchMetadataOperator, Probe, as_tensor, StateTransitionMessage, DynamicSourceMessage, SourceConfig
+from pyservicemaker import Pipeline, Flow, BufferProvider, Buffer, RenderMode, BufferRetriever, as_tensor, StateTransitionMessage, DynamicSourceMessage, SourceConfig, BatchMetadataOperator, Probe
 from typing import Dict, List
 from queue import Queue, Empty, Full
 from dataclasses import dataclass
@@ -125,7 +125,7 @@ class ImageTensorInput(BufferProvider):
         self.format = format
         self.framerate = 1
         self.device = 'cpu'
-        self.queue = Queue(maxsize=1)
+        self.queue = Queue(maxsize=10)
 
     def generate(self, size):
         tensor = self.queue.get()
@@ -143,7 +143,7 @@ class ImageTensorInput(BufferProvider):
 
 class GenericTensorInput():
     def __init__(self, device_id):
-        self.queue = Queue(maxsize=1)
+        self.queue = Queue(maxsize=10)
         self._device_id = device_id
 
     def generate(self, n):
@@ -306,7 +306,7 @@ class BulkVideoInputPool(TensorInputPool):
             if self._media_url_tensor_name and self._media_url_tensor_name in item:
                 url_list.append(str(item.pop(self._media_url_tensor_name)))
             elif self._source_tensor_name and self._source_tensor_name in data[0]:
-                source_config_file = item.pop(self._source_tensor_name).tolist()
+                source_config_file = item.pop(self._source_tensor_name).item()
                 if not source_config_file.lower().endswith(('.yml', '.yaml')):
                     logger.error(
                         f"Source config file must be a YAML file: {source_config_file}"
@@ -372,13 +372,11 @@ class BulkVideoInputPool(TensorInputPool):
             if self._kitti_config.tracker_kitti_output_dir:
                 flow = flow.attach(what="kitti_dump_probe", name="tracker_kitti_dump", properties={"tracker-kitti-output": True,"kitti-dir": self._kitti_config.tracker_kitti_output_dir})
 
-        flow = flow.attach(Probe('tensor_retriver', self._output))
-
         if self._perf_config.enable_fps_logs:
             flow = flow.attach(what="measure_fps_probe", name="fps_probe")
         if self._perf_config.enable_latency_logs:
             flow = flow.attach(what="measure_latency_probe", name="latency_probe")
-
+        n_sink = 0
         if self._msgbroker_config:
             flow = flow.attach(
                 what="add_message_meta_probe",
@@ -389,6 +387,7 @@ class BulkVideoInputPool(TensorInputPool):
                 }
             )
             flow = flow.fork()
+            n_sink += 1
             publish_params = {
                 'msg_broker_proto_lib': self._msgbroker_config.proto_lib_path,
                 'msg_broker_conn_str': self._msgbroker_config.conn_str,
@@ -404,17 +403,22 @@ class BulkVideoInputPool(TensorInputPool):
 
             flow.publish(**publish_params)
         if self._render_config.enable_stream:
-            if not self._msgbroker_config:
+            if n_sink == 0:
                 flow = flow.fork()
+                n_sink += 1
             flow.render(RenderMode.STREAM,
                        enable_osd=self._render_config.enable_osd,
                        rtsp_mount_point=self._render_config.rtsp_mount_point,
                        rtsp_port=self._render_config.rtsp_port,
                        sync=False)
+        if self._render_config.enable_display:
+            if n_sink == 0:
+                flow = flow.fork()
+                n_sink += 1
+            seg_mask_config = dict(self._render_config.seg_mask_config) if self._render_config.seg_mask_config else None
+            flow.render(RenderMode.DISPLAY, enable_osd=self._render_config.enable_osd, seg_mask_config=seg_mask_config, sync=False)
 
-        seg_mask_config = dict(self._render_config.seg_mask_config) if self._render_config.seg_mask_config else None
-        flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
-                    enable_osd=self._render_config.enable_osd, seg_mask_config=seg_mask_config, sync=False)
+        flow = flow.attach(what=Probe("metadata_probe", self._output)).retrieve(self._output, **{'async': False})
 
         if self._pipeline is not None:
             self._pipeline.wait()
@@ -433,16 +437,34 @@ class BulkVideoInputPool(TensorInputPool):
             self._pipeline.wait()
 
 
-class BaseTensorOutput(BatchMetadataOperator):
+class BaseTensorOutput(BufferRetriever, BatchMetadataOperator):
+    """Base class for tensor outputs that can work as both BufferRetriever (appsink) and
+    BatchMetadataOperator (probe).
+
+    Subclasses override _extract_metadata() to yield results.
+    Both consume() (appsink) and handle_metadata() (probe) iterate and deposit.
+    """
     def __init__(self, n_outputs, name: str = None):
-        super().__init__()
+        BufferRetriever.__init__(self)
+        BatchMetadataOperator.__init__(self)
         self._n_outputs = n_outputs
         self._queue = Queue()
         self._stashed = []
         self._name = name
 
+    def consume(self, buffer):
+        """Called when used as appsink retriever (BufferRetriever interface)."""
+        return 1
+
     def handle_metadata(self, batch_meta):
-        pass
+        """Called when used as probe (BatchMetadataOperator interface)."""
+        for metadata in self._extract_metadata(batch_meta):
+            self._deposit(metadata)
+
+    def _extract_metadata(self, batch_meta):
+        """Override in subclasses to extract metadata. Yields list of results."""
+        return
+        yield  # Make this a generator
 
     def collect(self, indices: List, timeout=None) -> List | None:
         def move_data(data: list, collected: list):
@@ -498,7 +520,7 @@ class TensorOutput(BaseTensorOutput):
         super().__init__(n_outputs, None)
         self._preprocess_config_path = preprocess_config_path
 
-    def handle_metadata(self, batch_meta):
+    def _extract_metadata(self, batch_meta):
         received = [None] * self._n_outputs
         if self._preprocess_config_path:
             for meta in batch_meta.preprocess_batch_items:
@@ -514,7 +536,6 @@ class TensorOutput(BaseTensorOutput):
                                 torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
                                 result[n] = torch_tensor
                     received[roi.frame_meta.pad_index] = result
-            self._deposit(received)
         else:
             for frame_meta in batch_meta.frame_items:
                 result = dict()
@@ -525,101 +546,32 @@ class TensorOutput(BaseTensorOutput):
                             torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
                             result[n] = torch_tensor
                 received[frame_meta.pad_index] = result
-            self._deposit(received)
+        yield received
 
 class PreprocessMetadataOutput(BaseTensorOutput):
+    """Output handler for preprocess metadata."""
     def __init__(self, n_outputs, output_name, dims):
         super().__init__(n_outputs, name=output_name)
+        self._n_outputs = n_outputs
         self._shape = dims
 
-    def handle_metadata(self, batch_meta):
-        received = [None] * self._n_outputs
+    def _extract_metadata(self, batch_meta):
         for meta in batch_meta.preprocess_batch_items:
             preprocess_batch = meta.as_preprocess_batch()
             if not preprocess_batch:
                 continue
-            for roi in preprocess_batch.rois:
-                metadata = {
-                    'shape': [0, 0],
-                    'bboxes': [],
-                    'probs': [],
-                    'labels': [],
-                    'seg_maps': [],
-                    'objects': [],
-                    'timestamp': 0
-                }
-                # segmentation metadata
-                for u_meta in roi.segmentation_items:
-                    seg_meta = u_meta.as_segmentation()
-                    if seg_meta:
-                        metadata['shape'] = [seg_meta.height, seg_meta.width]
-                        metadata['seg_maps'].append(seg_meta.class_map.copy())
-                # object metadata
-                for object_meta in roi.frame_meta.object_items:
-                    labels = [object_meta.label] if object_meta.label else []
-                    left = int(object_meta.rect_params.left)
-                    top = int(object_meta.rect_params.top)
-                    width = int(object_meta.rect_params.width)
-                    height = int(object_meta.rect_params.height)
-                    metadata['shape'] = [self._shape[0], self._shape[1]]
-                    metadata['bboxes'].append([left, top, left + width, top + height])
-                    metadata['probs'].append(object_meta.confidence)
-                    for classifier in object_meta.classifier_items:
-                        for i in range(classifier.n_labels):
-                            labels.append(classifier.get_n_label(i))
-                    metadata['labels'].append(labels)
-                    metadata['objects'].append(object_meta.object_id)
-                for classifier in roi.classifier_items:
-                    labels = []
-                    for i in range(classifier.n_labels):
-                        labels.append(classifier.get_n_label(i))
-                    metadata['labels'].append(labels)
-                metadata['timestamp'] = roi.frame_meta.buffer_pts
-                received[roi.frame_meta.pad_index] = metadata
-            self._deposit(received)
+            received = preprocess_batch.extract(self._n_outputs)
+            yield received
 
 class MetadataOutput(BaseTensorOutput):
     def __init__(self, n_outputs, output_name, dims):
         super().__init__(n_outputs, name=output_name)
+        self._n_outputs = n_outputs
         self._shape = dims
 
-    def handle_metadata(self, batch_meta):
-        received = [None] * self._n_outputs
-        for frame_meta in batch_meta.frame_items:
-            metadata = {
-                'shape': [0, 0],
-                'bboxes': [],
-                'probs': [],
-                'labels': [],
-                'seg_maps': [],
-                'objects': [],
-                'timestamp': 0
-            }
-            for object_meta in frame_meta.object_items:
-                labels = [object_meta.label] if object_meta.label else []
-                left = int(object_meta.rect_params.left)
-                top = int(object_meta.rect_params.top)
-                width = int(object_meta.rect_params.width)
-                height = int(object_meta.rect_params.height)
-                instance_mask = object_meta.mask_params.mask_array
-                metadata['shape'] = [self._shape[0], self._shape[1]]
-                metadata['bboxes'].append([left, top, left + width, top + height])
-                metadata['probs'].append(object_meta.confidence)
-                for classifier in object_meta.classifier_items:
-                    for i in range(classifier.n_labels):
-                        labels.append(classifier.get_n_label(i))
-                metadata['labels'].append(labels)
-                metadata['objects'].append(object_meta.object_id)
-                if instance_mask.size > 0:
-                    metadata['seg_maps'].append(instance_mask.astype(int))
-            for user_meta in frame_meta.segmentation_items:
-                seg_meta = user_meta.as_segmentation()
-                if seg_meta:
-                    metadata['shape'] = [seg_meta.height, seg_meta.width]
-                    metadata['seg_maps'].append(seg_meta.class_map.copy())
-            metadata['timestamp'] = frame_meta.buffer_pts
-            received[frame_meta.pad_index] = metadata
-        self._deposit(received)
+    def _extract_metadata(self, batch_meta):
+        received = batch_meta.extract(self._n_outputs)
+        yield received
 
 class DeepstreamBackend(ModelBackend):
     """Deepstream backend using pyservicemaker"""
@@ -823,7 +775,6 @@ class DeepstreamBackend(ModelBackend):
 
             # build the inference flow
             flow = Flow(pipeline)
-            probe = Probe('tensor_retriver', output)
             batch_timeout = model_config["parameters"].get("batch_timeout", 1000 * self._max_batch_size)
             flow = flow.inject(in_pool.image_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=batch_timeout, live_source=False, width=dims[1], height=dims[0])
             for config_file in preprocess_config_paths:
@@ -835,21 +786,29 @@ class DeepstreamBackend(ModelBackend):
                     flow = flow.infer(config_file, with_triton, batch_size=self._max_batch_size, model_engine_file=engine_file)
                 else:
                     flow = flow.infer(config_file, with_triton, batch_size=self._max_batch_size)
-            flow = flow.attach(probe).render(RenderMode.DISCARD, enable_osd=False)
-            pipeline.start()
+
+            flow = flow.attach(what=Probe("metadata_probe", output)).retrieve(output, **{'async': False})
+
             # warm up
             warmup_data_0[self._image_tensor_name] = np.frombuffer(png_data, dtype=np.uint8)
             warmup_data_0[self._mime_tensor_name] = "image/png"
             warmup_data_1[self._image_tensor_name] = np.frombuffer(jpg_data, dtype=np.uint8)
             warmup_data_1[self._mime_tensor_name] = "image/jpeg"
-            indices = in_pool.submit([warmup_data_0.copy() for _ in range(self._max_batch_size)])
-            results = output.collect(indices)
+
+            logger.info("Image decoder warming up - pre-filling all queues")
+            # Submit BOTH PNG and JPEG warmup data BEFORE starting pipeline
+            # This ensures all 4 sources have data when streaming threads start
+            indices_0 = in_pool.submit([warmup_data_0.copy() for _ in range(self._max_batch_size)])
+            indices_1 = in_pool.submit([warmup_data_1.copy() for _ in range(self._max_batch_size)])
+
+            # Now start pipeline - all queues have data
+            pipeline.start()
+
+            # Collect all results together (PNG + JPEG)
+            all_indices = indices_0 + indices_1
+            results = output.collect(all_indices)
             output.reset()
-            logger.info(f"Warm up 0: {results}")
-            indices = in_pool.submit([warmup_data_1.copy() for _ in range(self._max_batch_size)])
-            results = output.collect(indices)
-            output.reset()
-            logger.info(f"Warm up 1: {results}")
+            logger.info(f"Warm up done: {results}")
 
         if (self._media_url_tensor_name is not None or
             self._source_tensor_name is not None):
@@ -937,6 +896,16 @@ class DeepstreamBackend(ModelBackend):
                     f"got {media} and {current_media}"
                 )
                 return
+
+        # validate the media type
+        if media not in self._in_pools:
+            if media == "image":
+                logger.error("TYPE_CUSTOM_DS_IMAGE input must be added to the pipeline for image support")
+            elif media == "video":
+                logger.error("TYPE_CUSTOM_BINARY_URLS input must be added to the pipeline for video suppport")
+            else:
+                logger.error("Unknown media type : ", media)
+            return
 
         # submit the data to the pipeline which supports the media type
         indices = self._in_pools[media].submit(in_data_list)

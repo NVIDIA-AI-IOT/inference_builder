@@ -16,7 +16,7 @@
 
 # Sample Dockerfile for a DeepStream TAO ds_app-style pipeline using
 # a Triton-enabled DeepStream base image.
-FROM "nvcr.io/nvidia/deepstream:8.0-triton-multiarch" AS inference_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1_ER-ma" AS inference_base
 
 # Install Python dependencies required by THIS ds_app sample. These
 # versions are pinned for reproducibility and can be adjusted for
@@ -33,21 +33,21 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # by the ARGs below; update them if you target different CUDA/TRT
 # versions or GPU architectures.
 ARG TRT_VERSION_MAJOR=10
-ARG TRT_VERSION_MINOR=9
-ARG TRT_VERSION_PATCH=0
-ARG TRT_VERSION_BUILD=34
+ARG TRT_VERSION_MINOR=14
+ARG TRT_VERSION_PATCH=1
+ARG TRT_VERSION_BUILD=48
 
 ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
 ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
 ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
 
-ARG CUDA_VERSION_MAJOR=12
-ARG CUDA_VERSION_MINOR=8
-ARG CUDA_VERSION_PATCH=93
-ARG CUDA_VERSION_BUILD=35583870_0
+ARG CUDA_VERSION_MAJOR=13
+ARG CUDA_VERSION_MINOR=1
+ARG CUDA_VERSION_PATCH=80
+ARG CUDA_VERSION_BUILD=36836380_0
 ARG CUDA_VERSION_MAJOR_MINOR=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR
 ARG CUDA_VERSION_FULL=$CUDA_VERSION_MAJOR_MINOR.$CUDA_VERSION_PATCH.$CUDA_VERSION_BUILD
-ARG CUDNN_VERSION=9.3.0.75
+ARG CUDNN_VERSION=9.17.0.29
 
 ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
 
@@ -89,7 +89,7 @@ RUN mkdir ds_tao_apps_src && \
    git clone -b $DS_TAO_APPS_TAG $DS_TAO_APPS_REPO ds_tao_apps && \
    cd ds_tao_apps/post_processor && \
    echo "$PWD Building DS TAO apps post processing..." && \
-   CUDA_MODULE_LOADING=LAZY CUDA_VER=12.8 make && \
+   CUDA_MODULE_LOADING=LAZY CUDA_VER=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR make && \
    [ -f libnvds_infercustomparser_tao.so ] && echo "$PWD post processing build successful" || echo "$PWD post processing build falied" && \
    cp libnvds_infercustomparser_tao.so /opt/nvidia/deepstream/deepstream/lib && \
    cd ../../../ && \

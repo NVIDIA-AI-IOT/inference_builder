@@ -1469,7 +1469,11 @@ class DockerBuildTester:
 
             # Run the container with test configuration
             # Use host network for serverless; use port mapping for non-serverless to avoid port conflicts
-            cmd = ["docker", "run", "--gpus", gpus]
+            # Use --ipc=host to share host's /dev/shm with the container;
+            # Docker's default 64MB /dev/shm is insufficient for PyTorch/TensorRT-LLM
+            # multiprocessing which shares tensors via shared memory, causing SIGBUS
+            # (Bus error: nonexistent physical address) when /dev/shm is exhausted.
+            cmd = ["docker", "run", "--ipc=host", "--gpus", gpus]
 
             # Add environment variables if specified
             if "env" in test_config:
@@ -2234,7 +2238,8 @@ class DockerBuildTester:
                         with open(error_export_file, 'r') as f:
                             error_data = json.load(f)
 
-                        total_errors = error_data.get("total_errors", 0)
+                        stats = error_data.get("stats", {})
+                        total_errors = stats.get("total_errors", 0)
                         errors = error_data.get("errors", [])
                         collected_codes = [err.get("error_code") for err in errors]
 
@@ -2287,7 +2292,8 @@ class DockerBuildTester:
                     with open(error_export_file, 'r') as f:
                         error_data = json.load(f)
 
-                    total_errors = error_data.get("total_errors", 0)
+                    stats = error_data.get("stats", {})
+                    total_errors = stats.get("total_errors", 0)
                     errors = error_data.get("errors", [])
 
                     if total_errors > 0:

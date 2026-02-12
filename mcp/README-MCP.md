@@ -58,6 +58,8 @@ Runs a Docker image with optional model repository mounting and environment conf
 
 Generates a DeepStream nvinfer runtime configuration file (nvdsinfer_config.yaml).
 
+**IMPORTANT**: Before generating a new config file, first call `prepare_model_repository` to download the model and check for existing nvinfer configuration files. Models from NGC typically include a configuration file (YAML or TXT) with all required inference parameters - always prefer using this provided configuration when available.
+
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `output_path` | Yes | - | Path where the generated config file should be saved |
@@ -66,8 +68,8 @@ Generates a DeepStream nvinfer runtime configuration file (nvdsinfer_config.yaml
 | `input_dims` | Yes | - | Input dimensions in format `channel;height;width` (e.g., `3;224;224`) |
 | `label_file` | Yes | - | Name of the label file |
 | `precision_mode` | No | `2` | Precision mode (0=FP32, 1=INT8, 2=FP16) |
-| `custom_lib_path` | No | - | Path to custom parser library |
-| `custom_parse_func` | No | - | Symbol name of custom parsing function |
+| `custom_lib_path` | No | - | Path to a C++ shared library (.so) for custom output parsing. Required for all models except classic ResNet when network_type is 0-3. For TAO models, build from https://github.com/NVIDIA-AI-IOT/deepstream_tao_apps/tree/master/post_processor |
+| `custom_parse_func` | No | - | Symbol name of the custom parsing function. (0) Detection: built-in assumes ResNet; (1) Classification: built-in treats as softmax; (2,3) Segmentation: required; (100) Custom: not required |
 | `num_classes` | No | - | Number of detected classes |
 | `gie_unique_id` | No | `1` | Unique ID for this GIE |
 | `net_scale_factor` | No | `0.00392156862745098` | Scale factor for normalization |

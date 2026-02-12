@@ -8,7 +8,7 @@
   "properties": {
     "infer_config_path": {
       "type": "array",
-      "description": "Paths (inside the model repository) to DeepStream nvinfer runtime configuration files (for example, nvdsinfer_config.yaml). If these file are not in the model repository folder, they must be created and copied into the model repository before deployment and are used by the DeepStream nvinfer plugin at runtime. Refer to https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvinfer.html#gst-nvinfer-file-configuration-specifications for more details.",
+      "description": "Paths (inside the model repository) to DeepStream nvinfer runtime configuration files (for example, nvdsinfer_config.yaml). These files are used by the DeepStream nvinfer plugin at runtime. **Creating or locating config files:** (1) The configuration file typically accompanies the ONNX model from the remote model repository (NGC) as a YAML or TXT file containing all required inference parameters - always prefer using this provided configuration when available. (2) If no configuration file is provided with the model, one must be created based on the model architecture, inference implementation details, and post-processing approaches specific to the model. (3) The config file must be copied into the model repository before deployment. Refer to https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvinfer.html#gst-nvinfer-file-configuration-specifications for the complete configuration specification.",
       "items": {
         "type": "string"
       }
@@ -22,8 +22,8 @@
     },
     "batch_timeout": {
       "type": "integer",
-      "minimum": 0,
-      "description": "Timeout in microseconds for batching multiple inputs"
+      "minimum": -1,
+      "description": "Timeout in microseconds for batching multiple inputs. Set to -1 to wait infinitely for batch formation. Default is 1000 * max_batch_size microseconds."
     },
     "inference_timeout": {
       "type": "integer",
@@ -83,9 +83,29 @@
         "msgconv_config_path": {
           "type": "string",
           "description": "Path to the message conversion configuration file, refer to https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvmsgconv.html for more details"
+        },
+        "msgconv_payload_type": {
+          "type": "integer",
+          "enum": [0, 1, 2],
+          "description": "Payload type for message conversion (0=DeepStream JSON, 1=DeepStream Minimal JSON, 2=DeepStream Protobuf)"
+        },
+        "msgconv_msg2p_new_api": {
+          "type": "boolean",
+          "description": "Use new API which supports publishing multiple payloads using NvDsFrameMeta",
+          "default": false
+        },
+        "msgconv_frame_interval": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Frame interval at which payload is generated (every Nth frame)",
+          "default": 1
+        },
+        "msgconv_msg2p_lib": {
+          "type": "string",
+          "description": "Path to the message converter library"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "render_config": {
       "type": "object",
@@ -152,6 +172,16 @@
         }
       },
       "additionalProperties": false
+    },
+    "resize_video": {
+      "type": "array",
+      "description": "Target resolution for input stream resizing in format [height, width]. When specified, the input stream will be resized to these dimensions before processing. When tracker is being enabled, it requires a specific resolution consistent with the tracker config. In such cases, the resize_video configuration is required.",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "minItems": 2,
+      "maxItems": 2
     }
   },
   "additionalProperties": false

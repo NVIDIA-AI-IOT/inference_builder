@@ -93,7 +93,7 @@ if __name__ == '__main__':
         """Make a single request to the API"""
         start_time = time.time()
         chat_response = client.chat.completions.create(
-            model="nvidia/vila",
+            model="nvidia/cosmos",
             messages=messages,
             max_tokens=512,
             stream=False

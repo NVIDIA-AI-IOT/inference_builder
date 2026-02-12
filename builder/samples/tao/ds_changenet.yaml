@@ -74,12 +74,13 @@ server:
             "data": [
               {% for item in response.output %} {
                 "index": {{loop.index0}},
-                "shape": {{item['shape']}},
-                "bboxes": {{item['bboxes']}},
-                "probs": {{item['probs']}},
-                "labels": {{item['labels']|tojson}},
-                "masks": {{item['seg_maps']}}
-              } {% if not loop.last %}, {% endif %} {% endfor %} ],
+                "shape": {{item["shape"]}},
+                "bboxes": {{item["bboxes"]}},
+                "probs": {{item["probs"]}},
+                "labels": {{item["labels"]|tojson}},
+                "masks": {{item["seg_maps"]}}
+              } {% if not loop.last %}, {% endif %} {% endfor %}
+            ],
             "usage": { "num_images": 1},
             "model": "nvidia/nvdinov2"
           }
@@ -88,14 +89,14 @@ server:
       responses:
         AddFileResponse: >
           {
-            "data": {
+            "data": {{{
               "id": {{response.id|tojson}},
               "path": {{response.path|tojson}},
               "size": {{response.size|tojson}},
               "duration": {{response.duration|tojson}},
               "contentType": {{response.mime_type|tojson}}
             }
-          }
+          }}}
     del_file:
       operation: delete_media_file
       responses:

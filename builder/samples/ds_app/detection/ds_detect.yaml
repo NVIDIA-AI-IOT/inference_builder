@@ -22,6 +22,10 @@ models:
   backend: deepstream/nvinfer
   max_batch_size: "$MAX_BATCH_SIZE|4"
   input:
+  - name: images
+    data_type: TYPE_CUSTOM_DS_IMAGE
+    dims: [ -1 ]
+    optional: true
   - name: media_url
     data_type: TYPE_CUSTOM_BINARY_URLS
     dims: [ -1 ]
