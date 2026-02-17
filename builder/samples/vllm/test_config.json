@@ -114,7 +114,7 @@
   },
   {
     "name": "vllm_cosmos_sw_decoder",
-    "description": "Test Cosmos-Reason1-7B with vLLM backend and software decoder",
+    "description": "Test Cosmos-Reason2-2B with vLLM backend and software decoder",
     "build_args": {
       "TEST_APP_NAME": "vllm",
       "CACHE_BUSTER": "vllm_cosmos_sw_test",
@@ -160,14 +160,14 @@
         "Cosmos": {
           "source": "HF",
           "target": "/tmp/model-repo",
-          "path": "nvidia/Cosmos-Reason1-7B"
+          "path": "nvidia/Cosmos-Reason2-2B"
         }
       }
     }
   },
   {
     "name": "vllm_cosmos_hw_decoder",
-    "description": "Test Cosmos-Reason1-7B with vLLM backend and hardware decoder (NVDEC)",
+    "description": "Test Cosmos-Reason2-2B with vLLM backend and hardware decoder (NVDEC)",
     "build_args": {
       "TEST_APP_NAME": "vllm",
       "CACHE_BUSTER": "vllm_cosmos_hw_test",
@@ -183,7 +183,7 @@
       "env": {
         "MODEL_REPO": "/workspace/model-repo",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
-        "HF_MODEL_NAME": "nvidia/Cosmos-Reason1-7B"
+        "HF_MODEL_NAME": "nvidia/Cosmos-Reason2-2B"
       },
       "volumes": {
         "/tmp/model-repo": "/workspace/model-repo"

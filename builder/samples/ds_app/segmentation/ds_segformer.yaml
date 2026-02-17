@@ -16,6 +16,19 @@
 name: "deepstream-app"
 model_repo: "/workspace/models"
 
+input:
+- name: media_url
+  data_type: TYPE_CUSTOM_LIST
+  dims: [ -1 ]
+- name: mime
+  data_type: TYPE_CUSTOM_DS_MIME
+  dims: [ -1 ]
+
+output:
+  - name: output
+    data_type: TYPE_CUSTOM_DS_METADATA
+    dims: [ -1 ]
+
 models:
 - name: citysemsegformer
   backend: deepstream/nvinfer
@@ -26,7 +39,7 @@ models:
     dims: [ -1 ]
     optional: true
   - name: media_url
-    data_type: TYPE_CUSTOM_BINARY_URLS
+    data_type: TYPE_CUSTOM_DS_MEDIA_URL
     dims: [ -1 ]
   - name: mime
     data_type: TYPE_CUSTOM_DS_MIME

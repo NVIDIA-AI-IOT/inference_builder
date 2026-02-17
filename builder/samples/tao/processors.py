@@ -16,6 +16,8 @@
 import numpy as np
 import os
 
+# cv2 is imported only in BBoxOverlayVisualizer (lazy import in __init__)
+
 def generate_masks_with_special_tokens_and_transfer_map(tokenized, special_tokens_list):
     """Generate attention mask between each pair of special tokens.
 
@@ -459,7 +461,98 @@ class GDinoPostProcessor:
         }
 
 
+class BBoxOverlayVisualizer:
+    """Postprocessor that overlays bounding boxes on decoded image frames.
 
+    Draws bounding boxes with labels and confidence scores on the RGB HWC
+    image tensor extracted from the DeepStream pipeline and saves annotated
+    frames to disk.
 
+    Config:
+        output_dir: Directory to save annotated frames (default: /tmp/bbox_overlay)
+
+    Input:
+        output: DS metadata dict with 'bboxes', 'labels', 'probs' keys
+        decoded_frames: RGB uint8 image tensor in HWC layout [H, W, 3]
+    Output:
+        output: DS metadata dict (passed through unchanged)
+    """
+    name = "bbox-overlay-visualizer"
+
+    # Color palette for different labels (BGR for OpenCV)
+    COLORS = [
+        (0, 255, 0),    # green
+        (255, 0, 0),    # blue
+        (0, 0, 255),    # red
+        (255, 255, 0),  # cyan
+        (0, 255, 255),  # yellow
+        (255, 0, 255),  # magenta
+        (128, 255, 0),  # spring green
+        (255, 128, 0),  # azure
+    ]
+
+    def __init__(self, config):
+        import cv2
+        self._cv2 = cv2
+        self._font = cv2.FONT_HERSHEY_SIMPLEX
+        self._font_scale = 0.5
+        self._thickness = 2
+        self._frame_count = 0
+        self._output_dir = config.get("output_dir", "/tmp/bbox_overlay")
+        os.makedirs(self._output_dir, exist_ok=True)
+
+    def __call__(self, metadata, image):
+        if image is None:
+            return metadata
+
+        # Framework passes batch lists; unwrap to single items
+        import torch
+        if isinstance(metadata, list):
+            metadata = metadata[0]
+        if isinstance(image, list):
+            image = image[0]
+        if isinstance(image, torch.Tensor):
+            image = image.cpu().numpy()
+        annotated = self._cv2.cvtColor(np.asarray(image), self._cv2.COLOR_RGB2BGR)
+
+        if metadata is not None:
+            bboxes = metadata.get("bboxes", [])
+            labels = metadata.get("labels", [])
+            probs = metadata.get("probs", [])
+            shape = metadata.get("shape", [])
+
+            # Scale bboxes from metadata shape to image shape if needed
+            img_h, img_w = annotated.shape[:2]
+            scale_x, scale_y = 1.0, 1.0
+            if len(shape) == 2 and shape[0] > 0 and shape[1] > 0:
+                scale_x = img_w / shape[1]
+                scale_y = img_h / shape[0]
+
+            for i, bbox in enumerate(bboxes):
+                x1 = int(bbox[0] * scale_x)
+                y1 = int(bbox[1] * scale_y)
+                x2 = int(bbox[2] * scale_x)
+                y2 = int(bbox[3] * scale_y)
+
+                color = self.COLORS[i % len(self.COLORS)]
+                self._cv2.rectangle(annotated, (x1, y1), (x2, y2), color, self._thickness)
+
+                # Build label text
+                label_str = labels[i][0] if i < len(labels) and labels[i] else ""
+                prob_str = f"{probs[i]:.2f}" if i < len(probs) else ""
+                text = f"{label_str} {prob_str}".strip()
+
+                if text:
+                    (tw, th), _ = self._cv2.getTextSize(text, self._font, self._font_scale, 1)
+                    self._cv2.rectangle(annotated, (x1, y1 - th - 4), (x1 + tw, y1), color, -1)
+                    self._cv2.putText(annotated, text, (x1, y1 - 2),
+                                self._font, self._font_scale, (255, 255, 255), 1, self._cv2.LINE_AA)
+
+        # Save annotated frame to disk
+        out_path = os.path.join(self._output_dir, f"frame_{self._frame_count:04d}.jpg")
+        self._cv2.imwrite(out_path, annotated)
+        self._frame_count += 1
+
+        return metadata
 
 

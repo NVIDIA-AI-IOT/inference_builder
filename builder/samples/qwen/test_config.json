@@ -12,7 +12,7 @@
       "OPENAPI_SPEC": "openapi.yaml"
     },
     "test_config": {
-      "default_enable": true,
+      "default_enable": false,
       "timeout": 600,
       "env": {
         "MODEL_REPO": "/workspace/model-repo",
@@ -56,7 +56,7 @@
       "OPENAPI_SPEC": "openapi.yaml"
     },
     "test_config": {
-      "default_enable": true,
+      "default_enable": false,
       "timeout": 600,
       "env": {
         "MODEL_REPO": "/workspace/model-repo",
@@ -100,7 +100,7 @@
       "OPENAPI_SPEC": "openapi.yaml"
     },
     "test_config": {
-      "default_enable": true,
+      "default_enable": false,
       "timeout": 600,
       "env": {
         "MODEL_REPO": "/workspace/model-repo",

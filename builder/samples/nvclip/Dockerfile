@@ -17,26 +17,7 @@
 # DeepStream for hardware-accelerated video decoding and a
 # TensorRT backend for inference. This is a reference for this specific
 # sample, not a universal template for all deployments.em
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1_ER-ma" AS ds_stage
-
-# Final base image: Triton inference server where the TensorRT pipeline
-# and DeepStream components will run together.
-FROM "nvcr.io/nvidia/tritonserver:25.12-py3" AS builder_base
-
-# Install dependencies of DeepStream SDK for h/w decoder support.
-RUN apt update && apt install -y --no-install-recommends gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
-    libyaml-cpp-dev libgstrtspserver-1.0-0 libjsoncpp25 libgles2 pkg-config
-
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/lib /opt/nvidia/deepstream/deepstream-9.0/lib
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/bin /opt/nvidia/deepstream/deepstream-9.0/bin
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.sh /opt/nvidia/deepstream/deepstream-9.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.txt /opt/nvidia/deepstream/deepstream-9.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/README* /opt/nvidia/deepstream/deepstream-9.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.pdf /opt/nvidia/deepstream/deepstream-9.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/service-maker /opt/nvidia/deepstream/deepstream-9.0/service-maker
-
-RUN /opt/nvidia/deepstream/deepstream-9.0/install.sh
-RUN ln -sf deepstream-9.0 /opt/nvidia/deepstream/deepstream || true
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1_ER-ma" AS builder_base
 
 # Install Python dependencies required by THIS NVCLIP sample (CLIP
 # model, TensorRT bindings, FastAPI server, etc.). Versions are pinned

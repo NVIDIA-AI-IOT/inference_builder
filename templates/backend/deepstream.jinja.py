@@ -444,16 +444,58 @@ class BaseTensorOutput(BufferRetriever, BatchMetadataOperator):
     Subclasses override _extract_metadata() to yield results.
     Both consume() (appsink) and handle_metadata() (probe) iterate and deposit.
     """
-    def __init__(self, n_outputs, name: str = None):
+    def __init__(self, n_outputs, metadata_output_name: str = None, image_output_name: str = None):
+        """Initialize the base tensor output handler.
+
+        Args:
+            n_outputs: Maximum number of output slots (typically max_batch_size
+                or max_batch_size * num_formats). Each slot corresponds to a
+                pad index in the DeepStream pipeline.
+            metadata_output_name: When set, collected results are wrapped in a
+                dict keyed by this name (e.g. {"output": <result>}). Used by
+                MetadataOutput / PreprocessMetadataOutput for DS metadata
+                outputs (TYPE_CUSTOM_DS_METADATA). None for raw tensor outputs.
+            image_output_name: When set, indicates that decoded image frames
+                should be extracted from the DeepStream pipeline and returned
+                as RGB uint8 tensors in HWC layout (TYPE_CUSTOM_DS_IMAGE
+                output). The value is the output tensor name to use.
+        """
         BufferRetriever.__init__(self)
         BatchMetadataOperator.__init__(self)
         self._n_outputs = n_outputs
         self._queue = Queue()
         self._stashed = []
-        self._name = name
+        self._metadata_output_name = metadata_output_name
+        self._image_output_name = image_output_name
+        self._image_queue = Queue()  # separate queue for decoded image frames
+        self._image_stashed = []  # stashed image batches for cross-collect reuse
 
     def consume(self, buffer):
-        """Called when used as appsink retriever (BufferRetriever interface)."""
+        """Called when used as appsink retriever (BufferRetriever interface).
+
+        When image output is enabled, extracts decoded RGB HWC frames from
+        the buffer and converts them to CPU numpy arrays via dlpack before
+        queuing. The dlpack conversion must happen here while the buffer's
+        GPU memory is still valid — once consume() returns, the buffer is
+        released and the GPU tensor data becomes stale.
+
+        Obtains batch_meta from the buffer to get the batch_id → pad_index
+        mapping, then calls buffer.extract(batch_id) for each frame.
+        Note: batch_id is assigned by arrival order, not pad index — e.g. if
+        only pads 0, 2, 3 deliver frames, they get batch_ids 0, 1, 2.
+        """
+        if self._image_output_name:
+            received = [None] * self._n_outputs
+            batch_meta = buffer.batch_meta
+            for frame_meta in batch_meta.frame_items:
+                frame = buffer.extract(frame_meta.batch_id)
+                if frame is not None:
+                    # Clone via dlpack while buffer GPU memory is still valid;
+                    # clone() copies to a new GPU allocation so the tensor
+                    # survives after the buffer is released.
+                    frame = torch.utils.dlpack.from_dlpack(frame).clone()
+                    received[frame_meta.pad_index] = (frame, frame_meta.buffer_pts)
+            self._image_queue.put(received)
         return 1
 
     def handle_metadata(self, batch_meta):
@@ -462,7 +504,14 @@ class BaseTensorOutput(BufferRetriever, BatchMetadataOperator):
             self._deposit(metadata)
 
     def _extract_metadata(self, batch_meta):
-        """Override in subclasses to extract metadata. Yields list of results."""
+        """Override in subclasses to extract metadata.
+
+        Yields a list (indexed by pad_index) where each non-None element is
+        a dict containing the extracted data. The dict should include a
+        "timestamp" key (buffer_pts) for synchronization with image frames
+        in collect(). DS metadata dicts already carry this; tensor outputs
+        insert it explicitly.
+        """
         return
         yield  # Make this a generator
 
@@ -474,38 +523,118 @@ class BaseTensorOutput(BufferRetriever, BatchMetadataOperator):
                         collected[i] = d
                         data[i] = None
 
-        # expected results for a batch
-        collected = [None] * (max(indices) + 1)
-
-        # first check the for stashed results for the batch
-        while self._stashed:
-            data = self._stashed.pop(0)
-            move_data(data, collected)
-        # read from the thread queue for the remaining results
-        while not all(collected[i] is not None for i in indices):
-            try:
-                data = self._queue.get(timeout=timeout)
-                if data is None:
-                    break
+        def _drain(queue, stashed, collected, indices):
+            """Drain a queue into collected slots using stash for leftovers."""
+            while stashed:
+                data = stashed.pop(0)
                 move_data(data, collected)
+            while not all(collected[i] is not None for i in indices):
+                try:
+                    data = queue.get(timeout=timeout)
+                    if data is None:
+                        break
+                    move_data(data, collected)
+                    if any(d is not None for d in data):
+                        stashed.append(data)
+                except Empty:
+                    break
+
+        def _drain_images(queue, stashed, collected, indices, target_pts):
+            """Drain image queue, discarding images older than metadata timestamps."""
+            def process(data):
+                for i, d in enumerate(data):
+                    if d is None:
+                        continue
+                    # Always discard stale images even if this pad is already collected
+                    if i in target_pts:
+                        _, img_pts = d
+                        if img_pts < target_pts[i]:
+                            data[i] = None
+                            continue
+                    if collected[i] is None:
+                        collected[i] = d
+                        data[i] = None
+
+            remaining = []
+            for data in stashed:
+                process(data)
                 if any(d is not None for d in data):
-                    self._stashed.append(data)
-            except Empty:
-                break
-        if all(i is None for i in collected):
-            # signal the end of the inference run
-            return None
-        # rearrange the results to the required order
-        collected = [collected[i] for i in indices]
-        return collected if self._name is None else [
-            {self._name: r} for r in collected
-        ]
+                    remaining.append(data)
+            stashed.clear()
+            stashed.extend(remaining)
+
+            while not all(collected[i] is not None for i in indices):
+                try:
+                    data = queue.get(timeout=timeout)
+                    if data is None:
+                        break
+                    process(data)
+                    if any(d is not None for d in data):
+                        stashed.append(data)
+                except Empty:
+                    break
+
+        n_slots = max(indices) + 1
+
+        # Drain metadata queue first — metadata drives collection.
+        meta_collected = [None] * n_slots
+        _drain(self._queue, self._stashed, meta_collected, indices)
+
+        if self._image_output_name:
+            # Build target timestamps from metadata for image synchronization.
+            # Images with pts older than the metadata are stale and discarded.
+            target_pts = {}
+            for i in indices:
+                meta = meta_collected[i]
+                if meta is not None and isinstance(meta, dict):
+                    pts = meta.get("timestamp")
+                    if pts is not None:
+                        target_pts[i] = pts
+
+            image_collected = [None] * n_slots
+            _drain_images(self._image_queue, self._image_stashed, image_collected, indices, target_pts)
+
+            if all(i is None for i in meta_collected) and all(i is None for i in image_collected):
+                return None
+
+            results = []
+            for idx in indices:
+                result = {}
+                metadata = meta_collected[idx]
+                image_entry = image_collected[idx]
+
+                if metadata is not None:
+                    if self._metadata_output_name is not None:
+                        result[self._metadata_output_name] = metadata
+                    elif isinstance(metadata, dict):
+                        result.update(metadata)
+                    else:
+                        result = metadata
+
+                if image_entry is not None:
+                    frame, _ = image_entry
+                    if not isinstance(result, dict):
+                        result = {}
+                    result[self._image_output_name] = frame
+
+                results.append(result if result else None)
+            return results
+        else:
+            # --- Metadata-only path ---
+            if all(i is None for i in meta_collected):
+                return None
+            collected = [meta_collected[i] for i in indices]
+            return collected if self._metadata_output_name is None else [
+                {self._metadata_output_name: r} for r in collected
+            ]
 
     def reset(self):
         # wake up the old queue first
         self._queue.put(None)
         self._queue = Queue(maxsize=self._queue.maxsize)
         self._stashed = []
+        self._image_queue = Queue()
+        self._image_stashed = []
 
     def _deposit(self, received: list):
         logger.debug("DeepstreamBackend: Depositing data: %s", received)
@@ -516,8 +645,8 @@ class BaseTensorOutput(BufferRetriever, BatchMetadataOperator):
 
 
 class TensorOutput(BaseTensorOutput):
-    def __init__(self, n_outputs, preprocess_config_path):
-        super().__init__(n_outputs, None)
+    def __init__(self, n_outputs, preprocess_config_path, image_output_name=None):
+        super().__init__(n_outputs, metadata_output_name=None, image_output_name=image_output_name)
         self._preprocess_config_path = preprocess_config_path
 
     def _extract_metadata(self, batch_meta):
@@ -535,6 +664,7 @@ class TensorOutput(BaseTensorOutput):
                             for n, tensor in tensor_output.get_layers().items():
                                 torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
                                 result[n] = torch_tensor
+                    result["timestamp"] = roi.frame_meta.buffer_pts
                     received[roi.frame_meta.pad_index] = result
         else:
             for frame_meta in batch_meta.frame_items:
@@ -545,13 +675,14 @@ class TensorOutput(BaseTensorOutput):
                         for n, tensor in tensor_output.get_layers().items():
                             torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
                             result[n] = torch_tensor
+                result["timestamp"] = frame_meta.buffer_pts
                 received[frame_meta.pad_index] = result
         yield received
 
 class PreprocessMetadataOutput(BaseTensorOutput):
     """Output handler for preprocess metadata."""
-    def __init__(self, n_outputs, output_name, dims):
-        super().__init__(n_outputs, name=output_name)
+    def __init__(self, n_outputs, output_name, dims, image_output_name=None):
+        super().__init__(n_outputs, metadata_output_name=output_name, image_output_name=image_output_name)
         self._n_outputs = n_outputs
         self._shape = dims
 
@@ -561,17 +692,21 @@ class PreprocessMetadataOutput(BaseTensorOutput):
             if not preprocess_batch:
                 continue
             received = preprocess_batch.extract(self._n_outputs)
+            for roi in preprocess_batch.rois:
+                idx = roi.frame_meta.pad_index
+                if received[idx] is not None:
+                    received[idx]["timestamp"] = roi.frame_meta.buffer_pts
             yield received
 
 class MetadataOutput(BaseTensorOutput):
-    def __init__(self, n_outputs, output_name, dims):
-        super().__init__(n_outputs, name=output_name)
+    def __init__(self, n_outputs, output_name, dims, image_output_name=None):
+        super().__init__(n_outputs, metadata_output_name=output_name, image_output_name=image_output_name)
         self._n_outputs = n_outputs
         self._shape = dims
 
     def _extract_metadata(self, batch_meta):
-        received = batch_meta.extract(self._n_outputs)
-        yield received
+        # DS metadata from batch_meta.extract() already carries pts internally
+        yield batch_meta.extract(self._n_outputs)
 
 class DeepstreamBackend(ModelBackend):
     """Deepstream backend using pyservicemaker"""
@@ -585,15 +720,17 @@ class DeepstreamBackend(ModelBackend):
         self._media_url_tensor_name = None
         self._mime_tensor_name = None
         self._source_tensor_name = None
+        self._image_output_name = None
         self._inference_timeout = model_config["parameters"].get("inference_timeout", None)
         self._in_pools = {}
         self._outputs = {}
         self._pipelines = {}
 
-        if len(self._output_names) > 1 and self._output_types[0] == "TYPE_CUSTOM_DS_METADATA":
-            raise Exception(f"No more than one output is allowed for DS metadata!")
-
         tensor_output = False if self._output_types[0] == "TYPE_CUSTOM_DS_METADATA" else True
+        for o in model_config['output']:
+            if o['data_type'] == 'TYPE_CUSTOM_DS_IMAGE':
+                self._image_output_name = o['name']
+                break
         dims = (0, 0)
 
         if "parameters" not in model_config or "infer_config_path" not in model_config["parameters"]:
@@ -688,7 +825,7 @@ class DeepstreamBackend(ModelBackend):
         for input in model_config['input']:
             if input['data_type'] == 'TYPE_CUSTOM_DS_IMAGE':
                 self._image_tensor_name = input['name']
-            elif input['data_type'] == 'TYPE_CUSTOM_BINARY_URLS':
+            elif input['data_type'] == 'TYPE_CUSTOM_DS_MEDIA_URL':
                 self._media_url_tensor_name = input['name']
             elif input['data_type'] == 'TYPE_CUSTOM_DS_MIME':
                 self._mime_tensor_name = input['name']
@@ -705,7 +842,7 @@ class DeepstreamBackend(ModelBackend):
             self._source_tensor_name is None):
             raise ValueError(
                 "Deepstream pipeline requires at least one "
-                "TYPE_CUSTOM_DS_IMAGE or TYPE_CUSTOM_BINARY_URLS input "
+                "TYPE_CUSTOM_DS_IMAGE or TYPE_CUSTOM_DS_MEDIA_URL input "
                 "or TYPE_CUSTOM_DS_SOURCE_CONFIG input"
             )
         if ((self._image_tensor_name or self._media_url_tensor_name) and
@@ -761,11 +898,11 @@ class DeepstreamBackend(ModelBackend):
             in_pool = ImageTensorInputPool(dims[0], dims[1], formats, self._max_batch_size, self._image_tensor_name, self._media_url_tensor_name, self._mime_tensor_name, device_id, require_extra_input)
             n_output = self._max_batch_size * len(formats)
             if tensor_output:
-                output = TensorOutput(n_output, preprocess_config_paths)
+                output = TensorOutput(n_output, preprocess_config_paths, image_output_name=self._image_output_name)
             elif preprocess_config_paths:
-                output = PreprocessMetadataOutput(n_output, self._output_names[0], dims)
+                output = PreprocessMetadataOutput(n_output, self._output_names[0], dims, image_output_name=self._image_output_name)
             else:
-                output = MetadataOutput(n_output, self._output_names[0], dims)
+                output = MetadataOutput(n_output, self._output_names[0], dims, image_output_name=self._image_output_name)
             # create the pipeline
             pipeline = Pipeline(f"deepstream-{self._model_name}-{media}")
 
@@ -815,11 +952,11 @@ class DeepstreamBackend(ModelBackend):
             # video input support
             media = "video"
             if tensor_output:
-                output = TensorOutput(self._max_batch_size, preprocess_config_paths)
+                output = TensorOutput(self._max_batch_size, preprocess_config_paths, image_output_name=self._image_output_name)
             elif preprocess_config_paths:
-                output = PreprocessMetadataOutput(self._max_batch_size, self._output_names[0], dims)
+                output = PreprocessMetadataOutput(self._max_batch_size, self._output_names[0], dims, image_output_name=self._image_output_name)
             else:
-                output = MetadataOutput(self._max_batch_size, self._output_names[0], dims)
+                output = MetadataOutput(self._max_batch_size, self._output_names[0], dims, image_output_name=self._image_output_name)
             engine_files = [
                 self._generate_engine_name(
                     config_file,
@@ -871,12 +1008,19 @@ class DeepstreamBackend(ModelBackend):
 
 
     def __call__(self, *args, **kwargs):
-        in_data_list = args if args else [kwargs]
+        in_data_list = args if args else split_tensor_in_dict(kwargs)
         media = None
         explicit_batch = True if args else False
 
         # analyze the input batch
         for data in in_data_list:
+            # convert numpy types to native Python types
+            for k, v in data.items():
+                if isinstance(v, np.generic):
+                    v = v.item()
+                if isinstance(v, bytes):
+                    v = v.decode()
+                data[k] = v
             # get the media type
             if ((self._image_tensor_name in data or self._media_url_tensor_name in data) and
                 not self._mime_tensor_name in data):
@@ -902,7 +1046,7 @@ class DeepstreamBackend(ModelBackend):
             if media == "image":
                 logger.error("TYPE_CUSTOM_DS_IMAGE input must be added to the pipeline for image support")
             elif media == "video":
-                logger.error("TYPE_CUSTOM_BINARY_URLS input must be added to the pipeline for video suppport")
+                logger.error("TYPE_CUSTOM_DS_MEDIA_URL input must be added to the pipeline for video support")
             else:
                 logger.error("Unknown media type : ", media)
             return

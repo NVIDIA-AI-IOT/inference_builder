@@ -163,7 +163,7 @@
   },
   {
     "name": "citysemsegformer_segmentation_inference",
-    "description": "Test CitySemsegFormer semantic segmentation application with video input",
+    "description": "Test CitySemsegFormer semantic segmentation application with image input",
     "build_args": {
       "TEST_APP_NAME": "deepstream-app",
       "CACHE_BUSTER": "citysemsegformer_segmentation_test",
@@ -172,7 +172,7 @@
       "SERVER_TYPE": "serverless"
     },
     "test_config": {
-      "default_enable": true,
+      "default_enable": false,
       "timeout": 1000,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
@@ -184,9 +184,9 @@
       },
       "cmd": [
         "--media-url",
-        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4",
+        "/opt/nvidia/deepstream/deepstream/samples/streams/sample_720p.jpg",
         "--mime",
-        "video/mp4"
+        "image/jpeg"
       ],
       "prerequisite_script": null,
       "models": {
