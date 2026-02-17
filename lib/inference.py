@@ -66,7 +66,8 @@ py_datatype_mapping = {
     "TYPE_STRING": str,
     "TYPE_CUSTOM_DS_IMAGE": str,
     "TYPE_CUSTOM_DS_MIME": str,
-    "TYPE_CUSTOM_BINARY_URLS": str,
+    "TYPE_CUSTOM_LIST": str,
+    "TYPE_CUSTOM_DS_MEDIA_URL": str,
     "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
     "TYPE_CUSTOM_BINARY_BASE64": str,
     "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": str,
@@ -92,6 +93,7 @@ np_datatype_mapping = {
     "TYPE_STRING": np.string_,
     "TYPE_CUSTOM_DS_IMAGE": np.ubyte,
     "TYPE_CUSTOM_DS_MIME": np.string_,
+    "TYPE_CUSTOM_DS_MEDIA_URL": np.string_,
     "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
     "TYPE_BF16": None,
     "TYPE_CUSTOM_OBJECT": None
@@ -114,6 +116,7 @@ torch_datatype_mapping = {
     "TYPE_STRING": None,
     "TYPE_CUSTOM_DS_IMAGE": torch.int8,
     "TYPE_CUSTOM_DS_MIME": None,
+    "TYPE_CUSTOM_DS_MEDIA_URL": None,
     "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
     "TYPE_BF16": None,
     "TYPE_CUSTOM_OBJECT": None
@@ -175,7 +178,7 @@ class DataFlow:
         """
         processed = tensor
         if self._inbound:
-            if data_type == "TYPE_CUSTOM_BINARY_URLS":
+            if data_type == "TYPE_CUSTOM_LIST":
                 logger.debug("DataFlow _process_custom_data: %s", data_type)
                 processed = [input for input in tensor]
             elif data_type == "TYPE_CUSTOM_BINARY_BASE64":
@@ -271,7 +274,7 @@ class DataFlow:
             # handling custom data type
             if self._inbound or self._outbound:
                 config = self.get_config(i_name)
-                if config and not config["data_type"] in np_datatype_mapping and isinstance(tensor, np.ndarray):
+                if config and not config["data_type"] in np_datatype_mapping:
                     result = self._process_custom_data(tensor, config["data_type"])
                     # Check if processing returned an error
                     if isinstance(result, EnhancedError):
@@ -794,7 +797,7 @@ class VideoFrameSamplingDataFlow(DataFlow):
         super().stop()
         if self._media_extractor:
             # explicitly call __exit__ due to MediaExtractor internal threads holding the reference
-            self._media_extractor.__exit__()
+            self._media_extractor.__exit__(None, None, None)
             self._media_extractor = None
         if self._frame_collector is not None:
             logger.info(f"VideoFrameSamplingDataFlow: shutting down frame collector")
@@ -1650,9 +1653,9 @@ class ModelOperator:
     def _postprocess(self, data: Dict):
         processed = {k: v for k, v in data.items()}
         for processor in self._postprocessors:
-            if not all([i in data for i in processor.input]):
+            if not all([i in processed for i in processor.input]):
                 logger.info(
-                        "Pre-processor %s skipped on mismatching input",
+                        "Post-processor %s skipped on mismatching input",
                         processor.name
                     )
                 continue
