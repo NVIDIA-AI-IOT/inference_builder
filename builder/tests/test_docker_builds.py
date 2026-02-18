@@ -41,6 +41,7 @@ import logging
 import re
 import urllib.request
 import urllib.error
+from huggingface_hub import snapshot_download
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -77,7 +78,9 @@ def validate_script_command(script_command: str) -> bool:
     # Allow specific known scripts
     allowed_script_names = [
         "setup_rtsp_server.sh",
-        "./setup_rtsp_server.sh"
+        "./setup_rtsp_server.sh",
+        "prepare_engine.sh",
+        "./prepare_engine.sh",
     ]
 
     allowed_shell_commands = ["bash", "sh"]
@@ -666,40 +669,18 @@ class DockerBuildTester:
                     # Create target directory
                     target_dir.mkdir(parents=True, exist_ok=True)
 
-                    # Ensure git-lfs is installed
-                    logger.info("   Setting up git-lfs...")
-                    lfs_result = subprocess.run(
-                        ["git", "lfs", "install"],
-                        capture_output=True,
-                        text=True,
-                        timeout=30
-                    )
-                    if lfs_result.returncode != 0:
-                        logger.warning(f"⚠️  git-lfs install warning: {lfs_result.stderr}")
-
-                    # Clone from Hugging Face
-                    hf_url = f"https://huggingface.co/{model_path}"
-                    clone_cmd = ["git", "clone", hf_url, str(final_model_dir)]
-                    logger.info(f"   Running: {' '.join(clone_cmd)}")
-
-                    result = subprocess.run(
-                        clone_cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=1800  # 30 minute timeout for large model download
-                    )
-
-                    if result.returncode != 0:
-                        error_msg = f"Failed to download model '{model_name}' from HF: {result.stderr}"
+                    # Download using huggingface_hub
+                    hf_token = os.environ.get("HF_TOKEN")
+                    try:
+                        snapshot_download(
+                            model_path,
+                            local_dir=str(final_model_dir),
+                            token=hf_token,
+                        )
+                    except Exception as e:
+                        error_msg = f"Failed to download model '{model_name}' from HF: {e}"
                         logger.error(f"❌ {error_msg}")
                         return False, error_msg
-
-                    # Set permissions
-                    try:
-                        os.chmod(final_model_dir, 0o777)
-                        logger.info(f"   Set permissions: chmod 777 {final_model_dir}")
-                    except Exception as e:
-                        logger.warning(f"⚠️  Failed to set permissions on {final_model_dir}: {e}")
 
                     # Execute post-script if specified (for HF models)
                     post_script = model_info.get("post_script")
@@ -1277,10 +1258,18 @@ class DockerBuildTester:
             logger.error(f"❌ {error_msg}")
             return False, error_msg
 
-    def run_prerequisite_script(self, script_command: str, test_id: int) -> Tuple[bool, str]:
-        """Run a prerequisite script before testing the docker container."""
+    def run_prerequisite_script(self, script_command: str, test_id: int, image_name: str = "", cwd: str = None) -> Tuple[bool, str]:
+        """Run a prerequisite script before testing the docker container.
+
+        Supports {image_name} placeholder in script_command, which is replaced
+        with the built Docker image name before execution.
+        """
         if not script_command:
             return True, "No prerequisite script specified"
+
+        # Substitute {image_name} placeholder
+        if image_name:
+            script_command = script_command.replace("{image_name}", image_name)
 
         # Validate script command to prevent command injection
         if not validate_script_command(script_command):
@@ -1305,7 +1294,8 @@ class DockerBuildTester:
                         cmd_args,
                         capture_output=True,
                         text=True,
-                        timeout=300,
+                        timeout=1800,
+                        cwd=cwd,
                         shell=False  # Safer execution without shell
                     )
                 else:
@@ -1319,7 +1309,8 @@ class DockerBuildTester:
                         shell=True,  # Only when necessary and after validation
                         capture_output=True,
                         text=True,
-                        timeout=300
+                        timeout=1800,
+                        cwd=cwd
                     )
             except ValueError as e:
                 if "failed security validation" in str(e):
@@ -1330,7 +1321,8 @@ class DockerBuildTester:
                     shell=True,
                     capture_output=True,
                     text=True,
-                    timeout=300
+                    timeout=1800,
+                    cwd=cwd
                 )
 
             # Save prerequisite script logs
@@ -1357,7 +1349,7 @@ class DockerBuildTester:
                 return False, error_msg
 
         except subprocess.TimeoutExpired:
-            error_msg = f"Prerequisite script timed out after 300 seconds"
+            error_msg = f"Prerequisite script timed out after 1800 seconds"
             logger.error(f"❌ {error_msg}")
 
             # Save timeout log
@@ -1365,7 +1357,7 @@ class DockerBuildTester:
                 f.write("=== Prerequisite Script Execution ===\n")
                 f.write(f"Command: {script_command}\n")
                 f.write(f"Status: TIMEOUT\n")
-                f.write(f"Timeout: 300 seconds\n")
+                f.write(f"Timeout: 1800 seconds\n")
                 f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write("\n=== ERROR ===\n")
                 f.write(error_msg)
@@ -1429,8 +1421,9 @@ class DockerBuildTester:
             # Run prerequisite script if specified
             prerequisite_script = test_config.get("prerequisite_script")
             if prerequisite_script:
+                config_dir = str(Path(test_config.get("_config_dir", ".")).resolve())
                 prerequisite_success, prerequisite_output = self.run_prerequisite_script(
-                    prerequisite_script, test_id
+                    prerequisite_script, test_id, image_name=image_name, cwd=config_dir
                 )
                 if not prerequisite_success:
                     return False, f"Prerequisite script failed: {prerequisite_output}", ""
@@ -1547,6 +1540,17 @@ class DockerBuildTester:
             else:
                 cmd.insert(2, "--network=host")
 
+            # For serverless non-negative tests, save inference results for validation
+            result_export_file = None
+            if is_serverless and not expected_error:
+                result_export_dir = Path("/tmp/result")
+                result_export_dir.mkdir(parents=True, exist_ok=True)
+                result_filename = f"result_{test_id}_{int(time.time())}.json"
+                result_export_file = result_export_dir / result_filename
+                container_result_path = f"/tmp/result/{result_filename}"
+                cmd.extend(["-v", f"{result_export_dir}:{result_export_dir}"])
+                logger.info(f"📄 Result export: {result_export_file} -> {container_result_path}")
+
             cmd.append(image_name)
 
             # Add command arguments if specified (serverless only)
@@ -1560,6 +1564,10 @@ class DockerBuildTester:
                         logger.error(f"❌ {error_msg}")
                         return False, error_msg, ""
                 cmd.extend(cmd_args)
+
+            # Append -s flag for serverless non-negative tests
+            if result_export_file:
+                cmd.extend(["-s", container_result_path])
 
             logger.info(f"Testing image: {image_name}")
             logger.info(f"Command: {' '.join(cmd)}")
@@ -2282,6 +2290,21 @@ class DockerBuildTester:
                     logger.error(f"❌ {error_msg}")
                     logger.info(f"📄 Logs saved to: {log_file}")
                     return False, error_msg, str(log_file)
+
+            # For serverless non-negative tests, check that the result file exists and is non-empty
+            if result_export_file:
+                if not result_export_file.exists():
+                    error_msg = f"Result file not found: {result_export_file}"
+                    logger.error(f"❌ {error_msg}")
+                    logger.info(f"📄 Logs saved to: {log_file}")
+                    return False, error_msg, str(log_file)
+                file_size = result_export_file.stat().st_size
+                if file_size == 0:
+                    error_msg = f"Result file is empty: {result_export_file}"
+                    logger.error(f"❌ {error_msg}")
+                    logger.info(f"📄 Logs saved to: {log_file}")
+                    return False, error_msg, str(log_file)
+                logger.info(f"📄 Result file OK: {result_export_file} ({file_size} bytes)")
 
             # Check for errors using the exported error JSON file (if ERROR_EXPORT_PATH was configured)
             has_errors = False

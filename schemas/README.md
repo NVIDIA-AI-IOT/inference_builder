@@ -158,7 +158,7 @@ Common parameters include:
 - `FORCE_CPU_ONLY_INPUT_TENSORS`: Controls whether input tensors are kept on GPU or copied to CPU (Triton Python backend). Set to `"no"` to keep tensors on GPU for better performance.
 - Backend-specific parameters (e.g., TensorRT engine paths, ONNX model paths, etc.)
 
-For complete parameter documentation, refer to the [Triton Model Configuration documentation](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/model_configuration.html).
+For complete parameter documentation, refer to the [Triton Model Configuration documentation](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/user_guide/model_configuration.html).
 
 **Example**:
 ```yaml
@@ -256,7 +256,7 @@ The following data types are supported:
 - `TYPE_STRING`: String data
 
 ### Custom Types
-- `TYPE_CUSTOM_IMAGE_BASE64`: Base64-encoded JPEG/PNG image data. When used as a top-level input, it creates an `ImageInputDataFlow` that decodes the base64 payload into image tensors before they are passed to downstream models. When used for an output, image tensors are encoded into a base64 string.
+- `TYPE_CUSTOM_IMAGE_BASE64`: Base64-encoded JPEG/PNG image data as a data URI string. Each element must follow the format `data:image/{format};base64,{payload}` where `{format}` is `jpeg`, `jpg`, or `png`, and `{payload}` is the base64-encoded image bytes. This type is mapped to `TYPE_STRING` in Triton and arrives as a list of strings. When used as a top-level input, it creates an `ImageInputDataFlow` that parses the data URI prefix to determine the image format, decodes the base64 payload into raw bytes, and decodes the image using a hardware-accelerated DeepStream pipeline (`nvjpegdec`/`pngdec`) to produce RGB `uint8` image tensors in HWC layout `[H, W, 3]` on GPU at the original image resolution. These decoded tensors are then passed to downstream models. When used for an output, image tensors are encoded into a base64 string.
 - `TYPE_CUSTOM_IMAGE_ASSETS`: Image asset identifiers (file paths, URLs, or asset IDs) referring to JPEG/PNG images. When used as a top-level input, it creates an `ImageInputDataFlow` that loads and decodes the referenced images into image tensors before they are passed to downstream models.
 - `TYPE_CUSTOM_LONG_VIDEO_ASSETS`: Video asset identifiers for **long videos and live streams requiring temporal chunking**. Particularly suitable for: (1) **live streams** such as RTSP feeds that need continuous processing in chunks, (2) long video files that should be split into temporal segments, (3) scenarios where frames need to be delivered in multiple batches over time. Supports file paths, URLs, RTSP streams, or asset IDs, with query parameters such as `?frames=N&interval=INTERVAL_NSEC&chunks=M&scale=WIDTHxHEIGHT`. When used as a top-level input, it creates a `VideoInputDataFlow` that asynchronously extracts frames in chunks, with each chunk containing N frames sampled at the specified interval. Results are delivered via a queue as they become available, enabling streaming processing. Processing always starts from the beginning of the video or live stream. Use `TYPE_CUSTOM_VIDEO_CHUNK_ASSETS` instead for short videos that fit in a single batch without temporal chunking, or when you need to specify a start position. Supported query parameters:
   - `frames`: (Required) Number of frames to sample per chunk.
@@ -273,14 +273,27 @@ The following data types are supported:
   - `start`: (Optional) Start timestamp in nanoseconds (default 0).
   - `duration`: (Optional) Duration to sample from in nanoseconds (defaults to entire video).
 - `TYPE_CUSTOM_BINARY_BASE64`: Base64-encoded binary data. For inputs, the strings are automatically decoded into uint8 tensors before being passed downstream. For outputs, binary tensors are base64-encoded into strings.
-- `TYPE_CUSTOM_BINARY_URLS`: Binary file URLs for remote data access. The values are converted into a list and treated as URLs, which also implies explicit batching of the input data.
+- `TYPE_CUSTOM_LIST`: Converts the input values into a list, which implies explicit batching of the input data. Use this for non-DS inputs that need list conversion (e.g., video URLs for VLM models).
+- `TYPE_CUSTOM_DS_MEDIA_URL`: DeepStream media URL input. A string URL (file path or remote URL) pointing to an image or video for DeepStream pipeline processing. Unlike `TYPE_CUSTOM_LIST`, this type follows the implicit batch path and is recognized by the DeepStream backend as a media source. Must be paired with a `TYPE_CUSTOM_DS_MIME` input.
 - `TYPE_CUSTOM_VLM_INPUT`: Vision-Language Model input in dictionary form, passed through to downstream models as-is.
 - `TYPE_CUSTOM_OBJECT`: Generic custom object type for complex structured data.
 
 ### DeepStream-Specific Types
 
 #### TYPE_CUSTOM_DS_IMAGE
-DeepStream custom type for image buffer input. A 1-D uint8 tensor (or list of tensors) containing encoded JPEG/PNG image bytes that can be passed directly into DeepStream backends without additional decoding in the Python runtime. **This input must be defined in the model configuration to enable the image decoder in the DeepStream pipeline.**
+DeepStream custom type for image buffers, usable as both input and output.
+
+**As Input:** A 1-D uint8 tensor (or list of tensors) containing encoded JPEG/PNG image bytes that can be passed directly into DeepStream backends without additional decoding in the Python runtime. **This input must be defined in the model configuration to enable the image decoder in the DeepStream pipeline.**
+
+**As Output:** Extracts the decoded image frames from the DeepStream pipeline and returns them as RGB uint8 image tensors in HWC (Height, Width, Channels) layout. Each tensor has shape `[H, W, 3]` where Channels is 3 (R, G, B), representing the decoded frame at its processed resolution.
+
+**Example Output Usage:**
+```yaml
+output:
+  - name: "decoded_frames"
+    data_type: TYPE_CUSTOM_DS_IMAGE
+    dims: [-1, -1, 3]
+```
 
 #### TYPE_CUSTOM_DS_METADATA
 DeepStream custom type for metadata output, containing per-frame detection, classification, and segmentation results. The output is returned as a **dictionary** with the following structure (defined in `definitions/deepstreamMetadata`):
@@ -333,7 +346,7 @@ responses:
 ```
 
 #### TYPE_CUSTOM_DS_MIME
-DeepStream custom type for MIME type string (for example, `image/jpeg` or `image/png`) describing the associated DeepStream image or media buffers. Required alongside `TYPE_CUSTOM_DS_IMAGE` or `TYPE_CUSTOM_BINARY_URLS` inputs so the DeepStream pipeline can select the appropriate decoder.
+DeepStream custom type for MIME type string (for example, `image/jpeg` or `image/png`) describing the associated DeepStream image or media buffers. Required alongside `TYPE_CUSTOM_DS_IMAGE` or `TYPE_CUSTOM_DS_MEDIA_URL` inputs so the DeepStream pipeline can select the appropriate decoder.
 
 #### TYPE_CUSTOM_DS_SOURCE_CONFIG
 DeepStream custom type for path to a YAML source configuration file. When used as a model input, consider using it when sources such as live streams are dynamically added and removed.

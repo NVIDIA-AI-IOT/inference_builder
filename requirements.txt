@@ -12,3 +12,4 @@ pillow==11.3.0
 click==8.0.4
 jsonschema==4.21.1
 pyyaml==6.0.1
+huggingface_hub>=0.20.0

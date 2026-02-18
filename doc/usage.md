@@ -59,7 +59,7 @@ models:
   max_batch_size: 4
   input:
   - name: media_url
-    data_type: TYPE_CUSTOM_BINARY_URLS
+    data_type: TYPE_CUSTOM_DS_MEDIA_URL
     dims: [ -1 ]
   - name: mime
     data_type: TYPE_CUSTOM_DS_MIME
