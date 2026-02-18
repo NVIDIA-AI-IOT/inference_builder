@@ -23,11 +23,11 @@ Visit our [documentation](doc) for more details:
 
 First, be sure your system meets the requirement.
 
-| Operating System   | Python | CPU            |  GPU*                        |
+| Operating System   | Python | CPU            | GPU[^1]                      |
 |:-------------------|:-------|:---------------|:-----------------------------|
 |Ubuntu 24.04        |3.12    | x86, aarch64   |Nvidia ADA, Hopper, Blackwell |
 
-*: If you only generate the inference pipeline without running it, no GPU is required.
+[^1]: If you only generate the inference pipeline without running it, no GPU is required.
 
 Next, follow these steps to get started:
 
@@ -62,6 +62,32 @@ pip3 install -r requirements.txt
 ```
 
 ## Play with the examples
+
+Docker environment must be properly set up with below packages for building and running the examples:
+
+- **Docker**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
+- **Docker Compose**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
+- **NVIDIA Container Toolkit**: [Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+
+
+Ensure nvidia runtime added to `/etc/docker/daemon.json` to run GPU-enabled containers
+
+```bash
+{
+    "runtimes": {
+        "nvidia": {
+            "args": [],
+            "path": "nvidia-container-runtime"
+        }
+    }
+}
+```
+
+The `docker` group must exist in your system, please check if it has been created using `getent group docker`. Your current user must belong to the `docker` group, If not, run the command below, then log out and back in for the group change to take effect.
+
+```bash
+sudo usermod -aG docker $USER
+```
 
 Now you can try [our examples](builder/samples/README.md) to learn more. These examples span all supported backends and demonstrate their distinct inference flows.
 
@@ -114,8 +140,8 @@ pip install -r mcp/requirements-mcp.txt
 
 3. **Start using the MCP tools:**
 
-   In any Cursor chat or composer, invoke the tools by mentioning them in your prompt:
-   - *"Use deepstream-inference-builder to generate an inference pipeline for PeopleNet"*
+   Start a new Cursor agent and invoke the tools by mentioning "deepstream inference builder" in your prompt:
+   - *"Use deepstream inference builder to generate an object detection pipeline for Yolo11 model"*
    - *"Build a Docker image for my detection pipeline"*
 
 ### Setting Up for Claude Code
@@ -141,7 +167,9 @@ pip install -r mcp/requirements-mcp.txt
 
 3. **Start using the MCP tools:**
 
-   Simply ask Claude Code to perform tasks like generating pipelines or building images.
+   Simply ask Claude Code to perform tasks by mentioning "deepstream inference builder" in your prompt:
+   - *"Use deepstream inference builder to generate an object detection pipeline for Yolo11 model"*
+   - *"Build a Docker image for my detection pipeline"*
 
 ### Available MCP Tools
 
@@ -164,6 +192,9 @@ pip install -r mcp/requirements-mcp.txt
 | `samples://dockerfile/*` | Sample Dockerfiles |
 | `samples://processor/*` | Sample preprocessors and postprocessors |
 
+### Sample Prompts
+
+You can now try out the [example prompts](mcp/examples.md) using either Cursor or Claude Code.
 
 ## Contributing
 

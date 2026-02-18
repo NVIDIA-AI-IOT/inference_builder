@@ -32,8 +32,8 @@ Apart from the models listed in the above table, the Inference Builder also supp
 If you don't have any test video in hand, you can copy it from deepstream-sample container image using following commands:
 
 ```bash
-docker pull gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1_ER-ma
-docker create --name temp gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1_ER-ma
+docker pull gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1_ER3-ma
+docker create --name temp gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1_ER3-ma
 docker cp temp:/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4 ~/Videos
 docker rm temp
 ```

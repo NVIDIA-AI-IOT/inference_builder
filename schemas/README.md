@@ -158,7 +158,7 @@ Common parameters include:
 - `FORCE_CPU_ONLY_INPUT_TENSORS`: Controls whether input tensors are kept on GPU or copied to CPU (Triton Python backend). Set to `"no"` to keep tensors on GPU for better performance.
 - Backend-specific parameters (e.g., TensorRT engine paths, ONNX model paths, etc.)
 
-For complete parameter documentation, refer to the [Triton Model Configuration documentation](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/model_configuration.html).
+For complete parameter documentation, refer to the [Triton Model Configuration documentation](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/user_guide/model_configuration.html).
 
 **Example**:
 ```yaml

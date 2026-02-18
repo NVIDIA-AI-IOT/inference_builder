@@ -15,7 +15,6 @@ If you don't have NGC CLI installed, please download and install it from [this p
 ### Image Classification
 - **PCB Classification**: [PCB Classification Model](https://catalog.ngc.nvidia.com/orgs/nvaie/models/pcbclassification)
 
-
 ### Visual Change Detection
 - **Visual Changenet Classification**: [Visual Changenet Classification Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/visual_changenet_classification)
 
