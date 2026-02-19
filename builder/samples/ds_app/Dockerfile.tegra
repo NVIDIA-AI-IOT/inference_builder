@@ -41,7 +41,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     networkx==3.5 \
     sympy==1.14.0 \
     pillow==11.3 \
-    transformers==4.54.1
+    transformers==4.54.1 \
+    opencv-python
 
 # Build TensorRT OSS to provide customized plugins (e.g. for ONNX) and
 # the trtexec tool. The version and GPU architectures are controlled

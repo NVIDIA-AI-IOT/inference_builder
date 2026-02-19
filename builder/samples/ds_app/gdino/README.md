@@ -138,6 +138,7 @@ docker run --rm --network=host --gpus all --privileged --runtime=nvidia \
     --media-url /opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4 \
     --mime video/mp4 \
     --text "car,person"
+    -s
 ```
 
 ### Run with RTSP input
@@ -160,6 +161,7 @@ docker run --rm --network=host --gpus all --privileged --runtime=nvidia \
     --media-url rtsp://<url_path> \
     --mime video/mp4 \
     --text "car,person"
+    -s
 ```
 
 ### Run with image input
@@ -181,4 +183,5 @@ docker run --rm --network=host --gpus all --privileged --runtime=nvidia \
     --media-url /sample_input/test.jpg \
     --mime image/jpeg \
     --text "car,person"
+    -s
 ```

@@ -46,13 +46,14 @@ The Agent is expected to fix all the build and runtime errors while doing the sm
 
 ###  3. Create a Deepstream Inference Application with Customized Logic
 
-***Create a deepstream pipeline for object detection using PeopleNet transformer model from NGC; the pipeline accepts video url as input and output detected bounding boxes. Count the number of vehicles in each frame and raise an alarm whenever the number exceeds 10 by writing it down to a file. Do a smoke test once done.***
+***Create a deepstream pipeline for object detection using PeopleNet transformer model from NGC; the pipeline accepts video url as input and output detected bounding boxes. Count the number of people in each frame and raise an alarm whenever the number exceeds 10 by writing it down to a file. Do a smoke test once done.***
 
 The Agent is expected to draft a plan based on the prompt and generates required files accordingly (file names may differ in each run unless explicitly specified):
 
 - peoplenet_transformer_pipeline.yaml (pipeline configuration yaml)
 - Dockerfile
 - nvdsinfer_config.yaml (nvinfer configuration yaml)
+- processor.py (Customized processor for counting and raising alarm)
 - peoplenet.tgz (python code for inference)
 - models/peoplenet (folder for required model files)
 
