@@ -8,7 +8,7 @@ This example demonstrates how to build an inference pipeline and for the Qwen fa
 Three configurations are provided, allowing you to choose based on your specific software and hardware environment:
 
 1. pytorch_qwen.yaml: leveraging the transformer APIs and fits all the models
-2. trtllm_qwen.yaml: leveraging TensroRT LLM APIs for better performance
+2. trtllm_qwen.yaml: leveraging TensorRT LLM APIs for better performance
 3. trtllm_nvdec_qwen.yaml: leveraging h/w decoder and TensorRT LLM for the best performance
 
 We provide a sample Dockerfile for the example, which you can use to build a Docker image and test the microservice on any x86 system.

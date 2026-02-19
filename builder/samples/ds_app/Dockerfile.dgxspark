@@ -18,7 +18,7 @@
 # source image for copying Python packages.
 FROM "nvcr.io/nvidia/pytorch:25.08-py3" AS pytorch_src
 
-FROM "nvcr.io/nvidia/deepstream:8.0-triton-dgx-spark" AS inference_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-arm-sbsa-spark-26.02.1" AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -40,7 +40,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     networkx==3.5 \
     sympy==1.14.0 \
     pillow==11.3 \
-    transformers==4.54.1
+    transformers==4.54.1 \
+    opencv-python
 
 # Build TensorRT OSS to provide customized plugins (e.g. for ONNX) and
 # the trtexec tool. The version and GPU architectures are controlled
