@@ -16,7 +16,7 @@
 
 # Sample Dockerfile for a DeepStream TAO ds_app-style pipeline using
 # a Triton-enabled DeepStream base image.
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1_ER3-ma" AS inference_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1-ma" AS inference_base
 
 # Install Python dependencies required by THIS ds_app sample. These
 # versions are pinned for reproducibility and can be adjusted for
@@ -83,6 +83,7 @@ RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x
 # version if you use different DS/TAO releases.
 ENV DS_TAO_APPS_REPO=https://github.com/NVIDIA-AI-IOT/deepstream_tao_apps.git
 ENV DS_TAO_APPS_TAG="master"
+ENV DS_SRC_PATH=/opt/nvidia/deepstream/deepstream
 ARG CACHE_BUSTER=unique_value_to_bypass_docker_cache
 RUN mkdir ds_tao_apps_src && \
    cd ds_tao_apps_src && \
@@ -90,7 +91,7 @@ RUN mkdir ds_tao_apps_src && \
    git clone -b $DS_TAO_APPS_TAG $DS_TAO_APPS_REPO ds_tao_apps && \
    cd ds_tao_apps/post_processor && \
    echo "$PWD Building DS TAO apps post processing..." && \
-   CUDA_MODULE_LOADING=LAZY CUDA_VER=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR make && \
+   CUDA_MODULE_LOADING=LAZY CUDA_VER=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR make DS_SRC_PATH=$DS_SRC_PATH && \
    [ -f libnvds_infercustomparser_tao.so ] && echo "$PWD post processing build successful" || echo "$PWD post processing build failed" && \
    cp libnvds_infercustomparser_tao.so /opt/nvidia/deepstream/deepstream/lib && \
    cd ../../../ && \

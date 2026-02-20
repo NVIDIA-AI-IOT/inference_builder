@@ -11,7 +11,7 @@
 # Sample Dockerfile for a vLLM-based vision-language pipeline using a
 # Triton-enabled DeepStream base image for accelerated video decoding.
 # This is specific to the vllm sample in this repository.
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1_ER3-ma" AS inference_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1-ma" AS inference_base
 
 # Install Python dependencies required by THIS vllm sample. These
 # versions are pinned for reproducibility and can be adjusted for
