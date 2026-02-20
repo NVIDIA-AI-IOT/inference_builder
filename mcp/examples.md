@@ -32,7 +32,7 @@ The Agent is expected to fix all the build and runtime errors while doing the sm
 
 ### 2. Create an advanced Deepstream Application  Supporting Tracker and Multi-stream Inputs
 
-***Create a deepstream object detection pipeline with the PeopleNet transformer model from NGC; the pipeline should support 4 video inputs in parallel and track all the objects in the inputs using NVDCF tracker. Do a smoke test once done.***
+***Use deepstream inference builder tool to create an object detection pipeline with the PeopleNet transformer model from NGC; the pipeline should support 4 video inputs in parallel and track all the objects in the inputs using NVDCF tracker. Do a smoke test once done.***
 
 The Agent is expected to draft a plan based on the prompt and generates required files accordingly (file names may differ in each run unless explicitly specified):
 
@@ -46,7 +46,7 @@ The Agent is expected to fix all the build and runtime errors while doing the sm
 
 ###  3. Create a Deepstream Inference Application with Customized Logic
 
-***Create a deepstream pipeline for object detection using PeopleNet transformer model from NGC; the pipeline accepts video url as input and output detected bounding boxes. Count the number of people in each frame and raise an alarm whenever the number exceeds 10 by writing it down to a file. Do a smoke test once done.***
+***Use deepstream inferenc builder tool to create an object detection pipeline with PeopleNet transformer model from NGC; the pipeline accepts video url as input and output detected bounding boxes. Count the number of people in each frame and raise an alarm whenever the number exceeds 10 by writing it down to a file. Do a smoke test once done.***
 
 The Agent is expected to draft a plan based on the prompt and generates required files accordingly (file names may differ in each run unless explicitly specified):
 
