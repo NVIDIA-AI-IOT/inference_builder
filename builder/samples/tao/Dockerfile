@@ -20,7 +20,7 @@
 # all DeepStream deployments.
 
 # pull the latest DeepStream Triton multiarch image
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1-ma" AS cv_tao_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1.2-ma" AS cv_tao_base
 
 # Install system dependencies used to build TensorRT OSS plugins and
 # DeepStream TAO post-processors (yaml-cpp, cmake, etc.).
