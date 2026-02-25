@@ -220,8 +220,8 @@ def main(config_path=None):
     print("1. Restart your MCP client (Cursor, Claude Code, etc.)")
     print("2. Verify the 'deepstream-inference-builder' MCP server is connected")
     print("3. Try using the tools:")
-    print("   - 'Show me what sample configurations are available'")
-    print("   - 'Generate a DeepStream object detection pipeline'")
+    print("   - 'Show me what sample configurations are available from the inference builder?'")
+    print("   - 'Generate a DeepStream object detection pipeline using the inference builder with PeopleNet transformer model from NGC.'")
     print("\nFor more information, see mcp/README-MCP.md")
 
     return True
