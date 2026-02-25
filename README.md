@@ -59,6 +59,7 @@ git submodule update --init --recursive
 python3 -m venv .venv
 source .venv/bin/activate
 pip3 install -r requirements.txt
+pip install -r mcp/requirements-mcp.txt
 ```
 
 ## Play with the examples
@@ -110,15 +111,13 @@ For detailed tool reference and advanced usage, see [mcp/README-MCP.md](mcp/READ
 
 ### Prerequisites
 
-Before setting up MCP, ensure you have completed the [Getting Started](#getting-started) steps above, then install the MCP dependencies:
+Before setting up MCP, ensure you have completed the [Getting Started](#getting-started) steps above.
 
-```bash
-pip install -r mcp/requirements-mcp.txt
-```
+Ensure that you are in the repository's root directory.
 
 ### Setting Up for Cursor
 
-1. **Generate the MCP configuration:**
+1. **Generate the MCP configuration**
 
    For a global configuration (available across all projects):
    ```bash
@@ -130,7 +129,7 @@ pip install -r mcp/requirements-mcp.txt
    python3 mcp/setup_mcp.py /path/to/your_project/.cursor/mcp.json
    ```
 
-2. **Verify the MCP server is loaded:**
+2. **Open your project folder and verify the MCP server is successfully loaded**
 
    In Cursor, navigate to **File > Preferences > Cursor Settings > MCP**. You should see:
 
@@ -141,8 +140,8 @@ pip install -r mcp/requirements-mcp.txt
 3. **Start using the MCP tools:**
 
    Start a new Cursor agent and invoke the tools by mentioning "deepstream inference builder" in your prompt:
-   - *"Use deepstream inference builder to generate an object detection pipeline for Yolo11 model"*
-   - *"Build a Docker image for my detection pipeline"*
+   - "Show me what sample configurations are available from the inference builder?"
+   - "Generate a DeepStream object detection pipeline using the inference builder with PeopleNet transformer model from NGC."
 
 ### Setting Up for Claude Code
 
@@ -158,7 +157,7 @@ pip install -r mcp/requirements-mcp.txt
    python3 mcp/setup_mcp.py /path/to/your_project/.mcp.json
    ```
 
-2. **Verify the MCP server is connected:**
+2. **Start Claude Code from your project folder and Verify the MCP server is connected:**
 
    Run `/mcp` in the Claude Code console. You should see:
    ```
@@ -168,8 +167,8 @@ pip install -r mcp/requirements-mcp.txt
 3. **Start using the MCP tools:**
 
    Simply ask Claude Code to perform tasks by mentioning "deepstream inference builder" in your prompt:
-   - *"Use deepstream inference builder to generate an object detection pipeline for Yolo11 model"*
-   - *"Build a Docker image for my detection pipeline"*
+   - "Show me what sample configurations are available from the inference builder?"
+   - "Generate a DeepStream object detection pipeline using the inference builder with PeopleNet transformer model from NGC."
 
 ### Available MCP Tools
 
