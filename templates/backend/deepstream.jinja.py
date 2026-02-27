@@ -99,6 +99,21 @@ class MessageBrokerConfig:
         )
 
 @dataclass
+class AnalyticsConfig:
+    """Configuration for nvdsanalytics (ROI, line-crossing, overcrowding, direction)."""
+    config_path: str | None = None
+    gpu_id: int = 0
+
+    def __bool__(self) -> bool:
+        """Check if analytics is configured (config_path set)."""
+        if self.config_path is None:
+            return False
+        if not os.path.exists(self.config_path):
+            logger.warning(f"AnalyticsConfig: config_path does not exist: {self.config_path}")
+            return False
+        return True
+
+@dataclass
 class KittiConfig:
     infer_kitti_output_dir: str | None = None
     tracker_kitti_output_dir: str | None = None
@@ -251,6 +266,7 @@ class BulkVideoInputPool(TensorInputPool):
         infer_config_paths,
         preprocess_config_paths,
         tracker_config: TrackerConfig,
+        analytics_config: AnalyticsConfig,
         msgbroker_config: MessageBrokerConfig,
         render_config: RenderConfig,
         perf_config: PerfConfig,
@@ -277,6 +293,7 @@ class BulkVideoInputPool(TensorInputPool):
         self._device_id = device_id
         self._dims = dims
         self._tracker_config = tracker_config
+        self._analytics_config = analytics_config
         self._msgbroker_config = msgbroker_config
         self._render_config = render_config
         self._perf_config = perf_config
@@ -371,6 +388,12 @@ class BulkVideoInputPool(TensorInputPool):
             )
             if self._kitti_config.tracker_kitti_output_dir:
                 flow = flow.attach(what="kitti_dump_probe", name="tracker_kitti_dump", properties={"tracker-kitti-output": True,"kitti-dir": self._kitti_config.tracker_kitti_output_dir})
+        if self._analytics_config:
+            flow = flow.analyze(
+                self._analytics_config.config_path,
+                enable=1,
+                gpu_id=self._analytics_config.gpu_id
+            )
 
         if self._perf_config.enable_fps_logs:
             flow = flow.attach(what="measure_fps_probe", name="fps_probe")
@@ -817,6 +840,18 @@ class DeepstreamBackend(ModelBackend):
         else:
             kitti_config = KittiConfig()
 
+        if "analytics_config" in model_config["parameters"]:
+            ac = model_config["parameters"]["analytics_config"]
+            config_path = self._correct_config_paths([ac["config_file_path"]])[0] if ac.get("config_file_path") else None
+            analytics_config = AnalyticsConfig(
+                config_path=config_path,
+                gpu_id=ac.get("gpu_id", device_id)
+            )
+            if not analytics_config:
+                logger.warning("DeepstreamBackend: analytics_config is not properly configured")
+        else:
+            analytics_config = AnalyticsConfig()
+
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
         require_extra_input = False
@@ -974,6 +1009,7 @@ class DeepstreamBackend(ModelBackend):
                 infer_config_paths=infer_config_paths,
                 preprocess_config_paths=preprocess_config_paths,
                 tracker_config=tracker_config,
+                analytics_config=analytics_config,
                 msgbroker_config=msgbroker_config,
                 render_config=render_config,
                 perf_config=perf_config,

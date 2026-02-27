@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -72,6 +72,9 @@ models:
       width: 960
       height: 544
       display_tracking_id: true
+    # analytics_config:
+    #   config_file_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-nvdsanalytics-test/config_nvdsanalytics.txt
+    #   gpu_id: 0
     # msgbroker_config:
     #   msgbroker_proto_lib_path: /opt/nvidia/deepstream/deepstream/lib/libnvds_kafka_proto.so
     #   msgbroker_conn_str: localhost;9092
