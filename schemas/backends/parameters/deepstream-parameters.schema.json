@@ -173,6 +173,24 @@
       },
       "additionalProperties": false
     },
+    "analytics_config": {
+      "type": "object",
+      "description": "Configuration for nvdsanalytics (ROI, line-crossing, overcrowding, direction). Absence means no analytics. Typically used after tracker. Refer to https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvdsanalytics.html",
+      "required": ["config_file_path"],
+      "properties": {
+        "config_file_path": {
+          "type": "string",
+          "description": "Path to the analytics configuration file (YAML or TXT). Path is relative to model repository unless absolute."
+        },
+        "gpu_id": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "GPU device id for nvdsanalytics",
+          "default": 0
+        }
+      },
+      "additionalProperties": false
+    },
     "resize_video": {
       "type": "array",
       "description": "Target resolution for input stream resizing in format [height, width]. When specified, the input stream will be resized to these dimensions before processing. When tracker is being enabled, it requires a specific resolution consistent with the tracker config. In such cases, the resize_video configuration is required.",

@@ -82,6 +82,17 @@ tracker_config:
   display_tracking_id: true # Display tracking id in object text
 ```
 
+### Analytics Configuration
+
+Used for object activity analysis such as line-crossing, ROI enetering/exiting, crowding and direction detection.
+
+```yaml
+analytics_config:
+  config_file_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-nvdsanalytics-test/config_nvdsanalytics.txt # Path to the nvdsanalytics configuration file
+  gpu_id: 0 # GPU core id for analytics running
+```
+
+
 ### Message Broker Configuration
 
 Used to send inference data over the cloud using nvmsgbroker and nvmsgconverter. Supports various message brokers like Kafka, MQTT, etc.
