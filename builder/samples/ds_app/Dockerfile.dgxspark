@@ -123,6 +123,10 @@ WORKDIR /workspace
 # match the generated pipeline artifact you want to deploy.
 ADD deepstream-app.tgz /workspace
 
+# Copy test data for CI/regression testing of this sample pipeline.
+# This is optional and specific to the ds_app sample setup.
+COPY test_data/* /workspace/test_data/
+
 ## Set Environment variables required for DeepStream runtime.
 # Make sure DeepStream GStreamer plugins and libraries are discoverable.
 ENV GST_PLUGIN_PATH=/opt/nvidia/deepstream/deepstream/lib/gst-plugins
