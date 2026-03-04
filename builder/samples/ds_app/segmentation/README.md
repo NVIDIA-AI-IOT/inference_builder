@@ -78,7 +78,7 @@ python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml \
 
 **Note:** You can optionally set the `$SAMPLE_INPUT` environment variable to point to your input media directory if you want to perform inference on media files stored on your host machine.
 
-**Note:** By default the inference results are printed to the console, you can save it to a json file if appending `-s result.json` to the commands
+***Note:** To save the inference results, append the `-s result.json` option to your `docker run` command.
 
 ```bash
 # Update this with your actual samples directory path

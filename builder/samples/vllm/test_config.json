@@ -17,7 +17,8 @@
       "env": {
         "MODEL_REPO": "/workspace/model-repo",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
-        "HF_MODEL_NAME": "Qwen/Qwen3-VL-2B-Instruct"
+        "HF_MODEL_NAME": "Qwen/Qwen3-VL-2B-Instruct",
+        "HTTP_PORT": "8020"
       },
       "volumes": {
         "/tmp/model-repo": "/workspace/model-repo"
@@ -70,7 +71,8 @@
       "env": {
         "MODEL_REPO": "/workspace/model-repo",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
-        "HF_MODEL_NAME": "Qwen/Qwen3-VL-2B-Instruct"
+        "HF_MODEL_NAME": "Qwen/Qwen3-VL-2B-Instruct",
+        "HTTP_PORT": "8021"
       },
       "volumes": {
         "/tmp/model-repo": "/workspace/model-repo"
@@ -130,7 +132,8 @@
       "env": {
         "MODEL_REPO": "/workspace/model-repo",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
-        "HF_MODEL_NAME": "nvidia/Cosmos-Reason2-2B"
+        "HF_MODEL_NAME": "nvidia/Cosmos-Reason2-2B",
+        "HTTP_PORT": "8022"
       },
       "volumes": {
         "/tmp/model-repo": "/workspace/model-repo"
@@ -183,7 +186,8 @@
       "env": {
         "MODEL_REPO": "/workspace/model-repo",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics",
-        "HF_MODEL_NAME": "nvidia/Cosmos-Reason2-2B"
+        "HF_MODEL_NAME": "nvidia/Cosmos-Reason2-2B",
+        "HTTP_PORT": "8023"
       },
       "volumes": {
         "/tmp/model-repo": "/workspace/model-repo"

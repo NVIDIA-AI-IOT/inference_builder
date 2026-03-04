@@ -1759,6 +1759,8 @@ class DockerBuildTester:
                             logger.warning("Health probe request timed out")
                         else:
                             logger.info(f"Health probe URLError: {e.reason}, retrying...")
+                    except (TimeoutError, socket.timeout):
+                        logger.warning("Health probe request timed out, retrying...")
                     time.sleep(2)
 
                 client_stdout = ""

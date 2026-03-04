@@ -100,7 +100,7 @@ python builder/main.py builder/samples/ds_app/gdino/ds_gdino.yaml \
 
 **Note:** You can optionally set the `$SAMPLE_INPUT` environment variable to point to your input media directory if you want to perform inference on media files stored on your host machine.
 
-**Note:** By default, inference results are printed to the console. To save them instead, append the `-s result.json` option to your `docker run` command.
+**Note:** To save the inference results, append the `-s result.json` option to your `docker run` command.
 
 ```bash
 # Update this with your actual samples directory path
@@ -138,7 +138,6 @@ docker run --rm --network=host --gpus all --privileged --runtime=nvidia \
     --media-url /opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4 \
     --mime video/mp4 \
     --text "car,person"
-    -s
 ```
 
 ### Run with RTSP input
@@ -161,7 +160,6 @@ docker run --rm --network=host --gpus all --privileged --runtime=nvidia \
     --media-url rtsp://<url_path> \
     --mime video/mp4 \
     --text "car,person"
-    -s
 ```
 
 ### Run with image input
@@ -183,5 +181,4 @@ docker run --rm --network=host --gpus all --privileged --runtime=nvidia \
     --media-url /sample_input/test.jpg \
     --mime image/jpeg \
     --text "car,person"
-    -s
 ```
