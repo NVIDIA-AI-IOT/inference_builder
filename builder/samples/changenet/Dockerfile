@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,7 @@
 # accelerated ImageInputDataFlow and CVCUDA for pre-processing.
 
 # Pull the base image from Deepstream Triton multiarch image.
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1.2-ma" AS builder_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.4-ma" AS builder_base
 
 # Install the Python dependencies required by THIS changenet sample
 # backend. These versions are pinned for reproducibility and may be
@@ -75,7 +75,7 @@ RUN touch /workspace/start_server.sh && \
 	#!/usr/bin/env bash
 	set -eu
 
-	# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+	# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 	# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
     python3 /workspace/__main__.py & tritonserver --model-repository /workspace/model_repo
 #    while true; do sleep 5; done

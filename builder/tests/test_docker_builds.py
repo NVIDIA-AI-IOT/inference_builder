@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1759,6 +1759,8 @@ class DockerBuildTester:
                             logger.warning("Health probe request timed out")
                         else:
                             logger.info(f"Health probe URLError: {e.reason}, retrying...")
+                    except (TimeoutError, socket.timeout):
+                        logger.warning("Health probe request timed out, retrying...")
                     time.sleep(2)
 
                 client_stdout = ""

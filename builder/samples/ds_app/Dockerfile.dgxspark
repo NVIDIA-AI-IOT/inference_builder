@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +16,16 @@
 # Sample Dockerfile for a DeepStream TAO ds_app-style pipeline on DGX
 # with Spark, using a Triton-enabled DeepStream base image and a PyTorch
 # source image for copying Python packages.
+#
+# Target platform: aarch64 / NVIDIA server-grade ARM64 (GB300, DGX Spark)
+# Intended for NVIDIA ARM64 server systems such as GB300 NVL and DGX Spark
+# that run the arm-sbsa DeepStream variant. Like the Tegra variant, PyTorch
+# packages are copied from the NGC pytorch image. Unlike Tegra, this targets
+# high-performance datacenter ARM64 hardware (SBSA) rather than embedded
+# Jetson devices.
 FROM "nvcr.io/nvidia/pytorch:25.08-py3" AS pytorch_src
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-arm-sbsa-spark-26.02.2" AS inference_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:arm-sbsa-9.0.0-arm-sbsa-spark-26.02.6-224" AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -122,6 +129,10 @@ WORKDIR /workspace
 # running the builder with tarball output enabled, and its name should
 # match the generated pipeline artifact you want to deploy.
 ADD deepstream-app.tgz /workspace
+
+# Copy test data for CI/regression testing of this sample pipeline.
+# This is optional and specific to the ds_app sample setup.
+COPY test_data/* /workspace/test_data/
 
 ## Set Environment variables required for DeepStream runtime.
 # Make sure DeepStream GStreamer plugins and libraries are discoverable.

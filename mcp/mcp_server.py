@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -188,6 +188,20 @@ class InferenceBuilderMCPServer:
                             "Covers command line arguments, configuration file format, "
                             "model definitions, preprocessors/postprocessors, server configuration, "
                             "routing, and runtime environment variables."
+                        ),
+                        mimeType="text/markdown"
+                    ),
+                    Resource(
+                        uri="docs://platform-guide.md",
+                        name="Platform Guide",
+                        description=(
+                            "Hardware platform selection guide. "
+                            "Maps target hardware (x86_64 datacenter, Jetson/Tegra, arm-sbsa servers "
+                            "such as GB10/GB300/DGX Spark) to the correct Dockerfile template, "
+                            "DeepStream base image, GPU architecture flags, PyTorch install method, "
+                            "and CUDA version. **Read this first** when building a Docker image to "
+                            "avoid runtime failures caused by mismatched base images or missing "
+                            "platform libraries (e.g. libnvbufsurface on Tegra)."
                         ),
                         mimeType="text/markdown"
                     ),
@@ -424,6 +438,7 @@ class InferenceBuilderMCPServer:
                     "docs://README.md": project_root / "README.md",
                     "docs://mcp/README-MCP.md": project_root / "mcp" / "README-MCP.md",
                     "docs://usage.md": project_root / "doc" / "usage.md",
+                    "docs://platform-guide.md": project_root / "doc" / "platform-guide.md",
                 }
                 if uri in docs_mappings:
                     file_path = docs_mappings[uri]
@@ -704,9 +719,12 @@ class InferenceBuilderMCPServer:
                                 "type": "string",
                                 "description": (
                                     "Path to Dockerfile. Always generate the Dockerfile based on user "
-                                    "requirements and 'samples://dockerfile/*' resources. Consider model "
-                                    "backend (triton, vllm, tensorrt-llm, deepstream), server type "
-                                    "(serverless, fastapi), and hardware platform (x86_64, Tegra/Jetson). "
+                                    "requirements and 'samples://dockerfile/*' resources. "
+                                    "**Before choosing a Dockerfile template, read 'docs://platform-guide.md' "
+                                    "to identify the correct base image and template for the target hardware** "
+                                    "(x86_64 datacenter, Jetson/Tegra, or arm-sbsa servers like GB10/GB300/DGX Spark). "
+                                    "Consider model backend (triton, vllm, tensorrt-llm, deepstream), server type "
+                                    "(serverless, fastapi), and hardware platform. "
                                     "The Dockerfile MUST be placed in the output_dir where the generated "
                                     "pipeline resides, as its parent directory becomes the Docker build "
                                     "context for properly transferring the pipeline code into the container."
@@ -1823,7 +1841,7 @@ class InferenceBuilderMCPServer:
                 # network_type 100 (custom) doesn't need a parse function name
 
         # Generate YAML content with header
-        header = """# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+        header = """# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

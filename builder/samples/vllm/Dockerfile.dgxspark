@@ -1,0 +1,102 @@
+# RTVI VLM – arm-sbsa (DGX Spark / GB10) Dockerfile
+#
+# Combines:
+#  - NVIDIA vLLM NGC image  (inference runtime + Python stack)
+#  - DeepStream arm-sbsa-spark image  (NVDEC HW decoder + GStreamer plugins)
+#
+# Target hardware: NVIDIA GB10 / GB300 / DGX Spark (aarch64 arm-sbsa)
+
+# ── Stage 1: DeepStream arm-sbsa libraries ───────────────────────────────────
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:arm-sbsa-9.0.0-arm-sbsa-spark-26.02.6-224" AS ds_stage
+
+# ── Stage 2: vLLM inference base ─────────────────────────────────────────────
+FROM nvcr.io/nvidia/vllm:26.02-py3 AS inference_base
+
+ENV NVIDIA_DRIVER_CAPABILITIES=$NVIDIA_DRIVER_CAPABILITIES,video
+
+# GStreamer plugins and DeepStream runtime dependencies for RTSP + NVDEC.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    libyaml-cpp-dev \
+    libgstrtspserver-1.0-0 \
+    libjsoncpp25 \
+    libgles2 \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy DeepStream runtime from the arm-sbsa stage.
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/lib          /opt/nvidia/deepstream/deepstream-9.0/lib
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/bin          /opt/nvidia/deepstream/deepstream-9.0/bin
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.sh         /opt/nvidia/deepstream/deepstream-9.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.txt        /opt/nvidia/deepstream/deepstream-9.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/README*      /opt/nvidia/deepstream/deepstream-9.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.pdf        /opt/nvidia/deepstream/deepstream-9.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/service-maker /opt/nvidia/deepstream/deepstream-9.0/service-maker
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/samples/streams/* /opt/nvidia/deepstream/deepstream-9.0/samples/streams/
+
+# CUDA NPP and nvjpeg libs required by DeepStream GStreamer plugins
+# (nvvideoconvert, nvdsgst_image, etc.) – sbsa-linux path / CUDA 13.0.
+COPY --from=ds_stage /usr/local/cuda-13.0/targets/sbsa-linux/lib/libnpp*.so*    /usr/local/lib/
+COPY --from=ds_stage /usr/local/cuda-13.0/targets/sbsa-linux/lib/libnvjpeg*.so* /usr/local/lib/
+
+# On arm-sbsa (DGX Spark / GB10), pyservicemaker/_pydeepstream.so requires
+# libnvbufsurface.so.1.0.0 from the Tegra BSP.  Copy only that lib and its
+# direct ldd dependencies; omit all NVIDIA driver-level libs (NVML, CUDA,
+# libnvcuextend, libnvidia-rmapi-tegra, libnvrm_gpu, etc.) which conflict
+# with the host-injected 580.95.05 / CUDA-compat 590 stack at container runtime.
+RUN mkdir -p /usr/lib/aarch64-linux-gnu/tegra
+COPY --from=ds_stage \
+    /usr/lib/aarch64-linux-gnu/tegra/libnvbufsurface.so.1.0.0 \
+    /usr/lib/aarch64-linux-gnu/tegra/libnvbufsurface.so \
+    /usr/lib/aarch64-linux-gnu/tegra/libnvrm_mem.so \
+    /usr/lib/aarch64-linux-gnu/tegra/libnvrm_surface.so \
+    /usr/lib/aarch64-linux-gnu/tegra/libnvrm_chip.so \
+    /usr/lib/aarch64-linux-gnu/tegra/libnvos.so \
+    /usr/lib/aarch64-linux-gnu/tegra/libnvbuf_fdmap.so.1.0.0 \
+    /usr/lib/aarch64-linux-gnu/tegra/libnvdsbufferpool.so.1.0.0 \
+    /usr/lib/aarch64-linux-gnu/tegra/libnvdsbufferpool.so \
+    /usr/lib/aarch64-linux-gnu/tegra/libnvbufsurftransform.so.1.0.0 \
+    /usr/lib/aarch64-linux-gnu/tegra/libnvbufsurftransform.so \
+    /usr/lib/aarch64-linux-gnu/tegra/libnvid_mapper.so.1.0.0 \
+    /usr/lib/aarch64-linux-gnu/tegra/libnvid_mapper.so \
+    /usr/lib/aarch64-linux-gnu/tegra/
+RUN ldconfig
+
+RUN /opt/nvidia/deepstream/deepstream-9.0/install.sh
+RUN ln -sf deepstream-9.0 /opt/nvidia/deepstream/deepstream || true
+
+# Python packages required by the Qwen3-VL vLLM pipeline.
+RUN --mount=type=cache,target=/root/.cache/pip pip install \
+    qwen-vl-utils==0.0.8 \
+    python-multipart==0.0.9 \
+    aiofiles==23.2.1 \
+    aiohttp==3.11.0 \
+    annotated-types==0.7.0 \
+    python-magic==0.4.27 \
+    numpy==1.26.4 \
+    omegaconf==2.3.0
+
+WORKDIR /workspace
+
+# The inference pipeline tarball produced by Inference Builder
+# (generate_inference_pipeline with tar_output=true).
+ADD rtvi_vlm.tgz /workspace
+
+# ── Runtime environment ───────────────────────────────────────────────────────
+# Include the Tegra BSP path that the NVIDIA container toolkit injects at
+# runtime on arm-sbsa (GB10/GB300/DGX Spark) systems. libnvbufsurface lives
+# there and is needed by pyservicemaker / DeepStream GStreamer plugins.
+ENV LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream/lib:/usr/lib/aarch64-linux-gnu/tegra
+ENV NVSTREAMMUX_ADAPTIVE_BATCHING=yes
+ENV NVIDIA_DRIVER_CAPABILITIES=$NVIDIA_DRIVER_CAPABILITIES,video
+ENV TORCH_CUDA_ARCH_LIST="8.0 8.6 9.0 10.0 11.0 12.0"
+ENV CUDA_CACHE_DISABLE=0
+
+RUN touch /workspace/start_server.sh && \
+    chmod a+rx /workspace/start_server.sh && \
+    printf '#!/usr/bin/env bash\nset -eu\npython3 /workspace/__main__.py\n' \
+    > /workspace/start_server.sh
+
+ENTRYPOINT ["/workspace/start_server.sh"]
+CMD []

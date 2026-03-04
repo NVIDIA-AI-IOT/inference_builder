@@ -96,3 +96,18 @@ New features can always be added through follow-up prompts:
 ***Write a detailed documentation for the project to ensure seamless and consistent future work.***
 
 Subsequently, the project remains open, allowing for continued adjustment, addition, or removal of features using the same methods.
+
+#### 4.5. YOLO26s Detection Deepstream Application
+
+***Download the YOLO26s detection model using the ultralytics library, then convert the model to ONNX model that supports dynamic batch, in Python virtual environment. Write a DeepStream custom parser for the model. Use deepstream inference builder tool to create an object detection pipeline with the model and custom parser. Do a smoke test once done.***
+
+The Agent is expected to draft a plan based on the prompt and generates required files accordingly (file names may differ in each run unless explicitly specified):
+
+- yolo26s_pipeline.yaml (pipeline configuration yaml)
+- Dockerfile
+- nvdsinfer_config.yaml (nvinfer configuration yaml)
+- yolo26s-detection.tgz (python code for inference)
+- models/yolo26s (folder for required model files)
+- custom_parser (DeepStream custom parser for the model)
+
+The Agent is expected to fix all the build and runtime errors while doing the smoke test.

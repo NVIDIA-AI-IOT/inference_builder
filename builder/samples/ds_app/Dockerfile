@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,14 +16,20 @@
 
 # Sample Dockerfile for a DeepStream TAO ds_app-style pipeline using
 # a Triton-enabled DeepStream base image.
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1.2-ma" AS inference_base
+#
+# Target platform: x86_64 (amd64)
+# Intended for standard datacenter/workstation GPUs (e.g. A100, H100, B200,
+# RTX series) running Linux on x86_64. Uses pre-built PyTorch wheels from
+# PyTorch's CUDA index and links against x86_64 system libraries.
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.4-ma" AS inference_base
 
 # Install Python dependencies required by THIS ds_app sample. These
 # versions are pinned for reproducibility and can be adjusted for
 # other pipelines or environments.
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
-    torch==2.7.0 \
+    --extra-index-url https://download.pytorch.org/whl/cu130 \
+    torch==2.9.0+cu130 \
     numpy==1.26.4 \
     omegaconf==2.3.0 \
     transformers==4.54.1 \
