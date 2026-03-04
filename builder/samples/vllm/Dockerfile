@@ -11,22 +11,48 @@
 # Sample Dockerfile for a vLLM-based vision-language pipeline using a
 # Triton-enabled DeepStream base image for accelerated video decoding.
 # This is specific to the vllm sample in this repository.
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.1.2-ma" AS inference_base
+# Stage 1: pull in DeepStream libraries, binaries, and sample assets.
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.4-ma" AS ds_stage
 
-# Install Python dependencies required by THIS vllm sample. These
+FROM nvcr.io/nvidia/vllm:26.02-py3 AS inference_base
+
+ENV NVIDIA_DRIVER_CAPABILITIES $NVIDIA_DRIVER_CAPABILITIES,video
+
+# Install GStreamer plugins and DeepStream runtime dependencies needed
+# for hardware-accelerated decoding and RTSP support.
+RUN apt update && apt install -y --no-install-recommends gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+    libyaml-cpp-dev libgstrtspserver-1.0-0 libjsoncpp25 libgles2 pkg-config
+
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/lib /opt/nvidia/deepstream/deepstream-9.0/lib
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/bin /opt/nvidia/deepstream/deepstream-9.0/bin
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.sh /opt/nvidia/deepstream/deepstream-9.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.txt /opt/nvidia/deepstream/deepstream-9.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/README* /opt/nvidia/deepstream/deepstream-9.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.pdf /opt/nvidia/deepstream/deepstream-9.0/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/service-maker /opt/nvidia/deepstream/deepstream-9.0/service-maker
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/samples/streams/* /opt/nvidia/deepstream/deepstream-9.0/samples/streams/
+
+# Copy CUDA NPP and nvjpeg libraries required by DeepStream GStreamer
+# plugins (nvvideoconvert, nvdsgst_image, etc.) that are absent from
+# the vLLM base image.
+COPY --from=ds_stage /usr/local/cuda-13.1/targets/x86_64-linux/lib/libnpp*.so* /usr/local/lib/
+COPY --from=ds_stage /usr/local/cuda-13.1/targets/x86_64-linux/lib/libnvjpeg*.so* /usr/local/lib/
+RUN ldconfig
+
+RUN /opt/nvidia/deepstream/deepstream-9.0/install.sh
+RUN ln -sf deepstream-9.0 /opt/nvidia/deepstream/deepstream || true
+
+# Install Python dependencies required by THIS Qwen sample. These
 # versions are pinned for reproducibility and can be adjusted for
 # other pipelines or environments.
-RUN --mount=type=cache,target=/root/.cache/pip pip install --ignore-installed packaging && \
-    pip install qwen-vl-utils[decord]==0.0.14 \
+RUN --mount=type=cache,target=/root/.cache/pip pip install qwen-vl-utils[decord]==0.0.8 \
     python-multipart==0.0.9 \
     aiofiles==23.2.1 \
     aiohttp==3.11.0 \
     annotated-types==0.7.0 \
     python-magic==0.4.27 \
     numpy==1.26.4 \
-    omegaconf==2.3.0 \
-    vllm==0.11.0 \
-    transformers==4.57.3
+    omegaconf==2.3.0
 
 WORKDIR /workspace
 

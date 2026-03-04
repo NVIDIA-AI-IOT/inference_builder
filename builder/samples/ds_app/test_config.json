@@ -172,7 +172,7 @@
       "SERVER_TYPE": "serverless"
     },
     "test_config": {
-      "default_enable": false,
+      "default_enable": true,
       "timeout": 1000,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
