@@ -325,7 +325,7 @@ test:ds_app:
         echo "No requirements.txt found, skipping"
       fi
     # Create model repository directory
-    - mkdir -p "$MODEL_REPO"
+    - mkdir -p "$MODEL_REPO" && chmod 777 "$MODEL_REPO"
   script:
     - echo "Running DeepStream app tests with automatic model download..."
     - cd builder/tests
@@ -461,7 +461,7 @@ test:qwen:
         echo "No requirements.txt found, skipping"
       fi
     # Create model repository directory
-    - mkdir -p "$MODEL_REPO"
+    - mkdir -p "$MODEL_REPO" && chmod 777 "$MODEL_REPO"
   script:
     - echo "Running Qwen tests with automatic model download..."
     - cd builder/tests
@@ -531,7 +531,7 @@ test:tao_cv:
         echo "No requirements.txt found, skipping"
       fi
     # Create model repository directory
-    - mkdir -p "$MODEL_REPO"
+    - mkdir -p "$MODEL_REPO" && chmod 777 "$MODEL_REPO"
   script:
     - echo "Running TAO CV tests with automatic model download..."
     - cd builder/tests
@@ -597,7 +597,7 @@ test:cradio:
         echo "No requirements.txt found, skipping"
       fi
     # Create model repository directory
-    - mkdir -p "$MODEL_REPO"
+    - mkdir -p "$MODEL_REPO" && chmod 777 "$MODEL_REPO"
   script:
     - echo "Running C-RADIOv3-H + PeopleNet pipeline tests..."
     - cd builder/tests
@@ -667,7 +667,7 @@ test:changenet:
         echo "No requirements.txt found, skipping"
       fi
     # Create model repository directory
-    - mkdir -p "$MODEL_REPO"
+    - mkdir -p "$MODEL_REPO" && chmod 777 "$MODEL_REPO"
   script:
     - echo "Running ChangeNet tests with automatic model download..."
     - cd builder/tests

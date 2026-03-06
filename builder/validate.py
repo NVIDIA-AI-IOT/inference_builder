@@ -15,6 +15,7 @@
 
 import argparse
 import json
+import math
 import os
 import sys
 import subprocess
@@ -575,6 +576,70 @@ class CvValidator:
 
         return abs(a - b) <= (atol + rtol * max(abs(a), abs(b)))
 
+    @staticmethod
+    def compute_iou(box1: List, box2: List) -> float:
+        """Compute Intersection over Union between two bounding boxes.
+
+        Args:
+            box1: First bounding box as [x1, y1, x2, y2]
+            box2: Second bounding box as [x1, y1, x2, y2]
+
+        Returns:
+            float: IoU value in [0.0, 1.0]
+        """
+        x1 = max(box1[0], box2[0])
+        y1 = max(box1[1], box2[1])
+        x2 = min(box1[2], box2[2])
+        y2 = min(box1[3], box2[3])
+
+        intersection = max(0, x2 - x1) * max(0, y2 - y1)
+
+        area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+        area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+        union = area1 + area2 - intersection
+
+        if union == 0:
+            return 0.0
+        return intersection / union
+
+    @staticmethod
+    def tolerance_to_iou_params(tolerance: float) -> tuple:
+        """Project numeric tolerance to IoU matching parameters.
+
+        Uses two mathematical projections:
+
+        1. iou_threshold = 1 / (1 + sqrt(tolerance))
+           Inverse-sqrt decay — maps tolerance to the (0, 1] range.
+           The square root softens the curve so that moderate tolerances
+           still produce workable IoU thresholds for small objects, where
+           even 1-pixel shifts cause large IoU drops.
+           At tolerance=1.0 this yields 0.5, the standard PASCAL VOC threshold.
+
+        2. max_unmatched = floor(log2(1 + tolerance))
+           Logarithmic growth — allows more unmatched detections as tolerance
+           increases, but grows slowly to prevent over-permissiveness.
+
+        Reference table:
+            tolerance   iou_threshold   max_unmatched
+            0           1.000           0
+            1e-5        ≈1.000          0
+            0.01        ≈0.909          0
+            0.1         ≈0.760          0
+            0.5         ≈0.586          0
+            1.0         0.500           1
+            3.0         ≈0.366          2
+            7.0         ≈0.274          3
+
+        Args:
+            tolerance: The numeric float-comparison tolerance
+
+        Returns:
+            Tuple of (iou_threshold, max_unmatched)
+        """
+        iou_threshold = 1.0 / (1.0 + math.sqrt(tolerance))
+        max_unmatched = int(math.floor(math.log2(1.0 + tolerance))) if tolerance > 0 else 0
+        return iou_threshold, max_unmatched
+
     @classmethod
     def compare_lists(cls, list1: List[Any], list2: List[Any], tolerance: float) -> bool:
         """Compare two lists with tolerance for float values.
@@ -663,55 +728,216 @@ class CvValidator:
         return sorted(list1) == sorted(list2)
 
     @classmethod
-    def compare_inference_result(cls, actual: Dict, expected: Dict, tolerance: float) -> bool:
+    def match_detections(cls, actual_bboxes: List[List], expected_bboxes: List[List],
+                         iou_threshold: float = 0.5,
+                         actual_labels: List = None,
+                         expected_labels: List = None) -> tuple:
+        """Match actual detections to expected detections using greedy IoU matching.
+
+        Pairs detections by highest IoU first. A pair is only accepted if
+        IoU >= iou_threshold. When labels are provided, pairs must also
+        have matching labels — this prevents cross-matching at locations
+        where multiple classes are detected on the same bbox.
+
+        Args:
+            actual_bboxes: List of actual bounding boxes [x1, y1, x2, y2]
+            expected_bboxes: List of expected bounding boxes [x1, y1, x2, y2]
+            iou_threshold: Minimum IoU to consider a valid match
+            actual_labels: Optional per-detection labels for actual results
+            expected_labels: Optional per-detection labels for expected results
+
+        Returns:
+            Tuple of (matches, unmatched_actual, unmatched_expected) where
+            matches is a list of (actual_idx, expected_idx, iou) tuples
+        """
+        use_labels = actual_labels is not None and expected_labels is not None
+
+        candidates = []
+        for i, a_box in enumerate(actual_bboxes):
+            for j, e_box in enumerate(expected_bboxes):
+                if use_labels and actual_labels[i] != expected_labels[j]:
+                    continue
+                iou = cls.compute_iou(a_box, e_box)
+                if iou >= iou_threshold:
+                    candidates.append((iou, i, j))
+
+        candidates.sort(reverse=True)
+
+        matched_actual = set()
+        matched_expected = set()
+        matches = []
+
+        for iou, i, j in candidates:
+            if i not in matched_actual and j not in matched_expected:
+                matches.append((i, j, iou))
+                matched_actual.add(i)
+                matched_expected.add(j)
+
+        unmatched_actual = set(range(len(actual_bboxes))) - matched_actual
+        unmatched_expected = set(range(len(expected_bboxes))) - matched_expected
+
+        return matches, unmatched_actual, unmatched_expected
+
+    @classmethod
+    def _compare_detections_iou(cls, actual: Dict, expected: Dict, tolerance: float,
+                                iou_threshold: float, max_unmatched: int) -> bool:
+        """Compare detection results using IoU-based matching.
+
+        Matches detections holistically — each detection's bbox, label, and
+        probability are validated together as a unit.
+
+        Args:
+            actual: Actual inference result dict (must contain 'bboxes')
+            expected: Expected inference result dict (must contain 'bboxes')
+            tolerance: Float tolerance for probability comparison
+            iou_threshold: Minimum IoU for a bbox match
+            max_unmatched: Max total unmatched detections allowed (actual + expected)
+
+        Returns:
+            bool: True if detection results match within constraints
+        """
+        per_detection_keys = {'bboxes', 'probs', 'labels', 'masks', 'objects'}
+
+        for key in actual:
+            if key in per_detection_keys:
+                continue
+            actual_value = actual[key]
+            expected_value = expected[key]
+
+            if key == 'shape':
+                if actual_value != expected_value:
+                    print(f"  ✗ {key} mismatch: {actual_value} vs {expected_value}")
+                    return False
+                print(f"  ✓ {key} passed")
+                continue
+
+            if isinstance(actual_value, list):
+                if not cls.compare_lists(actual_value, expected_value, tolerance):
+                    print(f"  ✗ {key} mismatch")
+                    return False
+                print(f"  ✓ {key} passed")
+                continue
+
+            if actual_value != expected_value:
+                print(f"  ✗ {key} mismatch: {actual_value} vs {expected_value}")
+                return False
+
+        actual_labels = actual.get('labels')
+        expected_labels = expected.get('labels')
+        matches, unmatched_actual, unmatched_expected = cls.match_detections(
+            actual['bboxes'], expected['bboxes'], iou_threshold,
+            actual_labels, expected_labels
+        )
+
+        total_unmatched = len(unmatched_actual) + len(unmatched_expected)
+        if total_unmatched > max_unmatched:
+            print(f"  ✗ Too many unmatched detections: "
+                  f"{len(unmatched_actual)} extra in actual + "
+                  f"{len(unmatched_expected)} missing from expected "
+                  f"= {total_unmatched} (max allowed: {max_unmatched})")
+            for idx in sorted(unmatched_actual):
+                prob = actual['probs'][idx] if 'probs' in actual else 'N/A'
+                label = actual['labels'][idx] if 'labels' in actual else 'N/A'
+                print(f"    Extra actual[{idx}]: bbox={actual['bboxes'][idx]}, "
+                      f"prob={prob}, label={label}")
+            for idx in sorted(unmatched_expected):
+                prob = expected['probs'][idx] if 'probs' in expected else 'N/A'
+                label = expected['labels'][idx] if 'labels' in expected else 'N/A'
+                print(f"    Missing expected[{idx}]: bbox={expected['bboxes'][idx]}, "
+                      f"prob={prob}, label={label}")
+            return False
+
+        if unmatched_actual or unmatched_expected:
+            print(f"  ⚠ Unmatched detections within tolerance: "
+                  f"{len(unmatched_actual)} extra in actual, "
+                  f"{len(unmatched_expected)} missing from expected")
+
+        for actual_idx, expected_idx, iou in matches:
+            if 'probs' in actual and 'probs' in expected:
+                a_prob = actual['probs'][actual_idx]
+                e_prob = expected['probs'][expected_idx]
+                if isinstance(a_prob, (int, float)) and isinstance(e_prob, (int, float)):
+                    if not cls.is_float_equal(float(a_prob), float(e_prob), tolerance):
+                        print(f"  ✗ prob mismatch at IoU={iou:.3f}: "
+                              f"actual[{actual_idx}]={a_prob} vs expected[{expected_idx}]={e_prob}")
+                        return False
+
+            if 'labels' in actual and 'labels' in expected:
+                a_label = actual['labels'][actual_idx]
+                e_label = expected['labels'][expected_idx]
+                if a_label != e_label:
+                    print(f"  ✗ label mismatch at IoU={iou:.3f}: "
+                          f"actual[{actual_idx}]={a_label} vs expected[{expected_idx}]={e_label}")
+                    return False
+
+            if 'masks' in actual and 'masks' in expected:
+                a_masks = actual['masks']
+                e_masks = expected['masks']
+                if a_masks and e_masks and \
+                   len(a_masks) > actual_idx and len(e_masks) > expected_idx:
+                    a_mask = a_masks[actual_idx]
+                    e_mask = e_masks[expected_idx]
+                    if isinstance(a_mask, list) and isinstance(e_mask, list):
+                        if not cls.compare_lists(a_mask, e_mask, tolerance):
+                            print(f"  ✗ mask mismatch at IoU={iou:.3f}: "
+                                  f"actual[{actual_idx}] vs expected[{expected_idx}]")
+                            return False
+
+        print(f"  ✓ detections passed: {len(matches)} matched by IoU "
+              f"(iou_threshold={iou_threshold}, prob_tolerance={tolerance}, "
+              f"unmatched={total_unmatched}/{max_unmatched})")
+        return True
+
+    @classmethod
+    def compare_inference_result(cls, actual: Dict, expected: Dict, tolerance: float,
+                                 iou_threshold: float = None,
+                                 max_unmatched: int = None) -> bool:
         """Compare inference result dictionaries with special handling for different field types.
 
-        Examples:
-            # Basic comparison
-            actual = {
-                'shape': [1, 2, 3],
-                'bboxes': [[10.001, 20.002], [30.003, 40.004]],
-                'labels': ['car', 'person'],
-                'scores': [0.9001, 0.8002]
-            }
-            expected = {
-                'shape': [1, 2, 3],
-                'bboxes': [[30.002, 40.003], [10.002, 20.001]],
-                'labels': ['person', 'car'],
-                'scores': [0.8001, 0.9002]
-            }
-            assert compare_inference_result(actual, expected, 1e-2) == True
+        When bboxes are present, uses IoU-based matching to pair detections
+        holistically (bbox + label + prob as a unit). Otherwise falls back
+        to independent list comparison.
 
-            # Different shapes (should fail)
-            actual = {'shape': [1, 2, 3]}
-            expected = {'shape': [1, 2, 4]}
-            assert compare_inference_result(actual, expected, 1e-5) == False
+        If iou_threshold or max_unmatched are not provided, they are
+        automatically derived from tolerance via tolerance_to_iou_params().
 
         Args:
             actual: Dictionary containing actual inference results
             expected: Dictionary containing expected inference results
             tolerance: Float tolerance for comparing numeric values
+            iou_threshold: Minimum IoU to consider a bbox match (default: derived from tolerance)
+            max_unmatched: Max allowed unmatched detections (default: derived from tolerance)
 
         Returns:
             bool: True if dictionaries match within tolerance
         """
-        # Remove timestamp if present
         actual.pop('timestamp', None)
         expected.pop('timestamp', None)
 
         if actual.keys() != expected.keys():
             return False
 
+        if 'bboxes' in actual and actual['bboxes'] and expected.get('bboxes'):
+            if iou_threshold is None or max_unmatched is None:
+                derived_iou, derived_max = cls.tolerance_to_iou_params(tolerance)
+                if iou_threshold is None:
+                    iou_threshold = derived_iou
+                if max_unmatched is None:
+                    max_unmatched = derived_max
+                print(f"  IoU params (from tolerance={tolerance}): "
+                      f"iou_threshold={iou_threshold:.4f}, max_unmatched={max_unmatched}")
+            return cls._compare_detections_iou(
+                actual, expected, tolerance, iou_threshold, max_unmatched
+            )
+
         for key, actual_value in actual.items():
             expected_value = expected[key]
 
-            # Handle 'shape' specially - order matters
             if key == 'shape':
                 if actual_value != expected_value:
                     return False
                 continue
 
-            # Handle lists (bboxes, probs, labels)
             if isinstance(actual_value, list):
                 if not cls.compare_lists(actual_value, expected_value, tolerance):
                     return False
@@ -719,49 +945,25 @@ class CvValidator:
                     print(f"  ✓ {key} passed")
                     continue
 
-            # Handle other fields with direct comparison
             if actual_value != expected_value:
                 return False
 
         return True
 
     @classmethod
-    def compare_responses(cls, actual: Dict, expected: Dict, tolerance: float = 1e-5) -> bool:
+    def compare_responses(cls, actual: Dict, expected: Dict, tolerance: float = 1e-5,
+                          iou_threshold: float = None, max_unmatched: int = None) -> bool:
         """Compare actual and expected inference API responses.
 
-        Examples:
-            # Basic comparison
-            actual = {
-                'model_name': 'detector_v1',
-                'data': [
-                    {
-                        'shape': [1, 2, 3],
-                        'bboxes': [[10.001, 20.002]],
-                        'scores': [0.9001]
-                    }
-                ]
-            }
-            expected = {
-                'model_name': 'detector_v1',
-                'data': [
-                    {
-                        'shape': [1, 2, 3],
-                        'bboxes': [[10.002, 20.001]],
-                        'scores': [0.9002]
-                    }
-                ]
-            }
-            assert compare_responses(actual, expected, 1e-2) == True
-
-            # Different model names (should fail)
-            actual = {'model_name': 'detector_v1', 'data': []}
-            expected = {'model_name': 'detector_v2', 'data': []}
-            assert compare_responses(actual, expected) == False
+        If iou_threshold or max_unmatched are not provided, they are
+        automatically derived from tolerance via tolerance_to_iou_params().
 
         Args:
             actual: Dictionary containing actual API response
             expected: Dictionary containing expected API response
             tolerance: Float tolerance for comparing numeric values
+            iou_threshold: Minimum IoU for bbox matching (default: derived from tolerance)
+            max_unmatched: Max allowed unmatched detections (default: derived from tolerance)
 
         Returns:
             bool: True if responses match within tolerance
@@ -771,14 +973,13 @@ class CvValidator:
 
         for key, value in actual.items():
             if key == 'data':
-                # Compare data arrays
                 if len(actual['data']) != len(expected['data']):
                     return False
                 for actual_item, expected_item in zip(actual['data'], expected['data']):
-                    if not cls.compare_inference_result(actual_item, expected_item, tolerance):
+                    if not cls.compare_inference_result(actual_item, expected_item, tolerance,
+                                                       iou_threshold, max_unmatched):
                         return False
             else:
-                # Compare other top-level fields
                 if actual[key] != expected[key]:
                     return False
         return True
