@@ -56,7 +56,7 @@ def concat_tensors_in_dict(list_of_tensor_dicts: List) -> Dict:
 def stack_tensors_in_dict(list_of_tensor_dicts: List) -> Dict:
     """
     [{'k1': 'v1', 'k2': 'v2'}, {'k1': 'v3', 'k2': 'v4'}] ->
-    {'k1': ['v1', 'v2'], 'k2': ['v3', 'v4']}
+    {'k1': ['v1', 'v3'], 'k2': ['v2', 'v4']}
     """
     result = {}
 
@@ -79,15 +79,27 @@ def stack_tensors_in_dict(list_of_tensor_dicts: List) -> Dict:
 def split_tensor_in_dict(dict_of_tensor_list: Dict) -> List:
     """
     {'k1': ['v1', 'v2'], 'k2': ['v3', 'v4']} ->
-    [{'k1': 'v1', 'k2': 'v2'}, {'k1': 'v3', 'k2': 'v4'}]
+    [{'k1': 'v1', 'k2': 'v3'}, {'k1': 'v2', 'k2': 'v4'}]
     """
     values = [dict_of_tensor_list[k] for k in dict_of_tensor_list]
     result = []
-    length = min({len(v) for v in values})
+
+    def _len(v):
+        if isinstance(v, list):
+            return len(v)
+        if isinstance(v, np.ndarray) and v.ndim > 0:
+            return len(v)
+        return 1
+
+    length = min(_len(v) for v in values)
     for i in range(length):
-        result.append({ k: v[i] for k, v in dict_of_tensor_list.items()})
+        result.append({
+            k: v.item() if isinstance(v, np.ndarray) and v.ndim == 0 else v[i]
+            for k, v in dict_of_tensor_list.items()
+        })
 
     return result
+
 
 def convert_list(i: List, f: Callable):
     # If the item is a list, apply the function recursively
