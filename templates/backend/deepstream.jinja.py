@@ -323,7 +323,8 @@ class BulkVideoInputPool(TensorInputPool):
             if self._media_url_tensor_name and self._media_url_tensor_name in item:
                 url_list.append(str(item.pop(self._media_url_tensor_name)))
             elif self._source_tensor_name and self._source_tensor_name in data[0]:
-                source_config_file = item.pop(self._source_tensor_name).item()
+                val = item.pop(self._source_tensor_name)
+                source_config_file = val.item() if isinstance(val, np.ndarray) else str(val)
                 if not source_config_file.lower().endswith(('.yml', '.yaml')):
                     logger.error(
                         f"Source config file must be a YAML file: {source_config_file}"
