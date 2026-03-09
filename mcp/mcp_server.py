@@ -1443,32 +1443,21 @@ class InferenceBuilderMCPServer:
                             f"({hf_repo}) to {final_model_dir}"
                         )
 
-                        # Ensure git-lfs is installed (best-effort)
+                        # Use huggingface_hub.snapshot_download instead of git clone
+                        # so that actual binary weights are fetched via the HF CDN
+                        # (git clone only retrieves LFS pointer stubs unless a full
+                        # LFS pull is performed, which fails for gated repos without
+                        # proper credential configuration).
                         try:
-                            subprocess.run(
-                                ["git", "lfs", "install"],
-                                capture_output=True,
-                                text=True,
-                                timeout=30,
-                                check=False,
+                            from huggingface_hub import snapshot_download
+                            snapshot_download(
+                                repo_id=hf_repo,
+                                local_dir=str(final_model_dir),
+                                ignore_patterns=["*.pt", "*.bin", "original/*"],
                             )
-                        except Exception:
-                            # Non-fatal; cloning may still succeed
-                            pass
-
-                        hf_url = f"https://huggingface.co/{hf_repo}"
-                        clone_cmd = ["git", "clone", hf_url, str(final_model_dir)]
-                        result = subprocess.run(
-                            clone_cmd,
-                            capture_output=True,
-                            text=True,
-                            timeout=1800,
-                            check=False,
-                        )
-                        if result.returncode != 0:
+                        except Exception as e:
                             messages.append(
-                                f"❌ Failed to download HF model '{model_name}': "
-                                f"{result.stderr.strip()}"
+                                f"❌ Failed to download HF model '{model_name}': {e}"
                             )
                             continue
                     else:
