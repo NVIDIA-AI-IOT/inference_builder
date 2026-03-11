@@ -1524,6 +1524,8 @@ class ModelOperator:
         self._stop_event.set()
         if self._collector is not None:
             self._collector.stop()
+        if self._backend is not None:
+            self._backend.stop()
         self._in.clear()
         self._out.clear()
         self._preprocessors.clear()

@@ -729,24 +729,34 @@ class CvValidator:
 
     @classmethod
     def match_detections(cls, actual_bboxes: List[List], expected_bboxes: List[List],
-                         iou_threshold: float = 0.5) -> tuple:
+                         iou_threshold: float = 0.5,
+                         actual_labels: List = None,
+                         expected_labels: List = None) -> tuple:
         """Match actual detections to expected detections using greedy IoU matching.
 
         Pairs detections by highest IoU first. A pair is only accepted if
-        IoU >= iou_threshold.
+        IoU >= iou_threshold. When labels are provided, pairs must also
+        have matching labels — this prevents cross-matching at locations
+        where multiple classes are detected on the same bbox.
 
         Args:
             actual_bboxes: List of actual bounding boxes [x1, y1, x2, y2]
             expected_bboxes: List of expected bounding boxes [x1, y1, x2, y2]
             iou_threshold: Minimum IoU to consider a valid match
+            actual_labels: Optional per-detection labels for actual results
+            expected_labels: Optional per-detection labels for expected results
 
         Returns:
             Tuple of (matches, unmatched_actual, unmatched_expected) where
             matches is a list of (actual_idx, expected_idx, iou) tuples
         """
+        use_labels = actual_labels is not None and expected_labels is not None
+
         candidates = []
         for i, a_box in enumerate(actual_bboxes):
             for j, e_box in enumerate(expected_bboxes):
+                if use_labels and actual_labels[i] != expected_labels[j]:
+                    continue
                 iou = cls.compute_iou(a_box, e_box)
                 if iou >= iou_threshold:
                     candidates.append((iou, i, j))
@@ -812,8 +822,11 @@ class CvValidator:
                 print(f"  ✗ {key} mismatch: {actual_value} vs {expected_value}")
                 return False
 
+        actual_labels = actual.get('labels')
+        expected_labels = expected.get('labels')
         matches, unmatched_actual, unmatched_expected = cls.match_detections(
-            actual['bboxes'], expected['bboxes'], iou_threshold
+            actual['bboxes'], expected['bboxes'], iou_threshold,
+            actual_labels, expected_labels
         )
 
         total_unmatched = len(unmatched_actual) + len(unmatched_expected)
@@ -856,6 +869,19 @@ class CvValidator:
                     print(f"  ✗ label mismatch at IoU={iou:.3f}: "
                           f"actual[{actual_idx}]={a_label} vs expected[{expected_idx}]={e_label}")
                     return False
+
+            if 'masks' in actual and 'masks' in expected:
+                a_masks = actual['masks']
+                e_masks = expected['masks']
+                if a_masks and e_masks and \
+                   len(a_masks) > actual_idx and len(e_masks) > expected_idx:
+                    a_mask = a_masks[actual_idx]
+                    e_mask = e_masks[expected_idx]
+                    if isinstance(a_mask, list) and isinstance(e_mask, list):
+                        if not cls.compare_lists(a_mask, e_mask, tolerance):
+                            print(f"  ✗ mask mismatch at IoU={iou:.3f}: "
+                                  f"actual[{actual_idx}] vs expected[{expected_idx}]")
+                            return False
 
         print(f"  ✓ detections passed: {len(matches)} matched by IoU "
               f"(iou_threshold={iou_threshold}, prob_tolerance={tolerance}, "

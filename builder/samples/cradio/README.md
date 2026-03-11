@@ -100,7 +100,7 @@ Make sure you have the HuggingFace CLI installed and are logged in:
 
 ```bash
 pip install huggingface_hub
-huggingface-cli login
+hf auth login
 ```
 
 Or set the `HF_TOKEN` environment variable:
