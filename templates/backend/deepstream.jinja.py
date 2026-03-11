@@ -322,9 +322,13 @@ class BulkVideoInputPool(TensorInputPool):
                 item.pop(self._mime_tensor_name)
             if self._media_url_tensor_name and self._media_url_tensor_name in item:
                 url_list.append(str(item.pop(self._media_url_tensor_name)))
-            elif self._source_tensor_name and self._source_tensor_name in data[0]:
-                val = item.pop(self._source_tensor_name)
-                source_config_file = val.item() if isinstance(val, np.ndarray) else str(val)
+            elif self._source_tensor_name and self._source_tensor_name in item:
+                source_config_file = item.pop(self._source_tensor_name)
+                if not isinstance(source_config_file, str):
+                    logger.error(
+                        f"Source config value must be a string, got {type(source_config_file).__name__}: {source_config_file}"
+                    )
+                    return []
                 if not source_config_file.lower().endswith(('.yml', '.yaml')):
                     logger.error(
                         f"Source config file must be a YAML file: {source_config_file}"
@@ -1023,17 +1027,30 @@ class DeepstreamBackend(ModelBackend):
                 label_file_path=label_file_path,
                 model_home=self._model_home
             )
-            if not all(os.path.exists(e) for e in engine_files):
-                # generate the engine files
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    # Write test data to a temporary file
-                    temp_data_path = os.path.join(temp_dir, 'test.png')
-                    with open(temp_data_path, 'wb') as f:
-                        f.write(png_data)
-                    warmup_data = {self._media_url_tensor_name: temp_data_path}
-                    indices = in_pool.submit([warmup_data])
-                    results = output.collect(indices)
+
+            # build tensorrt engine if not exist
+            if not all (os.path.exists(e) for e in engine_files):
+                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as f:
+                    f.write(jpg_data)
+                    warmup_video_path = f.name
+                # Disable perf/render probes for warmup to avoid leaked FPS reporters
+                in_pool._perf_config = PerfConfig()
+                in_pool._render_config = RenderConfig()
+                try:
+                    logger.info("Video decoder warming up - building TensorRT engine")
+                    warmup_item = {self._media_url_tensor_name: warmup_video_path}
+                    if self._mime_tensor_name:
+                        warmup_item[self._mime_tensor_name] = "video/mp4"
+                    indices = in_pool.submit([warmup_item])
+                    if indices:
+                        results = output.collect(indices)
+                        logger.info(f"Video warm up done: {results}")
                     output.reset()
+                    in_pool.stop("warmup")
+                finally:
+                    in_pool._perf_config = perf_config
+                    in_pool._render_config = render_config
+                    os.unlink(warmup_video_path)
 
         self._in_pools[media] = in_pool
         self._outputs[media] = output
@@ -1111,12 +1128,18 @@ class DeepstreamBackend(ModelBackend):
             if media == "image":
                 break
 
-    def __del__(self):
+    def stop(self):
         for input_pool in self._in_pools.values():
             input_pool.stop("Finalized")
         for pipeline in self._pipelines.values():
             pipeline.stop()
             pipeline.wait()
+        self._in_pools.clear()
+        self._pipelines.clear()
+        super().stop()
+
+    def __del__(self):
+        self.stop()
 
     def _generate_engine_name(self, config_path: str, device_id: int, batch_size: int):
         def network_mode_to_string(network_mode: int):
@@ -1144,6 +1167,7 @@ class DeepstreamBackend(ModelBackend):
                     network_mode = mode
         engine_file = f"{onnx_file}_b{batch_size}_gpu{device_id}_{network_mode}.engine"
         return os.path.join(self._model_home, engine_file)
+
 
     def _correct_config_paths(self, config_paths: List[str]) -> List[str]:
         if not config_paths:
