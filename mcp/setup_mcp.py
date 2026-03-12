@@ -50,28 +50,6 @@ def check_python_version():
     print(f"✓ Python {version.major}.{version.minor}.{version.micro} is compatible")
     return True
 
-def install_dependencies():
-    """Install required dependencies"""
-    print("\nInstalling MCP dependencies...")
-
-    # Try to install MCP
-    if not run_command([sys.executable, "-m", "pip", "install", "mcp"], "Installing MCP"):
-        print("Failed to install MCP. Please install manually:")
-        print("pip install mcp")
-        return False
-
-    # Try to install OmegaConf if not already installed
-    try:
-        import omegaconf
-        print("✓ OmegaConf already installed")
-    except ImportError:
-        if not run_command([sys.executable, "-m", "pip", "install", "omegaconf"], "Installing OmegaConf"):
-            print("Failed to install OmegaConf. Please install manually:")
-            print("pip install omegaconf")
-            return False
-
-    return True
-
 def test_integration():
     """Test the MCP integration"""
     print("\nTesting MCP integration...")
@@ -199,11 +177,6 @@ def main(config_path=None):
     # Check Python version
     if not check_python_version():
         print("\n❌ Setup failed: Python version incompatible")
-        return False
-
-    # Install dependencies
-    if not install_dependencies():
-        print("\n❌ Setup failed: Dependency installation failed")
         return False
 
     # Test integration
