@@ -740,16 +740,20 @@ def validate_model_name(model: str) -> bool:
     
     return True
 
-def validate_file_paths(files: List[str]) -> bool:
-    """Validate file paths for security."""
+def validate_file_paths(files: List[str]) -> List[str]:
+    """Validate and sanitize file paths for security.
+    Returns:
+        List of sanitized absolute file paths.
+    Raises:
+        ValueError: If any path is invalid or potentially dangerous.
+    """
     if not files:
-        return False
-    
+        raise ValueError("File list cannot be empty")
+
+    sanitized = []
     for file_path in files:
-        if not validate_directory_path(file_path):
-            return False
-    
-    return True
+        sanitized.append(validate_directory_path(file_path))
+    return sanitized
 
 def validate_text_input(text: List[str]) -> bool:
     """Validate text input for security."""
@@ -820,17 +824,23 @@ if __name__ == '__main__':
     if not validate_model_name(args.model):
         validation_errors.append(f"Invalid model name: {args.model}")
     
-    # Validate file paths
-    if args.file and not validate_file_paths(args.file):
-        validation_errors.append("Invalid file paths provided")
+    # Validate and sanitize file paths
+    if args.file:
+        try:
+            args.file = validate_file_paths(args.file)
+        except ValueError as e:
+            validation_errors.append(f"Invalid file paths: {e}")
     
     # Validate text input
     if args.text and not validate_text_input(args.text):
         validation_errors.append("Invalid text input provided")
     
-    # Validate visualization directory
-    if args.vis_dir and not validate_directory_path(args.vis_dir):
-        validation_errors.append(f"Invalid visualization directory: {args.vis_dir}")
+    # Validate and sanitize visualization directory
+    if args.vis_dir:
+        try:
+            args.vis_dir = validate_directory_path(args.vis_dir)
+        except ValueError as e:
+            validation_errors.append(f"Invalid visualization directory: {e}")
     
     # Exit if any validation errors
     if validation_errors:
