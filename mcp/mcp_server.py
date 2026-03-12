@@ -41,6 +41,7 @@ import subprocess
 import logging
 import time
 import shutil
+import uuid
 
 # Add the builder directory to Python path
 sys.path.append(str(Path(__file__).parent.parent / "builder"))
@@ -806,7 +807,14 @@ class InferenceBuilderMCPServer:
                                     "Optional list of command-line arguments or an "
                                     "alternative command to pass to 'docker run' after "
                                     "the image name. For serverless flows this is "
-                                    "typically the inference entrypoint arguments."
+                                    "typically the inference entrypoint arguments. "
+                                    "IMPORTANT: when server_type is 'serverless', the "
+                                    "user's input must be supplied via CLI arguments in "
+                                    "this list. Argument names use hyphens, not "
+                                    "underscores (e.g., the input named 'media_url' "
+                                    "becomes '--media-url <value>'). Each flag and its "
+                                    "value should be separate items, for example: "
+                                    "[\"--media-url\", \"/path/to/video.mp4\"]."
                                 ),
                                 "items": {
                                     "type": "string"
@@ -1255,7 +1263,14 @@ class InferenceBuilderMCPServer:
         # Docker's default 64 MB /dev/shm is insufficient for
         # PyTorch / TensorRT-LLM multiprocessing which shares tensors
         # via shared memory, causing SIGBUS when /dev/shm is exhausted.
-        cmd: list[str] = ["docker", "run", "--rm", "--ipc=host"]
+        # Assign a deterministic name so we can force-remove the container
+        # on timeout — subprocess.TimeoutExpired kills the `docker run`
+        # client process but leaves the container running with GPUs held.
+        container_name = f"ib-run-{uuid.uuid4().hex[:12]}"
+        cmd: list[str] = [
+            "docker", "run", "--rm", "--ipc=host",
+            "--name", container_name,
+        ]
 
         # GPU configuration
         if gpus:
@@ -1309,19 +1324,68 @@ class InferenceBuilderMCPServer:
                 isError=True,
             )
         except subprocess.TimeoutExpired:
-            return CallToolResult(
-                content=[
-                    TextContent(
-                        type="text",
-                        text=(
-                            f"Docker run timed out after {timeout} seconds for image "
-                            f"'{image_name}'. You may want to increase the timeout or "
-                            "inspect the image logs manually."
-                        ),
+            is_serverless = server_type == "serverless"
+            if is_serverless:
+                # Serverless containers should finish within the timeout.
+                # The `docker run` client is dead but the container keeps
+                # running (and holding GPU memory).  Force-remove it.
+                cleanup_msg = ""
+                try:
+                    subprocess.run(
+                        ["docker", "rm", "-f", container_name],
+                        capture_output=True,
+                        timeout=30,
+                        check=False,
                     )
-                ],
-                isError=True,
-            )
+                    cleanup_msg = (
+                        f" The orphaned container '{container_name}' has "
+                        "been force-removed."
+                    )
+                except Exception as cleanup_exc:
+                    cleanup_msg = (
+                        f" WARNING: failed to remove orphaned container "
+                        f"'{container_name}': {cleanup_exc}. "
+                        "Please remove it manually with: "
+                        f"docker rm -f {container_name}"
+                    )
+                    self.logger.warning(
+                        "Failed to remove timed-out container %s: %s",
+                        container_name,
+                        cleanup_exc,
+                    )
+                return CallToolResult(
+                    content=[
+                        TextContent(
+                            type="text",
+                            text=(
+                                f"Docker run timed out after {timeout} seconds "
+                                f"for image '{image_name}'.{cleanup_msg} You may "
+                                "want to increase the timeout or inspect the "
+                                "image logs manually."
+                            ),
+                        )
+                    ],
+                    isError=True,
+                )
+            else:
+                # Non-serverless (persistent) servers are expected to keep
+                # running past the timeout — that means the server started
+                # successfully.  Leave the container running.
+                return CallToolResult(
+                    content=[
+                        TextContent(
+                            type="text",
+                            text=(
+                                f"Container '{container_name}' is running "
+                                f"(image '{image_name}'). The server appears to "
+                                f"have started successfully (still alive after "
+                                f"{timeout}s). To stop it later: "
+                                f"docker rm -f {container_name}"
+                            ),
+                        )
+                    ],
+                    isError=False,
+                )
         except Exception as exc:
             return CallToolResult(
                 content=[

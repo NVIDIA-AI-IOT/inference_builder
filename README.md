@@ -59,7 +59,6 @@ git submodule update --init --recursive
 python3 -m venv .venv
 source .venv/bin/activate
 pip3 install -r requirements.txt
-pip install -r mcp/requirements-mcp.txt
 ```
 
 ## Play with the examples
