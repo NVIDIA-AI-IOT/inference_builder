@@ -50,7 +50,7 @@ Runs a Docker image with optional model repository mounting and environment conf
 | `model_repo_container` | No | `/models` | Container path for model repository |
 | `server_type` | No | `serverless` | Server type hint |
 | `env` | No | - | Environment variables to set |
-| `cmd` | No | - | Command-line arguments |
+| `cmd` | No | - | Command-line arguments. For serverless flows, supply input values here using `--<name> <value>` flags. **Use hyphens, not underscores** in argument names (e.g., `media_url` → `--media-url`). Each flag and value is a separate list item: `["--media-url", "/path/to/video.mp4"]` |
 | `gpus` | No | `all` | GPU devices to use |
 | `timeout` | No | `300` | Timeout in seconds |
 
