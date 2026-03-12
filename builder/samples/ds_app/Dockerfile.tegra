@@ -25,7 +25,7 @@
 FROM "nvcr.io/nvidia/pytorch:25.08-py3" AS pytorch_src
 
 # Pull the base image from Deepstream Triton multiarch image.
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.4-ma" AS inference_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.5-ma" AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
