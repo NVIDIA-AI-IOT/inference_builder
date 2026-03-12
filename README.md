@@ -114,7 +114,7 @@ Before setting up MCP, ensure you have completed the [Getting Started](#getting-
 
 Ensure that you are in the repository's root directory.
 
-### Setting Up for Cursor
+### Set Up for Cursor
 
 1. **Generate the MCP configuration**
 
@@ -142,7 +142,7 @@ Ensure that you are in the repository's root directory.
    - "Show me what sample configurations are available from the inference builder?"
    - "Generate a DeepStream object detection pipeline using the inference builder with PeopleNet transformer model from NGC."
 
-### Setting Up for Claude Code
+### Set Up for Claude Code
 
 1. **Generate the MCP configuration:**
 
