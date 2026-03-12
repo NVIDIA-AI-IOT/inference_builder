@@ -15,7 +15,42 @@ After export, build a TensorRT engine:
 
 import argparse
 import os
+import sys
 import torch
+
+
+def validate_directory_path(dir_path):
+    """
+    Validate directory path to prevent OS access violations.
+    Args:
+        dir_path: Directory path to validate
+    Returns:
+        str: Validated and sanitized directory path
+    Raises:
+        ValueError: If path is invalid or potentially dangerous
+    """
+    if not dir_path:
+        raise ValueError("Directory path cannot be empty")
+
+    try:
+        abs_path = os.path.abspath(dir_path)
+        resolved_path = os.path.realpath(abs_path)
+    except (OSError, ValueError) as e:
+        raise ValueError(f"Invalid directory path: {e}")
+
+    if ".." in os.path.normpath(dir_path):
+        raise ValueError("Path traversal detected in directory path")
+
+    invalid_chars = ['<', '>', ':', '"', '|', '?', '*']
+    if any(char in dir_path for char in invalid_chars):
+        raise ValueError("Invalid characters in directory path")
+
+    system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin']
+    for sys_dir in system_dirs:
+        if resolved_path.startswith(sys_dir):
+            raise ValueError(f"Access to system directory {sys_dir} is not allowed")
+
+    return resolved_path
 
 
 def export_onnx(output_dir: str, resolution: int = 256, model_path: str = None):
@@ -72,5 +107,33 @@ if __name__ == "__main__":
         default=None,
         help="Local path to the model directory (skips HF download)",
     )
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()
+    except Exception as e:
+        print(f"Error: Argument parsing failed: {str(e)}")
+        sys.exit(1)
+
+    # Comprehensive security validation
+    validation_errors = []
+
+    # Validate and sanitize output directory
+    try:
+        args.output_dir = validate_directory_path(args.output_dir)
+    except ValueError as e:
+        validation_errors.append(f"Invalid output directory: {e}")
+
+    # Validate and sanitize model path
+    if args.model_path is not None:
+        try:
+            args.model_path = validate_directory_path(args.model_path)
+        except ValueError as e:
+            validation_errors.append(f"Invalid model path: {e}")
+
+    # Exit if any validation errors
+    if validation_errors:
+        print("Security validation failed:")
+        for error in validation_errors:
+            print(f"  - {error}")
+        sys.exit(1)
+
     export_onnx(args.output_dir, args.resolution, args.model_path)
