@@ -12,7 +12,7 @@
 # Triton-enabled DeepStream base image for accelerated video decoding.
 # This is specific to the vllm sample in this repository.
 # Stage 1: pull in DeepStream libraries, binaries, and sample assets.
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.4-ma" AS ds_stage
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.0.0-triton-26.02.5-ma" AS ds_stage
 
 FROM nvcr.io/nvidia/vllm:26.02-py3 AS inference_base
 
