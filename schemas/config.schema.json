@@ -336,7 +336,7 @@
         },
         "labels": {
           "type": "array",
-          "description": "Classification labels for detected objects or image classifications. Each element is an array of label strings, allowing for multi-label classification (e.g., object type and attributes). For single-label cases, each array contains one string.",
+          "description": "Classification labels as an array of arrays (list[list[str]]). The outer array has one entry per detected object (aligned by index with 'bboxes', 'probs', etc.). The inner array contains one or more label strings for that object, since a single object may have multiple labels (e.g., ['car', 'red', 'moving']). For single-label models, each inner array contains exactly one string (e.g., [['car'], ['person']]).",
           "items": {
             "type": "array",
             "items": {

@@ -83,7 +83,7 @@ The Agent is responsible for the smoke testing and troubleshooting of any issues
 With the generated server and client script, we can ask Cursor to intensively test stream summarization, and during this process Cursor will fix the generated processor code based on the container log.
 We'll need to go through this a few times because Cursor has to figure out the best model setup by running it.
 
-You can ask Cusor to use your live stream, e.g. rtsp://nv-wowza-pdc.nvidia.com:1935/vod/concat_wh_52.mp4
+You can ask Cusor to use your live stream: rtsp://<ip address>:<port>/<stream-name>.
 
 #### 4.3. New feature request
 
