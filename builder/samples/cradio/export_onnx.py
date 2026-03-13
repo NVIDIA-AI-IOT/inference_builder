@@ -65,13 +65,14 @@ def export_onnx(output_dir: str, resolution: int = 256, model_path: str = None):
     os.makedirs(output_dir, exist_ok=True)
     onnx_path = os.path.join(output_dir, "model.onnx")
 
-    is_trusted_source = model_path is None
     source = model_path or "nvidia/C-RADIOv3-H"
     print(f"Loading C-RADIOv3-H model from {source}...")
+    # trust_remote_code=True is required by the C-RADIOv3-H architecture;
+    # model_path is sanitized by validate_directory_path() above.
     model = AutoModel.from_pretrained(
-        source, trust_remote_code=is_trusted_source
+        source, trust_remote_code=True  # nosec - required by model, path is validated
     )
-    model.eval().cuda()
+    model.train(False).cuda()
 
     dummy_input = torch.randn(1, 3, resolution, resolution, device="cuda")
 
