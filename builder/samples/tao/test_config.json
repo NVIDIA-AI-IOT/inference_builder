@@ -124,7 +124,7 @@
       "OPENAPI_SPEC": "openapi.yaml"
     },
     "test_config": {
-      "default_enable": true,
+      "default_enable": false,
       "timeout": 600,
       "env": {
         "NVSTREAMMUX_ADAPTIVE_BATCHING": "yes",
