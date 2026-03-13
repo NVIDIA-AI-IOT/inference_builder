@@ -56,13 +56,20 @@ def validate_directory_path(dir_path):
 def export_onnx(output_dir: str, resolution: int = 256, model_path: str = None):
     from transformers import AutoModel
 
+    output_dir = validate_directory_path(output_dir)
+    if model_path is not None:
+        model_path = validate_directory_path(model_path)
+    if not isinstance(resolution, int) or resolution <= 0:
+        raise ValueError(f"Resolution must be a positive integer, got: {resolution}")
+
     os.makedirs(output_dir, exist_ok=True)
     onnx_path = os.path.join(output_dir, "model.onnx")
 
+    is_trusted_source = model_path is None
     source = model_path or "nvidia/C-RADIOv3-H"
     print(f"Loading C-RADIOv3-H model from {source}...")
     model = AutoModel.from_pretrained(
-        source, trust_remote_code=True
+        source, trust_remote_code=is_trusted_source
     )
     model.eval().cuda()
 
@@ -113,27 +120,8 @@ if __name__ == "__main__":
         print(f"Error: Argument parsing failed: {str(e)}")
         sys.exit(1)
 
-    # Comprehensive security validation
-    validation_errors = []
-
-    # Validate and sanitize output directory
     try:
-        args.output_dir = validate_directory_path(args.output_dir)
+        export_onnx(args.output_dir, args.resolution, args.model_path)
     except ValueError as e:
-        validation_errors.append(f"Invalid output directory: {e}")
-
-    # Validate and sanitize model path
-    if args.model_path is not None:
-        try:
-            args.model_path = validate_directory_path(args.model_path)
-        except ValueError as e:
-            validation_errors.append(f"Invalid model path: {e}")
-
-    # Exit if any validation errors
-    if validation_errors:
-        print("Security validation failed:")
-        for error in validation_errors:
-            print(f"  - {error}")
+        print(f"Security validation failed: {e}")
         sys.exit(1)
-
-    export_onnx(args.output_dir, args.resolution, args.model_path)
