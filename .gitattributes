@@ -2,3 +2,4 @@ builder/boilerplates/nim/** merge=ours
 templates/api_server/nim/** merge=ours
 builder/allowed_servers.txt merge=ours
 .gitlab-ci.yml merge=ours
+builder/samples/tao/ib_client.py merge=ours
