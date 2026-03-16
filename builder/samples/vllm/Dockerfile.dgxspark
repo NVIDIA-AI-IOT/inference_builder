@@ -7,7 +7,7 @@
 # Target hardware: NVIDIA GB10 / GB300 / DGX Spark (aarch64 arm-sbsa)
 
 # ── Stage 1: DeepStream arm-sbsa libraries ───────────────────────────────────
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:arm-sbsa-9.0.0-arm-sbsa-spark-26.02.7-226" AS ds_stage
+FROM "nvcr.io/nvidia/deepstream:deepstream:9.0-triton-arm-sbsa-spark" AS ds_stage
 
 # ── Stage 2: vLLM inference base ─────────────────────────────────────────────
 FROM nvcr.io/nvidia/vllm:26.02-py3 AS inference_base

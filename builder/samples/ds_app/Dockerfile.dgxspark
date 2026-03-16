@@ -25,7 +25,7 @@
 # Jetson devices.
 FROM "nvcr.io/nvidia/pytorch:25.08-py3" AS pytorch_src
 
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:arm-sbsa-9.0.0-arm-sbsa-spark-26.02.7-226" AS inference_base
+FROM "nvcr.io/nvidia/deepstream:deepstream:9.0-triton-arm-sbsa-spark" AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
