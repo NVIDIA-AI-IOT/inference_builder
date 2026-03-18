@@ -21,7 +21,7 @@
 # Intended for standard datacenter/workstation GPUs (e.g. A100, H100, B200,
 # RTX series) running Linux on x86_64. Uses pre-built PyTorch wheels from
 # PyTorch's CUDA index and links against x86_64 system libraries.
-FROM "nvcr.io/nvidia/deepstream:deepstream:9.0-triton-multiarch" AS inference_base
+FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS inference_base
 
 # Install Python dependencies required by THIS ds_app sample. These
 # versions are pinned for reproducibility and can be adjusted for
