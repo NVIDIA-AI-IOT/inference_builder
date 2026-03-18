@@ -54,8 +54,9 @@ CACHE_TIME=1500
 FRAME_RATE=1
 DURATION=5
 TEMP_DIR="/tmp/rtsp_server"
-PID_FILE="/tmp/rtsp_server.pid"
-LOG_FILE="/tmp/rtsp_server.log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PID_FILE="${SCRIPT_DIR}/logs/rtsp_server.pid"
+LOG_FILE="${SCRIPT_DIR}/logs/rtsp_server.log"
 
 # Function to show usage
 show_usage() {
