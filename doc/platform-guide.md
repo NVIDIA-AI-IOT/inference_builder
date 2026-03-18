@@ -9,9 +9,9 @@ for your target hardware **before** writing any Dockerfile or pipeline config.
 
 | Platform | Architecture | Example Hardware | Dockerfile Template | DeepStream Base Image |
 |---|---|---|---|---|
-| **x86_64 datacenter** | x86_64 | A100, H100, B200, RTX | `samples://dockerfile/ds_app/Dockerfile` | `nvcr.io/nvidia/deepstream:deepstream:9.0-triton-multiarch` |
-| **Jetson / Tegra** | aarch64 | Orin, AGX Orin, Thor | `samples://dockerfile/ds_app/Dockerfile.tegra` | `nvcr.io/nvidia/deepstream:deepstream:9.0-triton-multiarch` |
-| **arm-sbsa server** | aarch64 | GB10, GB300, DGX Spark | `samples://dockerfile/ds_app/Dockerfile.dgxspark` | `nvcr.io/nvidia/deepstream:deepstream:9.0-triton-arm-sbsa-spark` |
+| **x86_64 datacenter** | x86_64 | A100, H100, B200, RTX | `samples://dockerfile/ds_app/Dockerfile` | `nvcr.io/nvidia/deepstream:9.0-triton-multiarch` |
+| **Jetson / Tegra** | aarch64 | Orin, AGX Orin, Thor | `samples://dockerfile/ds_app/Dockerfile.tegra` | `nvcr.io/nvidia/deepstream:9.0-triton-multiarch` |
+| **arm-sbsa server** | aarch64 | GB10, GB300, DGX Spark | `samples://dockerfile/ds_app/Dockerfile.dgxspark` | `nvcr.io/nvidia/deepstream:9.0-triton-arm-sbsa-spark` |
 
 ---
 

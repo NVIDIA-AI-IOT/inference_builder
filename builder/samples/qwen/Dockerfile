@@ -18,7 +18,7 @@
 # hardware-accelerated decoding.
 #
 # Stage 1: pull in DeepStream libraries, binaries, and sample assets.
-FROM "nvcr.io/nvidia/deepstream:deepstream:9.0-triton-multiarch" AS ds_stage
+FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS ds_stage
 
 FROM nvcr.io/nvidia/tensorrt-llm/release:1.1.0 AS inference_base
 

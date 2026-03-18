@@ -17,7 +17,7 @@
 # DeepStream for hardware-accelerated video decoding and a
 # TensorRT backend for inference. This is a reference for this specific
 # sample, not a universal template for all deployments.em
-FROM "nvcr.io/nvidia/deepstream:deepstream:9.0-triton-multiarch" AS builder_base
+FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS builder_base
 
 # Install Python dependencies required by THIS NVCLIP sample (CLIP
 # model, TensorRT bindings, FastAPI server, etc.). Versions are pinned

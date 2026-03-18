@@ -15,7 +15,7 @@
 
 
 
-FROM "nvcr.io/nvidia/deepstream:deepstream:9.0-triton-multiarch" AS inference_base
+FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
