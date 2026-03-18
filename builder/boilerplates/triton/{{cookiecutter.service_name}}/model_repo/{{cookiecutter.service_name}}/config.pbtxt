@@ -1,2 +1,0 @@
-name: "{{cookiecutter.service_name}}"
-backend: "python"

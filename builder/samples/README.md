@@ -4,32 +4,6 @@ The examples in this folder demonstrates how to use Inference Builder to create 
 
 With the provided Dockerfile, you can package the generated pipeline into a container image and run it as a standalone app or a microservice. Build steps vary by backend. Check the corresponding README.md in each example folder for exact instructions. For examples that run as microservices, we've provided an all-in-one [docker-compose.yml](./docker-compose.yml) to manage them together. You can customize the container behavior by changing the configurations there accordingly.
 
-Docker environment must be properly set up with below packages for building and running the examples:
-
-- **Docker**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
-- **Docker Compose**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
-- **NVIDIA Container Toolkit**: [Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
-
-
-Ensure nvidia runtime added to `/etc/docker/daemon.json` to run GPU-enabled containers
-
-```bash
-{
-    "runtimes": {
-        "nvidia": {
-            "args": [],
-            "path": "nvidia-container-runtime"
-        }
-    }
-}
-```
-
-The `docker` group must exist in your system, please check if it has been created using `getent group docker`. Your current user must belong to the `docker` group, If not, run the command below, then log out and back in for the group change to take effect.
-
-```bash
-sudo usermod -aG docker $USER
-```
-
 ## Models
 
 Some of the models for examples are from the NVIDIA GPU Cloud (NGC) repository, and certain models from NGC require active subscription. Please download and install the NGC CLI from the [NGC page](https://org.ngc.nvidia.com/setup/installers/cli) and follow the [NGC CLI Guide](https://docs.ngc.nvidia.com/cli/index.html) to set up the tool.
@@ -60,4 +34,16 @@ Some of the models for examples are from the NVIDIA GPU Cloud (NGC) repository, 
 | Name | Description | Models | Backend | Output |
 |------|-------------|---------|---------|---------|
 | [qwen](./qwen/) | example of building inference microservices with TensorRT-LLM backend for vlm models | Qwen 2.5 VL models | TensorRT-LLM, Pytorch | microservice |
-| [vila](./vila/) | example of building infernece microservices with TensorRT-LLM using the legacy flow (to be deprecated) | VILA models | TensorRT-LLM | microservice |
+
+### Multiple Model Examples
+
+| Name | Description | Models | Backend | Output |
+|------|-------------|---------|---------|---------|
+| [cradio](./cradio/) | two-stage pipeline: PeopleNet Transformer (detection) then C-RADIOv3-H (per-detection embeddings) | PeopleNet Transformer, C-RADIOv3-H | DeepStream/nvinfer, TensorRT (polygraphy) | command line interface application |
+
+### VLLM Backend Examples
+
+| Name | Description | Models | Backend | Output |
+|------|-------------|---------|---------|---------|
+| [vllm](./vllm/) | example of building inference microservices with vLLM backend and DeepStream MediaExtractor | Cosmos-Reason2-2B, Qwen3-VL-2B-Instruct | vLLM, DeepStream | microservice |
+

@@ -22,6 +22,7 @@ from fastapi import Request, HTTPException, FastAPI, APIRouter
 import uvicorn
 from .responder import Responder
 from lib.utils import get_logger
+import os
 
 class FastAPIInterface:
 
@@ -40,7 +41,8 @@ class FastAPIInterface:
 
 
     def serve(self, **kwargs):
-        uvicorn.run(self.app, host="0.0.0.0", port=8000)
+        http_port = int(os.getenv("HTTP_PORT", "8000"))
+        uvicorn.run(self.app, host="0.0.0.0", port=http_port)
 
     {% for operation in operations %}
     async def {{operation.function_name}}(self, request: Request, {{operation.snake_case_arguments}}) -> {{operation.response}}:

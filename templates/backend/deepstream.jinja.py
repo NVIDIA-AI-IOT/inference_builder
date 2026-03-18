@@ -15,10 +15,10 @@
  limitations under the License.
 #}
 
-from pyservicemaker import Pipeline, Flow, BufferProvider, Buffer, RenderMode, BatchMetadataOperator, Probe, as_tensor, StateTransitionMessage
+from pyservicemaker import Pipeline, Flow, BufferProvider, Buffer, RenderMode, BufferRetriever, as_tensor, StateTransitionMessage, DynamicSourceMessage, SourceConfig, BatchMetadataOperator, Probe
 from typing import Dict, List
 from queue import Queue, Empty, Full
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import base64
 import numpy as np
 from abc import ABC, abstractmethod
@@ -42,6 +42,7 @@ class RenderConfig:
     enable_stream: bool = False
     rtsp_mount_point: str | None = "/ds-test"
     rtsp_port: int | None = 8554
+    seg_mask_config: dict | None = None
 
     def __bool__(self) -> bool:
         """Check if render configuration is valid."""
@@ -98,6 +99,21 @@ class MessageBrokerConfig:
         )
 
 @dataclass
+class AnalyticsConfig:
+    """Configuration for nvdsanalytics (ROI, line-crossing, overcrowding, direction)."""
+    config_path: str | None = None
+    gpu_id: int = 0
+
+    def __bool__(self) -> bool:
+        """Check if analytics is configured (config_path set)."""
+        if self.config_path is None:
+            return False
+        if not os.path.exists(self.config_path):
+            logger.warning(f"AnalyticsConfig: config_path does not exist: {self.config_path}")
+            return False
+        return True
+
+@dataclass
 class KittiConfig:
     infer_kitti_output_dir: str | None = None
     tracker_kitti_output_dir: str | None = None
@@ -124,7 +140,7 @@ class ImageTensorInput(BufferProvider):
         self.format = format
         self.framerate = 1
         self.device = 'cpu'
-        self.queue = Queue(maxsize=1)
+        self.queue = Queue(maxsize=10)
 
     def generate(self, size):
         tensor = self.queue.get()
@@ -142,7 +158,7 @@ class ImageTensorInput(BufferProvider):
 
 class GenericTensorInput():
     def __init__(self, device_id):
-        self.queue = Queue(maxsize=1)
+        self.queue = Queue(maxsize=10)
         self._device_id = device_id
 
     def generate(self, n):
@@ -250,6 +266,7 @@ class BulkVideoInputPool(TensorInputPool):
         infer_config_paths,
         preprocess_config_paths,
         tracker_config: TrackerConfig,
+        analytics_config: AnalyticsConfig,
         msgbroker_config: MessageBrokerConfig,
         render_config: RenderConfig,
         perf_config: PerfConfig,
@@ -259,7 +276,8 @@ class BulkVideoInputPool(TensorInputPool):
         require_extra_input,
         engine_file_names,
         dims,
-        label_file_path
+        label_file_path,
+        model_home
     ):
         self._batch_size = max_batch_size
         self._batch_timeout = batch_timeout
@@ -275,27 +293,50 @@ class BulkVideoInputPool(TensorInputPool):
         self._device_id = device_id
         self._dims = dims
         self._tracker_config = tracker_config
+        self._analytics_config = analytics_config
         self._msgbroker_config = msgbroker_config
         self._render_config = render_config
         self._perf_config = perf_config
         self._kitti_config = kitti_config
         self._label_file_path = label_file_path
+        self._model_home = model_home
 
     def submit(self, data: List):
+        def on_message(message, total_streams, output):
+            # handle the dynamic source messages only in case the source config is set
+            if not isinstance(message, DynamicSourceMessage):
+                return
+            logger.info(f"Received source added/removed message: {message.source_added}")
+            if message.source_added:
+                total_streams += 1
+            else:
+                total_streams -= 1
+                if total_streams <= 0:
+                    output.reset()
+
         url_list = []
         source_config_file = None
+        total_streams = 0
         for item in data:
             if self._mime_tensor_name and self._mime_tensor_name in item:
                 item.pop(self._mime_tensor_name)
             if self._media_url_tensor_name and self._media_url_tensor_name in item:
                 url_list.append(str(item.pop(self._media_url_tensor_name)))
-            elif self._source_tensor_name and self._source_tensor_name in data[0]:
-                source_config_file = item.pop(self._source_tensor_name).tolist()
+            elif self._source_tensor_name and self._source_tensor_name in item:
+                source_config_file = item.pop(self._source_tensor_name)
+                if not isinstance(source_config_file, str):
+                    logger.error(
+                        f"Source config value must be a string, got {type(source_config_file).__name__}: {source_config_file}"
+                    )
+                    return []
                 if not source_config_file.lower().endswith(('.yml', '.yaml')):
                     logger.error(
                         f"Source config file must be a YAML file: {source_config_file}"
                     )
                     return []
+                # Correct relative path to absolute path relative to model_home
+                if not os.path.isabs(source_config_file):
+                    source_config_file = os.path.join(self._model_home, source_config_file)
                 break
             else:
                 logger.error(f"Invalid input data: {data}")
@@ -315,6 +356,9 @@ class BulkVideoInputPool(TensorInputPool):
 
         # Use appropriate batch_capture method based on input type
         if source_config_file:
+            sc = SourceConfig()
+            sc.load(source_config_file)
+            total_streams = len(sc.sensor_list)
             flow = Flow(pipeline).batch_capture(
                 input=source_config_file,
                 width=self._dims[1], height=self._dims[0],
@@ -322,6 +366,7 @@ class BulkVideoInputPool(TensorInputPool):
                 batched_push_timeout=self._batch_timeout
             )
         else:
+            total_streams = len(url_list)
             flow = Flow(pipeline).batch_capture(
                 url_list,
                 width=self._dims[1],
@@ -348,14 +393,18 @@ class BulkVideoInputPool(TensorInputPool):
             )
             if self._kitti_config.tracker_kitti_output_dir:
                 flow = flow.attach(what="kitti_dump_probe", name="tracker_kitti_dump", properties={"tracker-kitti-output": True,"kitti-dir": self._kitti_config.tracker_kitti_output_dir})
-
-        flow = flow.attach(Probe('tensor_retriver', self._output))
+        if self._analytics_config:
+            flow = flow.analyze(
+                self._analytics_config.config_path,
+                enable=1,
+                gpu_id=self._analytics_config.gpu_id
+            )
 
         if self._perf_config.enable_fps_logs:
             flow = flow.attach(what="measure_fps_probe", name="fps_probe")
         if self._perf_config.enable_latency_logs:
             flow = flow.attach(what="measure_latency_probe", name="latency_probe")
-
+        n_sink = 0
         if self._msgbroker_config:
             flow = flow.attach(
                 what="add_message_meta_probe",
@@ -366,6 +415,7 @@ class BulkVideoInputPool(TensorInputPool):
                 }
             )
             flow = flow.fork()
+            n_sink += 1
             publish_params = {
                 'msg_broker_proto_lib': self._msgbroker_config.proto_lib_path,
                 'msg_broker_conn_str': self._msgbroker_config.conn_str,
@@ -381,21 +431,31 @@ class BulkVideoInputPool(TensorInputPool):
 
             flow.publish(**publish_params)
         if self._render_config.enable_stream:
-            if not self._msgbroker_config:
+            if n_sink == 0:
                 flow = flow.fork()
+                n_sink += 1
             flow.render(RenderMode.STREAM,
                        enable_osd=self._render_config.enable_osd,
                        rtsp_mount_point=self._render_config.rtsp_mount_point,
                        rtsp_port=self._render_config.rtsp_port,
                        sync=False)
+        if self._render_config.enable_display:
+            if n_sink == 0:
+                flow = flow.fork()
+                n_sink += 1
+            seg_mask_config = dict(self._render_config.seg_mask_config) if self._render_config.seg_mask_config else None
+            flow.render(RenderMode.DISPLAY, enable_osd=self._render_config.enable_osd, seg_mask_config=seg_mask_config, sync=False)
 
-        flow.render(RenderMode.DISCARD if not self._render_config.enable_display else RenderMode.DISPLAY,
-                    enable_osd=self._render_config.enable_osd, sync=False)
+        flow = flow.attach(what=Probe("metadata_probe", self._output)).retrieve(self._output, **{'async': False})
 
         if self._pipeline is not None:
             self._pipeline.wait()
 
-        pipeline.start()
+        if source_config_file:
+            # monitor the total streams and reset the output when the total streams is 0
+            pipeline.start(on_message=lambda message: on_message(message, total_streams, self._output))
+        else:
+            pipeline.start()
         self._pipeline = pipeline
         return list(range(len(url_list))) if url_list else list(range(self._batch_size))
 
@@ -405,69 +465,220 @@ class BulkVideoInputPool(TensorInputPool):
             self._pipeline.wait()
 
 
-class BaseTensorOutput(BatchMetadataOperator):
-    def __init__(self, n_outputs, name: str = None):
-        super().__init__()
-        self._queue = Queue(maxsize=n_outputs)
-        self._stashed = None
-        self._name = name
+class BaseTensorOutput(BufferRetriever, BatchMetadataOperator):
+    """Base class for tensor outputs that can work as both BufferRetriever (appsink) and
+    BatchMetadataOperator (probe).
+
+    Subclasses override _extract_metadata() to yield results.
+    Both consume() (appsink) and handle_metadata() (probe) iterate and deposit.
+    """
+    def __init__(self, n_outputs, metadata_output_name: str = None, image_output_name: str = None):
+        """Initialize the base tensor output handler.
+
+        Args:
+            n_outputs: Maximum number of output slots (typically max_batch_size
+                or max_batch_size * num_formats). Each slot corresponds to a
+                pad index in the DeepStream pipeline.
+            metadata_output_name: When set, collected results are wrapped in a
+                dict keyed by this name (e.g. {"output": <result>}). Used by
+                MetadataOutput / PreprocessMetadataOutput for DS metadata
+                outputs (TYPE_CUSTOM_DS_METADATA). None for raw tensor outputs.
+            image_output_name: When set, indicates that decoded image frames
+                should be extracted from the DeepStream pipeline and returned
+                as RGB uint8 tensors in HWC layout (TYPE_CUSTOM_DS_IMAGE
+                output). The value is the output tensor name to use.
+        """
+        BufferRetriever.__init__(self)
+        BatchMetadataOperator.__init__(self)
+        self._n_outputs = n_outputs
+        self._queue = Queue()
+        self._stashed = []
+        self._metadata_output_name = metadata_output_name
+        self._image_output_name = image_output_name
+        self._image_queue = Queue()  # separate queue for decoded image frames
+        self._image_stashed = []  # stashed image batches for cross-collect reuse
+
+    def consume(self, buffer):
+        """Called when used as appsink retriever (BufferRetriever interface).
+
+        When image output is enabled, extracts decoded RGB HWC frames from
+        the buffer and converts them to CPU numpy arrays via dlpack before
+        queuing. The dlpack conversion must happen here while the buffer's
+        GPU memory is still valid — once consume() returns, the buffer is
+        released and the GPU tensor data becomes stale.
+
+        Obtains batch_meta from the buffer to get the batch_id → pad_index
+        mapping, then calls buffer.extract(batch_id) for each frame.
+        Note: batch_id is assigned by arrival order, not pad index — e.g. if
+        only pads 0, 2, 3 deliver frames, they get batch_ids 0, 1, 2.
+        """
+        if self._image_output_name:
+            received = [None] * self._n_outputs
+            batch_meta = buffer.batch_meta
+            for frame_meta in batch_meta.frame_items:
+                frame = buffer.extract(frame_meta.batch_id)
+                if frame is not None:
+                    # Clone via dlpack while buffer GPU memory is still valid;
+                    # clone() copies to a new GPU allocation so the tensor
+                    # survives after the buffer is released.
+                    frame = torch.utils.dlpack.from_dlpack(frame).clone()
+                    received[frame_meta.pad_index] = (frame, frame_meta.buffer_pts)
+            self._image_queue.put(received)
+        return 1
 
     def handle_metadata(self, batch_meta):
-        pass
+        """Called when used as probe (BatchMetadataOperator interface)."""
+        for metadata in self._extract_metadata(batch_meta):
+            self._deposit(metadata)
+
+    def _extract_metadata(self, batch_meta):
+        """Override in subclasses to extract metadata.
+
+        Yields a list (indexed by pad_index) where each non-None element is
+        a dict containing the extracted data. The dict should include a
+        "timestamp" key (buffer_pts) for synchronization with image frames
+        in collect(). DS metadata dicts already carry this; tensor outputs
+        insert it explicitly.
+        """
+        return
+        yield  # Make this a generator
 
     def collect(self, indices: List, timeout=None) -> List | None:
-        # expected results for a batch
-        collected = [None] * (max(indices) + 1)
+        def move_data(data: list, collected: list):
+            for i, d in enumerate(data):
+                if d is not None:
+                    if collected[i] is None:
+                        collected[i] = d
+                        data[i] = None
 
-        # first check the for stashed results for the batch
-        if self._stashed is not None:
-            collected[self._stashed[0]] = self._stashed[1]
-            self._stashed = None
-
-        # read from the thread queue
-        while not all(collected[i] is not None for i in indices):
-            try:
-                i, data = self._queue.get(timeout=timeout)
-                if collected[i] is None:
-                    collected[i] = data
-                else:
-                    # this is a new batch, stash the results and break
-                    self._stashed = (i, data)
+        def _drain(queue, stashed, collected, indices):
+            """Drain a queue into collected slots using stash for leftovers."""
+            while stashed:
+                data = stashed.pop(0)
+                move_data(data, collected)
+            while not all(collected[i] is not None for i in indices):
+                try:
+                    data = queue.get(timeout=timeout)
+                    if data is None:
+                        break
+                    move_data(data, collected)
+                    if any(d is not None for d in data):
+                        stashed.append(data)
+                except Empty:
                     break
-            except Empty:
-                break
-        if all(i is None for i in collected):
-            # signal the end of the inference run
-            return None
-        # rearrange the results to the required order
-        collected = [collected[i] for i in indices]
-        return collected if self._name is None else [
-            {self._name: r} for r in collected
-        ]
+
+        def _drain_images(queue, stashed, collected, indices, target_pts):
+            """Drain image queue, discarding images older than metadata timestamps."""
+            def process(data):
+                for i, d in enumerate(data):
+                    if d is None:
+                        continue
+                    # Always discard stale images even if this pad is already collected
+                    if i in target_pts:
+                        _, img_pts = d
+                        if img_pts < target_pts[i]:
+                            data[i] = None
+                            continue
+                    if collected[i] is None:
+                        collected[i] = d
+                        data[i] = None
+
+            remaining = []
+            for data in stashed:
+                process(data)
+                if any(d is not None for d in data):
+                    remaining.append(data)
+            stashed.clear()
+            stashed.extend(remaining)
+
+            while not all(collected[i] is not None for i in indices):
+                try:
+                    data = queue.get(timeout=timeout)
+                    if data is None:
+                        break
+                    process(data)
+                    if any(d is not None for d in data):
+                        stashed.append(data)
+                except Empty:
+                    break
+
+        n_slots = max(indices) + 1
+
+        # Drain metadata queue first — metadata drives collection.
+        meta_collected = [None] * n_slots
+        _drain(self._queue, self._stashed, meta_collected, indices)
+
+        if self._image_output_name:
+            # Build target timestamps from metadata for image synchronization.
+            # Images with pts older than the metadata are stale and discarded.
+            target_pts = {}
+            for i in indices:
+                meta = meta_collected[i]
+                if meta is not None and isinstance(meta, dict):
+                    pts = meta.get("timestamp")
+                    if pts is not None:
+                        target_pts[i] = pts
+
+            image_collected = [None] * n_slots
+            _drain_images(self._image_queue, self._image_stashed, image_collected, indices, target_pts)
+
+            if all(i is None for i in meta_collected) and all(i is None for i in image_collected):
+                return None
+
+            results = []
+            for idx in indices:
+                result = {}
+                metadata = meta_collected[idx]
+                image_entry = image_collected[idx]
+
+                if metadata is not None:
+                    if self._metadata_output_name is not None:
+                        result[self._metadata_output_name] = metadata
+                    elif isinstance(metadata, dict):
+                        result.update(metadata)
+                    else:
+                        result = metadata
+
+                if image_entry is not None:
+                    frame, _ = image_entry
+                    if not isinstance(result, dict):
+                        result = {}
+                    result[self._image_output_name] = frame
+
+                results.append(result if result else None)
+            return results
+        else:
+            # --- Metadata-only path ---
+            if all(i is None for i in meta_collected):
+                return None
+            collected = [meta_collected[i] for i in indices]
+            return collected if self._metadata_output_name is None else [
+                {self._metadata_output_name: r} for r in collected
+            ]
 
     def reset(self):
+        # wake up the old queue first
+        self._queue.put(None)
         self._queue = Queue(maxsize=self._queue.maxsize)
-        self._stashed = None
+        self._stashed = []
+        self._image_queue = Queue()
+        self._image_stashed = []
 
-    def _deposit(self, index: int, data: dict):
-        logger.debug(
-            f"DeepstreamBackend: Depositing data to index {index}: {data}"
-        )
+    def _deposit(self, received: list):
+        logger.debug("DeepstreamBackend: Depositing data: %s", received)
         try:
-            self._queue.put((index, data))
+            self._queue.put(received)
         except Full:
-            logger.warning(
-                f"DeepstreamBackend: Queue is full, dropping data from "
-                f"index {index}"
-            )
+            logger.warning(f"DeepstreamBackend: Queue is full, dropping data: {received}")
 
 
 class TensorOutput(BaseTensorOutput):
-    def __init__(self, n_outputs, preprocess_config_path):
-        super().__init__(n_outputs, None)
+    def __init__(self, n_outputs, preprocess_config_path, image_output_name=None):
+        super().__init__(n_outputs, metadata_output_name=None, image_output_name=image_output_name)
         self._preprocess_config_path = preprocess_config_path
 
-    def handle_metadata(self, batch_meta):
+    def _extract_metadata(self, batch_meta):
+        received = [None] * self._n_outputs
         if self._preprocess_config_path:
             for meta in batch_meta.preprocess_batch_items:
                 preprocess_batch = meta.as_preprocess_batch()
@@ -481,7 +692,8 @@ class TensorOutput(BaseTensorOutput):
                             for n, tensor in tensor_output.get_layers().items():
                                 torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
                                 result[n] = torch_tensor
-                    self._deposit(roi.frame_meta.pad_index, result)
+                    result["timestamp"] = roi.frame_meta.buffer_pts
+                    received[roi.frame_meta.pad_index] = result
         else:
             for frame_meta in batch_meta.frame_items:
                 result = dict()
@@ -491,91 +703,38 @@ class TensorOutput(BaseTensorOutput):
                         for n, tensor in tensor_output.get_layers().items():
                             torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
                             result[n] = torch_tensor
-                self._deposit(frame_meta.pad_index, result)
-
-@dataclass
-class DeepstreamMetadata:
-    shape: list[int] = field(default_factory=lambda: [0, 0])
-    bboxes: list[list[int]] = field(default_factory=list)
-    probs: list[float] = field(default_factory=list)
-    labels: list[str] = field(default_factory=list)
-    seg_maps: list[np.ndarray] = field(default_factory=list)
-    objects: list[int] = field(default_factory=list)
-    timestamp: int = 0
+                result["timestamp"] = frame_meta.buffer_pts
+                received[frame_meta.pad_index] = result
+        yield received
 
 class PreprocessMetadataOutput(BaseTensorOutput):
-    def __init__(self, n_outputs, output_name, dims):
-        super().__init__(n_outputs, name=output_name)
+    """Output handler for preprocess metadata."""
+    def __init__(self, n_outputs, output_name, dims, image_output_name=None):
+        super().__init__(n_outputs, metadata_output_name=output_name, image_output_name=image_output_name)
+        self._n_outputs = n_outputs
         self._shape = dims
 
-    def handle_metadata(self, batch_meta):
+    def _extract_metadata(self, batch_meta):
         for meta in batch_meta.preprocess_batch_items:
             preprocess_batch = meta.as_preprocess_batch()
             if not preprocess_batch:
                 continue
+            received = preprocess_batch.extract(self._n_outputs)
             for roi in preprocess_batch.rois:
-                metadata = DeepstreamMetadata()
-                # segmentation metadata
-                for u_meta in roi.segmentation_items:
-                    seg_meta = u_meta.as_segmentation()
-                    if seg_meta:
-                        metadata.shape = [seg_meta.height, seg_meta.width]
-                        metadata.seg_maps.append(seg_meta.class_map.copy())
-                # object metadata
-                for object_meta in roi.frame_meta.object_items:
-                    labels = [object_meta.label] if object_meta.label else []
-                    left = int(object_meta.rect_params.left)
-                    top = int(object_meta.rect_params.top)
-                    width = int(object_meta.rect_params.width)
-                    height = int(object_meta.rect_params.height)
-                    metadata.shape = [self._shape[0], self._shape[1]]
-                    metadata.bboxes.append([left, top, left + width, top + height])
-                    metadata.probs.append(object_meta.confidence)
-                    for classifier in object_meta.classifier_items:
-                        for i in range(classifier.n_labels):
-                            labels.append(classifier.get_n_label(i))
-                    metadata.labels.append(labels)
-                    metadata.objects.append(object_meta.object_id)
-                for classifier in roi.classifier_items:
-                    labels = []
-                    for i in range(classifier.n_labels):
-                        labels.append(classifier.get_n_label(i))
-                    metadata.labels.append(labels)
-                metadata.timestamp = roi.frame_meta.buffer_pts
-                self._deposit(roi.frame_meta.pad_index, metadata)
+                idx = roi.frame_meta.pad_index
+                if received[idx] is not None:
+                    received[idx]["timestamp"] = roi.frame_meta.buffer_pts
+            yield received
 
 class MetadataOutput(BaseTensorOutput):
-    def __init__(self, n_outputs, output_name, dims):
-        super().__init__(n_outputs, name=output_name)
+    def __init__(self, n_outputs, output_name, dims, image_output_name=None):
+        super().__init__(n_outputs, metadata_output_name=output_name, image_output_name=image_output_name)
+        self._n_outputs = n_outputs
         self._shape = dims
 
-    def handle_metadata(self, batch_meta):
-        for frame_meta in batch_meta.frame_items:
-            metadata = DeepstreamMetadata()
-            for object_meta in frame_meta.object_items:
-                labels = [object_meta.label] if object_meta.label else []
-                left = int(object_meta.rect_params.left)
-                top = int(object_meta.rect_params.top)
-                width = int(object_meta.rect_params.width)
-                height = int(object_meta.rect_params.height)
-                instance_mask = object_meta.mask_params.mask_array
-                metadata.shape = [self._shape[0], self._shape[1]]
-                metadata.bboxes.append([left, top, left + width, top + height])
-                metadata.probs.append(object_meta.confidence)
-                for classifier in object_meta.classifier_items:
-                    for i in range(classifier.n_labels):
-                        labels.append(classifier.get_n_label(i))
-                metadata.labels.append(labels)
-                metadata.objects.append(object_meta.object_id)
-                if instance_mask.size > 0:
-                    metadata.seg_maps.append(instance_mask.astype(int))
-            for user_meta in frame_meta.segmentation_items:
-                seg_meta = user_meta.as_segmentation()
-                if seg_meta:
-                    metadata.shape = [seg_meta.height, seg_meta.width]
-                    metadata.seg_maps.append(seg_meta.class_map.copy())
-            metadata.timestamp = frame_meta.buffer_pts
-            self._deposit(frame_meta.pad_index, metadata)
+    def _extract_metadata(self, batch_meta):
+        # DS metadata from batch_meta.extract() already carries pts internally
+        yield batch_meta.extract(self._n_outputs)
 
 class DeepstreamBackend(ModelBackend):
     """Deepstream backend using pyservicemaker"""
@@ -589,12 +748,17 @@ class DeepstreamBackend(ModelBackend):
         self._media_url_tensor_name = None
         self._mime_tensor_name = None
         self._source_tensor_name = None
-        self._inference_timeout = model_config["parameters"].get("inference_timeout", 3)
-
-        if len(self._output_names) > 1 and self._output_types[0] == "TYPE_CUSTOM_DS_METADATA":
-            raise Exception(f"No more than one output is allowed for DS metadata!")
+        self._image_output_name = None
+        self._inference_timeout = model_config["parameters"].get("inference_timeout", None)
+        self._in_pools = {}
+        self._outputs = {}
+        self._pipelines = {}
 
         tensor_output = False if self._output_types[0] == "TYPE_CUSTOM_DS_METADATA" else True
+        for o in model_config['output']:
+            if o['data_type'] == 'TYPE_CUSTOM_DS_IMAGE':
+                self._image_output_name = o['name']
+                break
         dims = (0, 0)
 
         if "parameters" not in model_config or "infer_config_path" not in model_config["parameters"]:
@@ -657,7 +821,8 @@ class DeepstreamBackend(ModelBackend):
                 enable_osd=model_config["parameters"]["render_config"].get("enable_osd", False),
                 enable_stream=model_config["parameters"]["render_config"].get("enable_stream", False),
                 rtsp_mount_point=model_config["parameters"]["render_config"].get("rtsp_mount_point", "/ds-test"),
-                rtsp_port=model_config["parameters"]["render_config"].get("rtsp_port", 8554)
+                rtsp_port=model_config["parameters"]["render_config"].get("rtsp_port", 8554),
+                seg_mask_config=model_config["parameters"]["render_config"].get("seg_mask_visualization", None)
             )
         else:
             render_config = RenderConfig()
@@ -680,6 +845,18 @@ class DeepstreamBackend(ModelBackend):
         else:
             kitti_config = KittiConfig()
 
+        if "analytics_config" in model_config["parameters"]:
+            ac = model_config["parameters"]["analytics_config"]
+            config_path = self._correct_config_paths([ac["config_file_path"]])[0] if ac.get("config_file_path") else None
+            analytics_config = AnalyticsConfig(
+                config_path=config_path,
+                gpu_id=ac.get("gpu_id", device_id)
+            )
+            if not analytics_config:
+                logger.warning("DeepstreamBackend: analytics_config is not properly configured")
+        else:
+            analytics_config = AnalyticsConfig()
+
         infer_element = model_config['backend'].split('/')[-1]
         with_triton = infer_element == 'nvinferserver'
         require_extra_input = False
@@ -688,7 +865,7 @@ class DeepstreamBackend(ModelBackend):
         for input in model_config['input']:
             if input['data_type'] == 'TYPE_CUSTOM_DS_IMAGE':
                 self._image_tensor_name = input['name']
-            elif input['data_type'] == 'TYPE_CUSTOM_BINARY_URLS':
+            elif input['data_type'] == 'TYPE_CUSTOM_DS_MEDIA_URL':
                 self._media_url_tensor_name = input['name']
             elif input['data_type'] == 'TYPE_CUSTOM_DS_MIME':
                 self._mime_tensor_name = input['name']
@@ -705,7 +882,7 @@ class DeepstreamBackend(ModelBackend):
             self._source_tensor_name is None):
             raise ValueError(
                 "Deepstream pipeline requires at least one "
-                "TYPE_CUSTOM_DS_IMAGE or TYPE_CUSTOM_BINARY_URLS input "
+                "TYPE_CUSTOM_DS_IMAGE or TYPE_CUSTOM_DS_MEDIA_URL input "
                 "or TYPE_CUSTOM_DS_SOURCE_CONFIG input"
             )
         if ((self._image_tensor_name or self._media_url_tensor_name) and
@@ -754,21 +931,18 @@ class DeepstreamBackend(ModelBackend):
                 label_file_path = label_path
 
         # construct the input pools, outputs and pipelines
-        self._in_pools = {}
-        self._outputs = {}
-        self._pipelines = {}
-        if self._image_tensor_name is not None or self._media_url_tensor_name is not None:
+        if self._image_tensor_name is not None:
             # image input support
             media = "image"
             formats = ["JPEG", "PNG"]
             in_pool = ImageTensorInputPool(dims[0], dims[1], formats, self._max_batch_size, self._image_tensor_name, self._media_url_tensor_name, self._mime_tensor_name, device_id, require_extra_input)
             n_output = self._max_batch_size * len(formats)
             if tensor_output:
-                output = TensorOutput(n_output, preprocess_config_paths)
+                output = TensorOutput(n_output, preprocess_config_paths, image_output_name=self._image_output_name)
             elif preprocess_config_paths:
-                output = PreprocessMetadataOutput(n_output, self._output_names[0], dims)
+                output = PreprocessMetadataOutput(n_output, self._output_names[0], dims, image_output_name=self._image_output_name)
             else:
-                output = MetadataOutput(n_output, self._output_names[0], dims)
+                output = MetadataOutput(n_output, self._output_names[0], dims, image_output_name=self._image_output_name)
             # create the pipeline
             pipeline = Pipeline(f"deepstream-{self._model_name}-{media}")
 
@@ -778,7 +952,6 @@ class DeepstreamBackend(ModelBackend):
 
             # build the inference flow
             flow = Flow(pipeline)
-            probe = Probe('tensor_retriver', output)
             batch_timeout = model_config["parameters"].get("batch_timeout", 1000 * self._max_batch_size)
             flow = flow.inject(in_pool.image_inputs).decode().batch(batch_size=self._max_batch_size, batched_push_timeout=batch_timeout, live_source=False, width=dims[1], height=dims[0])
             for config_file in preprocess_config_paths:
@@ -790,32 +963,40 @@ class DeepstreamBackend(ModelBackend):
                     flow = flow.infer(config_file, with_triton, batch_size=self._max_batch_size, model_engine_file=engine_file)
                 else:
                     flow = flow.infer(config_file, with_triton, batch_size=self._max_batch_size)
-            flow = flow.attach(probe).render(RenderMode.DISCARD, enable_osd=False)
-            pipeline.start()
+
+            flow = flow.attach(what=Probe("metadata_probe", output)).retrieve(output, **{'async': False})
+
             # warm up
             warmup_data_0[self._image_tensor_name] = np.frombuffer(png_data, dtype=np.uint8)
             warmup_data_0[self._mime_tensor_name] = "image/png"
             warmup_data_1[self._image_tensor_name] = np.frombuffer(jpg_data, dtype=np.uint8)
             warmup_data_1[self._mime_tensor_name] = "image/jpeg"
-            indices = in_pool.submit([warmup_data_0.copy() for _ in range(self._max_batch_size)])
-            results = output.collect(indices)
+
+            logger.info("Image decoder warming up - pre-filling all queues")
+            # Submit BOTH PNG and JPEG warmup data BEFORE starting pipeline
+            # This ensures all 4 sources have data when streaming threads start
+            indices_0 = in_pool.submit([warmup_data_0.copy() for _ in range(self._max_batch_size)])
+            indices_1 = in_pool.submit([warmup_data_1.copy() for _ in range(self._max_batch_size)])
+
+            # Now start pipeline - all queues have data
+            pipeline.start()
+
+            # Collect all results together (PNG + JPEG)
+            all_indices = indices_0 + indices_1
+            results = output.collect(all_indices)
             output.reset()
-            logger.info(f"Warm up 0: {results}")
-            indices = in_pool.submit([warmup_data_1.copy() for _ in range(self._max_batch_size)])
-            results = output.collect(indices)
-            output.reset()
-            logger.info(f"Warm up 1: {results}")
+            logger.info(f"Warm up done: {results}")
 
         if (self._media_url_tensor_name is not None or
             self._source_tensor_name is not None):
             # video input support
             media = "video"
             if tensor_output:
-                output = TensorOutput(self._max_batch_size, preprocess_config_paths)
+                output = TensorOutput(self._max_batch_size, preprocess_config_paths, image_output_name=self._image_output_name)
             elif preprocess_config_paths:
-                output = PreprocessMetadataOutput(self._max_batch_size, self._output_names[0], dims)
+                output = PreprocessMetadataOutput(self._max_batch_size, self._output_names[0], dims, image_output_name=self._image_output_name)
             else:
-                output = MetadataOutput(self._max_batch_size, self._output_names[0], dims)
+                output = MetadataOutput(self._max_batch_size, self._output_names[0], dims, image_output_name=self._image_output_name)
             engine_files = [
                 self._generate_engine_name(
                     config_file,
@@ -833,6 +1014,7 @@ class DeepstreamBackend(ModelBackend):
                 infer_config_paths=infer_config_paths,
                 preprocess_config_paths=preprocess_config_paths,
                 tracker_config=tracker_config,
+                analytics_config=analytics_config,
                 msgbroker_config=msgbroker_config,
                 render_config=render_config,
                 perf_config=perf_config,
@@ -842,19 +1024,33 @@ class DeepstreamBackend(ModelBackend):
                 require_extra_input=require_extra_input,
                 engine_file_names=engine_files,
                 dims=dims,
-                label_file_path=label_file_path
+                label_file_path=label_file_path,
+                model_home=self._model_home
             )
-            if not all(os.path.exists(e) for e in engine_files):
-                # generate the engine files
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    # Write test data to a temporary file
-                    temp_data_path = os.path.join(temp_dir, 'test.png')
-                    with open(temp_data_path, 'wb') as f:
-                        f.write(png_data)
-                    warmup_data = {self._media_url_tensor_name: temp_data_path}
-                    indices = in_pool.submit([warmup_data])
-                    results = output.collect(indices)
+
+            # build tensorrt engine if not exist
+            if not all (os.path.exists(e) for e in engine_files):
+                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as f:
+                    f.write(jpg_data)
+                    warmup_video_path = f.name
+                # Disable perf/render probes for warmup to avoid leaked FPS reporters
+                in_pool._perf_config = PerfConfig()
+                in_pool._render_config = RenderConfig()
+                try:
+                    logger.info("Video decoder warming up - building TensorRT engine")
+                    warmup_item = {self._media_url_tensor_name: warmup_video_path}
+                    if self._mime_tensor_name:
+                        warmup_item[self._mime_tensor_name] = "video/mp4"
+                    indices = in_pool.submit([warmup_item])
+                    if indices:
+                        results = output.collect(indices)
+                        logger.info(f"Video warm up done: {results}")
                     output.reset()
+                    in_pool.stop("warmup")
+                finally:
+                    in_pool._perf_config = perf_config
+                    in_pool._render_config = render_config
+                    os.unlink(warmup_video_path)
 
         self._in_pools[media] = in_pool
         self._outputs[media] = output
@@ -866,12 +1062,19 @@ class DeepstreamBackend(ModelBackend):
 
 
     def __call__(self, *args, **kwargs):
-        in_data_list = args if args else [kwargs]
+        in_data_list = args if args else split_tensor_in_dict(kwargs)
         media = None
         explicit_batch = True if args else False
 
         # analyze the input batch
         for data in in_data_list:
+            # convert numpy types to native Python types
+            for k, v in data.items():
+                if isinstance(v, np.generic):
+                    v = v.item()
+                if isinstance(v, bytes):
+                    v = v.decode()
+                data[k] = v
             # get the media type
             if ((self._image_tensor_name in data or self._media_url_tensor_name in data) and
                 not self._mime_tensor_name in data):
@@ -891,6 +1094,16 @@ class DeepstreamBackend(ModelBackend):
                     f"got {media} and {current_media}"
                 )
                 return
+
+        # validate the media type
+        if media not in self._in_pools:
+            if media == "image":
+                logger.error("TYPE_CUSTOM_DS_IMAGE input must be added to the pipeline for image support")
+            elif media == "video":
+                logger.error("TYPE_CUSTOM_DS_MEDIA_URL input must be added to the pipeline for video support")
+            else:
+                logger.error("Unknown media type : ", media)
+            return
 
         # submit the data to the pipeline which supports the media type
         indices = self._in_pools[media].submit(in_data_list)
@@ -915,12 +1128,18 @@ class DeepstreamBackend(ModelBackend):
             if media == "image":
                 break
 
-    def __del__(self):
-        for input in self._in_pools.values():
-            input.stop("Finalized")
+    def stop(self):
+        for input_pool in self._in_pools.values():
+            input_pool.stop("Finalized")
         for pipeline in self._pipelines.values():
             pipeline.stop()
             pipeline.wait()
+        self._in_pools.clear()
+        self._pipelines.clear()
+        super().stop()
+
+    def __del__(self):
+        self.stop()
 
     def _generate_engine_name(self, config_path: str, device_id: int, batch_size: int):
         def network_mode_to_string(network_mode: int):
@@ -948,6 +1167,7 @@ class DeepstreamBackend(ModelBackend):
                     network_mode = mode
         engine_file = f"{onnx_file}_b{batch_size}_gpu{device_id}_{network_mode}.engine"
         return os.path.join(self._model_home, engine_file)
+
 
     def _correct_config_paths(self, config_paths: List[str]) -> List[str]:
         if not config_paths:

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,7 +37,7 @@ input:
     optional: true
   # a list of asset ids for video files
   - name: "video_assets"
-    data_type: TYPE_CUSTOM_VIDEO_ASSETS
+    data_type: TYPE_CUSTOM_LONG_VIDEO_ASSETS
     dims: [ -1 ]
     optional: true
 
@@ -190,13 +190,14 @@ server:
               } {% if not loop.last %}, {% endif %} {% endfor %}
             ]
           }
+    healthy_ready:
+      operation: health_ready_v1_health_ready_get
 
 models:
   - name: dummy
     backend: "dummy"
     max_batch_size: 1
-    parameters:
-      FORCE_CPU_ONLY_INPUT_TENSORS: "no"
+    parameters: {}
     input:
       - name: images
         data_type: TYPE_FP32

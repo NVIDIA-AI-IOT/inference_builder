@@ -38,7 +38,7 @@ Run `ls $MODEL_REPO/visual_changenet -l`, be sure you have `changenet_768.onnx` 
 docker login nvcr.io
 docker run -it --rm --gpus all \
 -v ~/.cache/model-repo/visual_changenet/:/changenet \
-nvcr.io/nvidia/tensorrt-pb25h1:25.03.02-py3 \
+nvcr.io/nvidia/tensorrt:25.12-py3 \
 trtexec --onnx=/changenet/changenet_768.onnx --saveEngine=/changenet/model.plan --fp16
 ```
 
@@ -53,7 +53,7 @@ The following command activates the virtual environment and generates the infere
 ```bash
 source .venv/bin/activate
 python builder/main.py \
-  --server-type triton \
+  --server-type fastapi \
   -a builder/samples/changenet/openapi.yaml \
   -c builder/samples/changenet/processors.py \
   -o builder/samples/changenet -t \
@@ -93,4 +93,4 @@ source .venv/bin/activate && cd builder/samples/changenet
 python ib_client.py --host 127.0.0.1 --port 8803 --file test_0.jpg golden_0.jpg
 ```
 
-If the inference request is successfuly processed, you'll get a HTTP 200 response and a new window shows the difference between two images.
+If the inference request is successfully processed, you'll get a HTTP 200 response and a new window shows the difference between two images.

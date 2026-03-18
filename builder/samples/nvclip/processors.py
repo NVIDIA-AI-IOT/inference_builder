@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +16,7 @@
 import numpy as np
 import io
 from PIL import Image
+from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize, InterpolationMode
 
 class OpenclipTokenizer:
     name = "openclip-tokenizer"
@@ -24,14 +25,12 @@ class OpenclipTokenizer:
         open_clip.add_model_config(config["model_home"])
         self._tokenizer = open_clip.get_tokenizer("NVCLIP_224_700M_ViTH14")
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         return self._tokenizer(args[0])
 
 class VisionPreprocessor:
     name = "nvclip-vision-preprocessor"
     def __init__(self, config):
-
-        from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize, InterpolationMode
         self._transform = Compose(
             [
                 Resize((224, 224), interpolation=InterpolationMode.BICUBIC),
@@ -45,7 +44,7 @@ class VisionPreprocessor:
             ]
         )
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         return self._transform(Image.open(io.BytesIO(args[0])))
 
 class NvClipPostProcessor:
@@ -53,7 +52,7 @@ class NvClipPostProcessor:
     def __init__(self, config):
         self._config = config
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         text = args[0].tolist()
         images = args[1].tolist()
         indices = args[2].tolist()

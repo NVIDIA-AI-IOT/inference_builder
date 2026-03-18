@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,9 +29,19 @@ from omegaconf.errors import ConfigKeyError
 from jinja2 import Environment, FileSystemLoader
 import ast
 import os
+import sys
 import subprocess
 import validate
 import re
+import json
+import sys
+
+# Import schema validation functions
+try:
+    from jsonschema import Draft7Validator
+except ImportError:
+    Draft7Validator = None
+    logging.warning("jsonschema not installed. Schema validation will be skipped. Install with: pip install jsonschema")
 
 """
 Inference Builder Main Module
@@ -45,7 +55,7 @@ Security Features:
 """
 
 LICENSE_HEADER = """
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,59 +71,187 @@ LICENSE_HEADER = """
 # limitations under the License.
 """
 
-ALLOWED_SERVER = ["triton", "fastapi", "serverless"]
+
+def load_allowed_servers(file_path: str = None) -> List[str]:
+    """Load allowed server types from a text file.
+
+    Args:
+        file_path: Path to the text file containing allowed server types.
+                  If None, uses the default 'allowed_servers.txt'
+                  in the builder directory.
+
+    Returns:
+        List of allowed server type strings.
+
+    Raises:
+        FileNotFoundError: If the configuration file is not found.
+        ValueError: If the file is empty or contains invalid entries.
+    """
+    if file_path is None:
+        # Use default file in the same directory as this script
+        script_dir = Path(__file__).parent
+        file_path = script_dir / "allowed_servers.txt"
+    else:
+        file_path = Path(file_path)
+
+    if not file_path.exists():
+        raise FileNotFoundError(
+            f"Allowed servers configuration file not found: {file_path}"
+        )
+
+    allowed_servers = []
+    with open(file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            # Strip whitespace and ignore empty lines and comments
+            line = line.strip()
+            if line and not line.startswith('#'):
+                allowed_servers.append(line)
+
+    if not allowed_servers:
+        raise ValueError(f"No valid server types found in {file_path}")
+
+    return allowed_servers
+
+
+# Load allowed server types from configuration file
+ALLOWED_SERVER = load_allowed_servers()
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Main")
 OmegaConf.register_new_resolver("multiline", lambda x: x, replace=False)
 
 
-def validate_file_path(file_path: str) -> bool:
-    """Validate file path to prevent directory traversal and command injection."""
+def validate_file_path(file_path: str) -> str:
+    """Validate and sanitize a file path to prevent directory traversal and command injection.
+
+    Returns:
+        str: Validated and resolved absolute file path.
+    Raises:
+        ValueError: If path is invalid or potentially dangerous.
+    """
     if not file_path:
-        return False
+        raise ValueError("File path cannot be empty")
 
-    # Check for dangerous patterns
-    dangerous_patterns = [
-        r'[;&|`$()]',  # Shell metacharacters
-        r'\.\.',       # Directory traversal
-        r'/etc/',      # System directories
-        r'/proc/',     # System directories
-        r'[<>]',       # Redirections
-    ]
+    try:
+        abs_path = os.path.abspath(file_path)
+        resolved_path = os.path.realpath(abs_path)
+    except (OSError, ValueError) as e:
+        raise ValueError(f"Invalid file path: {e}")
 
-    for pattern in dangerous_patterns:
-        if re.search(pattern, file_path):
-            return False
+    if ".." in os.path.normpath(file_path):
+        raise ValueError("Path traversal detected in file path")
 
-    # Ensure it's a regular file
-    path = Path(file_path)
-    return path.exists() and path.is_file()
+    invalid_chars = ['<', '>', ':', '"', '|', '?', '*']
+    if any(char in file_path for char in invalid_chars):
+        raise ValueError("Invalid characters in file path")
+
+    system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin']
+    for sys_dir in system_dirs:
+        if resolved_path.startswith(sys_dir):
+            raise ValueError(f"Access to system directory {sys_dir} is not allowed")
+
+    path = Path(resolved_path)
+    if not path.exists() or not path.is_file():
+        raise ValueError(f"File not found or not a regular file: {resolved_path}")
+
+    return resolved_path
 
 
-def validate_directory_path(dir_path: str) -> bool:
-    """Validate directory path to prevent directory traversal attacks."""
+def validate_directory_path(dir_path: str) -> str:
+    """Validate and sanitize a directory path to prevent directory traversal attacks.
+
+    Returns:
+        str: Validated and resolved absolute directory path.
+    Raises:
+        ValueError: If path is invalid or potentially dangerous.
+    """
     if not dir_path:
-        return False
+        raise ValueError("Directory path cannot be empty")
 
-    # Check for dangerous patterns
-    dangerous_patterns = [
-        r'[;&|`$()]',  # Shell metacharacters
-        r'\.\.',       # Directory traversal (relative)
-        r'/etc/',      # System directories
-        r'/proc/',     # System directories
-    ]
+    try:
+        abs_path = os.path.abspath(dir_path)
+        resolved_path = os.path.realpath(abs_path)
+    except (OSError, ValueError) as e:
+        raise ValueError(f"Invalid directory path: {e}")
 
-    for pattern in dangerous_patterns:
-        if re.search(pattern, dir_path):
-            return False
+    if ".." in os.path.normpath(dir_path):
+        raise ValueError("Path traversal detected in directory path")
 
-    return True
+    invalid_chars = ['<', '>', ':', '"', '|', '?', '*']
+    if any(char in dir_path for char in invalid_chars):
+        raise ValueError("Invalid characters in directory path")
+
+    system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin']
+    for sys_dir in system_dirs:
+        if resolved_path.startswith(sys_dir):
+            raise ValueError(f"Access to system directory {sys_dir} is not allowed")
+
+    return resolved_path
 
 
 def validate_server_type(server_type: str) -> bool:
     """Validate server type against allowed values."""
     return server_type in ALLOWED_SERVER
+
+
+def validate_config_against_schema(config_dict: Dict, schema_dir: Path = None) -> bool:
+    """Validate configuration against JSON schema.
+
+    Args:
+        config_dict: Configuration dictionary to validate
+        schema_dir: Directory containing schema files (default: ../schemas from this file)
+
+    Returns:
+        True if valid, False otherwise
+    """
+    if Draft7Validator is None:
+        logger.warning("Skipping schema validation (jsonschema not installed)")
+        return True
+
+    # Determine schema directory
+    if schema_dir is None:
+        schema_dir = Path(__file__).parent.parent / "schemas"
+
+    if not schema_dir.exists():
+        logger.warning(f"Schema directory not found: {schema_dir}. Skipping schema validation.")
+        return True
+
+    # Load main schema
+    schema_path = schema_dir / "config.schema.json"
+    try:
+        with open(schema_path, 'r') as f:
+            schema = json.load(f)
+    except FileNotFoundError:
+        logger.warning(f"Schema file not found: {schema_path}. Skipping schema validation.")
+        return True
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid schema file: {e}")
+        return False
+
+    # Validate configuration
+    try:
+        validator = Draft7Validator(schema)
+        errors = list(validator.iter_errors(config_dict))
+
+        if not errors:
+            logger.info("✓ Configuration schema validation passed")
+            return True
+
+        logger.error(f"✗ Configuration validation failed with {len(errors)} error(s):")
+        for i, error in enumerate(errors, 1):
+            path = '.'.join(str(p) for p in error.path) if error.path else 'root'
+            logger.error(f"  Error {i} at '{path}': {error.message}")
+
+            if error.context:
+                for ctx_error in error.context:
+                    logger.error(f"    - {ctx_error.message}")
+
+        return False
+
+    except Exception as e:
+        logger.error(f"Error during schema validation: {e}")
+        return False
 
 
 def build_args(parser):
@@ -304,8 +442,12 @@ def build_server(server_type, model_name, api_spec, config: Dict, output_dir):
     api_tpl_dir = get_resource_path(f"templates/api_server/{server_type}/route")
 
     # Use safer subprocess call with argument list instead of shell string interpolation
+    # Find fastapi-codegen in the same directory as the current Python executable
+    python_dir = Path(sys.executable).parent
+    fastapi_codegen = python_dir / "fastapi-codegen"
+    
     command = [
-        "fastapi-codegen",
+        str(fastapi_codegen),
         "--input", api_spec.name,
         "--output", str(output_dir),
         "--output-model-type", "pydantic_v2.BaseModel",
@@ -401,26 +543,45 @@ def generate_configuration(config, tree):
 
 
 def main(args):
-    # Validate all arguments to prevent security issues
-    if not validate_file_path(args.config):
-        raise ValueError(f"Invalid config file path: {args.config}")
+    # Defense-in-depth: validate and sanitize all path arguments
+    try:
+        args.config = validate_file_path(args.config)
+    except ValueError as e:
+        raise ValueError(f"Invalid config file path: {e}")
 
     if not validate_server_type(args.server_type):
         raise ValueError(f"Invalid server type: {args.server_type}")
 
-    if not validate_directory_path(args.output_dir):
-        raise ValueError(f"Invalid output directory: {args.output_dir}")
+    try:
+        args.output_dir = validate_directory_path(args.output_dir)
+    except ValueError as e:
+        raise ValueError(f"Invalid output directory: {e}")
 
-    if args.validation_dir and not validate_directory_path(args.validation_dir):
-        raise ValueError(f"Invalid validation directory: {args.validation_dir}")
+    if args.validation_dir:
+        try:
+            args.validation_dir = validate_directory_path(args.validation_dir)
+        except ValueError as e:
+            raise ValueError(f"Invalid validation directory: {e}")
 
-    # Validate custom modules if provided
     if args.custom_module:
         for module in args.custom_module:
-            if not validate_file_path(module.name):
-                raise ValueError(f"Invalid custom module file path: {module.name}")
+            try:
+                validate_file_path(module.name)
+            except ValueError as e:
+                raise ValueError(f"Invalid custom module file path: {e}")
 
+    # Load configuration
+    logger.info(f"Loading configuration from: {args.config}")
     config = OmegaConf.load(args.config)
+
+    # Validate configuration against JSON schema
+    logger.info("Validating configuration against JSON schema...")
+    config_dict = OmegaConf.to_container(config, resolve=True)
+
+    if not validate_config_against_schema(config_dict):
+        logger.error("Configuration validation failed. Fix the errors above and try again.")
+        sys.exit(1)
+
     with tempfile.TemporaryDirectory() as temp_dir:
         tree = build_tree(args.server_type, config, temp_dir)
         if args.server_type == "serverless":
@@ -462,4 +623,44 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Inference Builder")
     build_args(parser)
-    main(parser.parse_args())
+
+    try:
+        args = parser.parse_args()
+    except Exception as e:
+        print(f"Error: Argument parsing failed: {str(e)}")
+        sys.exit(1)
+
+    # Comprehensive security validation
+    validation_errors = []
+
+    # Validate and sanitize config file path
+    try:
+        args.config = validate_file_path(args.config)
+    except ValueError as e:
+        validation_errors.append(f"Invalid config file path: {e}")
+
+    # Validate server type (already constrained by argparse choices)
+    if not validate_server_type(args.server_type):
+        validation_errors.append(f"Invalid server type: {args.server_type}")
+
+    # Validate and sanitize output directory
+    try:
+        args.output_dir = validate_directory_path(args.output_dir)
+    except ValueError as e:
+        validation_errors.append(f"Invalid output directory: {e}")
+
+    # Validate and sanitize validation directory
+    if args.validation_dir:
+        try:
+            args.validation_dir = validate_directory_path(args.validation_dir)
+        except ValueError as e:
+            validation_errors.append(f"Invalid validation directory: {e}")
+
+    # Exit if any validation errors
+    if validation_errors:
+        print("Security validation failed:")
+        for error in validation_errors:
+            print(f"  - {error}")
+        sys.exit(1)
+
+    main(args)

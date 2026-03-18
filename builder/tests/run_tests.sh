@@ -51,23 +51,27 @@ print_error() {
 # Function to show usage
 show_usage() {
     cat << EOF
-Usage: $0 [COMMAND] [OPTIONS]
+Usage: $0 [OPTIONS]
 
-Commands:
-    full-test      Run full test suite with all configurations from test_configs.json
-    custom-test    Run test with custom configuration file
-    help           Show this help message
+Run Docker build tests using a configuration file (defaults to test_configs.json).
 
 Options:
     --no-cleanup           Don't cleanup Docker images after testing
     --output FILE          Save test report to specified file
-    --config FILE          Use custom configuration file (required for custom-test)
+    -c, --config FILE      Use configuration file (optional, defaults to test_configs.json)
     --log-dir DIR          Directory to save container logs (default: logs)
+    -t, --test-case NAME   Run only test cases matching this name (partial match). Use '*' for all.
+    --gpus DEVICES         GPU devices to use (default: 'all'). Examples: 'all', 'device=0', 'device=0,1'
 
 Examples:
-    $0 full-test
-    $0 custom-test --config my_config.json --output results.json
-    $0 full-test --no-cleanup --output full_results.json --log-dir test_logs
+    $0
+    $0 -c my_config.json --output results.json
+    $0 --no-cleanup --output full_results.json --log-dir test_logs
+    $0 -t "Frame Sampling"
+    $0 -t "*"
+    $0 --test-case "FastAPI"
+    $0 --gpus "device=0"
+    $0 --gpus "device=0,1" -t "*"
 
 EOF
 }
@@ -102,62 +106,19 @@ check_prerequisites() {
     print_success "Prerequisites check passed"
 }
 
-# Function to run full test
-run_full_test() {
-    print_info "Running full test suite with all configurations..."
-
-    local args=("--dockerfile" "Dockerfile" "--base-dir" "." "--config-file" "test_configs.json" "--log-dir" "$LOG_DIR")
-
-    if [ "$NO_CLEANUP" = "true" ]; then
-        args+=("--no-cleanup")
-    fi
-
-    if [ -n "$OUTPUT_FILE" ]; then
-        args+=("--output" "$OUTPUT_FILE")
-    fi
-
-    python3 "$TEST_SCRIPT" "${args[@]}"
-}
-
-# Function to run custom test
-run_custom_test() {
-    if [ -z "$CONFIG_FILE" ]; then
-        print_error "Custom test requires --config option"
-        exit 1
-    fi
-
-    if [ ! -f "$CONFIG_FILE" ]; then
-        print_error "Configuration file not found: $CONFIG_FILE"
-        exit 1
-    fi
-
-    print_info "Running custom test with configuration: $CONFIG_FILE"
-
-    local args=("--dockerfile" "Dockerfile" "--base-dir" "." "--config-file" "$CONFIG_FILE" "--log-dir" "$LOG_DIR")
-
-    if [ "$NO_CLEANUP" = "true" ]; then
-        args+=("--no-cleanup")
-    fi
-
-    if [ -n "$OUTPUT_FILE" ]; then
-        args+=("--output" "$OUTPUT_FILE")
-    fi
-
-    python3 "$TEST_SCRIPT" "${args[@]}"
-}
-
 # Parse command line arguments
-COMMAND=""
 NO_CLEANUP="false"
 OUTPUT_FILE=""
 CONFIG_FILE=""
 LOG_DIR="logs"
+TEST_CASE=""
+GPUS="all"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        full-test|custom-test|help)
-            COMMAND="$1"
-            shift
+        -h|--help)
+            show_usage
+            exit 0
             ;;
         --no-cleanup)
             NO_CLEANUP="true"
@@ -167,12 +128,20 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_FILE="$2"
             shift 2
             ;;
-        --config)
+        -c|--config)
             CONFIG_FILE="$2"
             shift 2
             ;;
         --log-dir)
             LOG_DIR="$2"
+            shift 2
+            ;;
+        -t|--test-case)
+            TEST_CASE="$2"
+            shift 2
+            ;;
+        --gpus)
+            GPUS="$2"
             shift 2
             ;;
         *)
@@ -183,21 +152,43 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Check if command is provided
-if [ -z "$COMMAND" ]; then
-    print_error "No command specified"
-    show_usage
-    exit 1
-fi
-
-# Handle help command
-if [ "$COMMAND" = "help" ]; then
-    show_usage
-    exit 0
-fi
-
 # Change to script directory
 cd "$SCRIPT_DIR"
 
 # Check prerequisites
 check_prerequisites
+
+# Determine configuration file (default to test_configs.json)
+if [ -z "$CONFIG_FILE" ]; then
+    CONFIG_FILE="test_configs.json"
+    print_info "No configuration file provided, using default: $CONFIG_FILE"
+fi
+
+if [ ! -f "$CONFIG_FILE" ]; then
+    print_error "Configuration file not found: $CONFIG_FILE"
+    exit 1
+fi
+
+print_info "Running tests with configuration: $CONFIG_FILE"
+
+args=("--dockerfile" "Dockerfile" "--base-dir" "." "--config-file" "$CONFIG_FILE" "--log-dir" "$LOG_DIR")
+
+if [ "$NO_CLEANUP" = "true" ]; then
+    args+=("--no-cleanup")
+fi
+
+if [ -n "$OUTPUT_FILE" ]; then
+    args+=("--output" "$OUTPUT_FILE")
+fi
+
+if [ -n "$TEST_CASE" ]; then
+    args+=("--test-case" "$TEST_CASE")
+fi
+
+if [ -n "$GPUS" ]; then
+    args+=("--gpus" "$GPUS")
+fi
+
+python3 "$TEST_SCRIPT" "${args[@]}"
+
+print_success "Test execution completed"

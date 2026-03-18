@@ -19,10 +19,10 @@
 import argparse
 from config import global_config
 from typing import List, Optional
-import asyncio
 from lib.inference import py_datatype_mapping
 from .model import GenericInference
 import json
+import sys
 from lib.utils import NumpyFlatEncoder
 
 
@@ -52,13 +52,15 @@ def create_parser(inputs: List) -> argparse.ArgumentParser:
         '-s',
         '--save-to',
         type=str,
-        help='Save results to a file'
+        nargs='?',
+        const='stdout',
+        help='Save results to a file, or use -s alone for stdout'
     )
     return parser
 
 
-async def run_inference(args) -> Optional[int]:
-    """Run the inference service asynchronously.
+def run_inference(args) -> Optional[int]:
+    """Run the inference service synchronously.
 
     Args:
         args: Parsed command line arguments
@@ -68,10 +70,8 @@ async def run_inference(args) -> Optional[int]:
     """
     # Read and remove save_to argument before converting to dict
     save_to = getattr(args, 'save_to', None)
-    if save_to:
+    if hasattr(args, 'save_to'):
         delattr(args, 'save_to')
-        # Create empty file if save_to is specified
-        open(save_to, 'w', encoding='utf-8').close()
 
     # Convert remaining args to dictionary
     inputs = vars(args)
@@ -81,19 +81,37 @@ async def run_inference(args) -> Optional[int]:
 
     service = GenericInference()
     service.initialize()
-    async for result in service.execute(inputs):
-        if save_to:
-            with open(save_to, "a", encoding='utf-8') as f:
-                json_str = json.dumps(result, indent=4, cls=NumpyFlatEncoder)
-                f.write(json_str)
-                f.write("\n")
+    status = 0
+
+    # Determine output target: file, stdout, or None (no output)
+    output_file = None
+    close_file = False
+    if save_to:
+        if save_to in ('-', 'stdout'):
+            output_file = sys.stdout
         else:
-            print(result)
-            print()
+            output_file = open(save_to, 'w', encoding='utf-8')
+            close_file = True
+
+    try:
+        for result in service.exec_sync(inputs):
+            if not result:
+                status = -1
+                break
+            # Unified logic: write JSON to output target if specified
+            if output_file:
+                json_str = json.dumps(result, indent=4, cls=NumpyFlatEncoder)
+                output_file.write(json_str)
+                output_file.write("\n")
+                if close_file:
+                    output_file.flush()  # Ensure data is written to disk
+    finally:
+        if close_file and output_file:
+            output_file.close()
 
     print("Inference completed.")
     service.finalize()
-    return 0
+    return status
 
 
 def main() -> int:
@@ -106,7 +124,7 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        return asyncio.run(run_inference(args))
+        return run_inference(args)
     except KeyboardInterrupt:
         print("\nInterrupted by user")
         return 130

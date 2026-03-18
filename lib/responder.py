@@ -65,6 +65,9 @@ class ResponderBase:
             raise ValueError(f"Unknown action: {action_name}")
         return await action(*args)
 
+    def healthy_ready(self):
+        return self._inference and self._inference.is_healthy()
+
     def process_request(self, responder: str, request: BaseModel) -> Dict[str, Any]:
         self.logger.debug(f"Processing request {request}")
 

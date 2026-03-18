@@ -22,6 +22,8 @@ from config import global_config
 from .model import GenericInference
 from lib.utils import create_jinja2_env, convert_list
 from lib.responder import ResponderBase
+from lib.inference import Stop
+from lib.errors import EnhancedError
 import re
 import numpy as np
 import torch
@@ -34,7 +36,6 @@ class Responder(ResponderBase):
         super().__init__()
         self._inference = GenericInference()
         self._inference.initialize()
-        self._lock = asyncio.Lock()
 
         # initialize the action map
         {% for responder in responders %}

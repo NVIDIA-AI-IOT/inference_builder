@@ -22,7 +22,7 @@ class DummyPreprocessor:
     def __init__(self, config):
         self.network_size = config['network_size']
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         if len(args) != 1:
             raise ValueError("DummyPreprocessor expects exactly one argument")
         input = args[0]
@@ -40,5 +40,5 @@ class DummyTokenizer:
     def __init__(self, config):
         pass
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         return np.random.randint(0, 100, size=10), np.array([10])

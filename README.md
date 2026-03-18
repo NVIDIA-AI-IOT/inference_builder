@@ -23,11 +23,11 @@ Visit our [documentation](doc) for more details:
 
 First, be sure your system meets the requirement.
 
-| Operating System   | Python | CPU            |  GPU*                        |
+| Operating System   | Python | CPU            | GPU[^1]                      |
 |:-------------------|:-------|:---------------|:-----------------------------|
 |Ubuntu 24.04        |3.12    | x86, aarch64   |Nvidia ADA, Hopper, Blackwell |
 
-*: If you only generate the inference pipeline without running it, no GPU is required.
+[^1]: If you only generate the inference pipeline without running it, no GPU is required.
 
 Next, follow these steps to get started:
 
@@ -63,6 +63,32 @@ pip3 install -r requirements.txt
 
 ## Play with the examples
 
+Docker environment must be properly set up with below packages for building and running the examples:
+
+- **Docker**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
+- **Docker Compose**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
+- **NVIDIA Container Toolkit**: [Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+
+
+Ensure nvidia runtime added to `/etc/docker/daemon.json` to run GPU-enabled containers
+
+```bash
+{
+    "runtimes": {
+        "nvidia": {
+            "args": [],
+            "path": "nvidia-container-runtime"
+        }
+    }
+}
+```
+
+The `docker` group must exist in your system, please check if it has been created using `getent group docker`. Your current user must belong to the `docker` group, If not, run the command below, then log out and back in for the group change to take effect.
+
+```bash
+sudo usermod -aG docker $USER
+```
+
 Now you can try [our examples](builder/samples/README.md) to learn more. These examples span all supported backends and demonstrate their distinct inference flows.
 
 ![Inference FLow of Different Backend](doc/assets/inference_flow.png)
@@ -75,6 +101,98 @@ Compared to manually crafting inference source code, Inference Builder offers de
 - Hardware acceleration: Automatically enables GPU-accelerated processing to boost performance.
 - Streaming support: Provides built-in support for streaming protocols such as RTSP with minimal configuration.
 - Standardized testing: Automates and standardizes test case generation to simplify validation and evaluation workflows.
+
+## MCP Integration
+
+Inference Builder includes MCP (Model Context Protocol) integration, enabling AI-assisted pipeline generation directly within Cursor or Claude Code. With MCP, you can use natural language to generate inference pipelines, build Docker images, and explore sample configurations.
+
+For detailed tool reference and advanced usage, see [mcp/README-MCP.md](mcp/README-MCP.md).
+
+### Prerequisites
+
+Before setting up MCP, ensure you have completed the [Getting Started](#getting-started) steps above.
+
+Ensure that you are in the repository's root directory.
+
+### Set Up for Cursor
+
+1. **Generate the MCP configuration**
+
+   For a global configuration (available across all projects):
+   ```bash
+   python3 mcp/setup_mcp.py ~/.cursor/mcp.json
+   ```
+
+   For a project-specific configuration:
+   ```bash
+   python3 mcp/setup_mcp.py /path/to/your_project/.cursor/mcp.json
+   ```
+
+2. **Open your project folder and verify the MCP server is successfully loaded**
+
+   In Cursor, navigate to **File > Preferences > Cursor Settings > MCP**. You should see:
+
+   ![MCP Server](mcp.png)
+
+   A green status icon next to `deepstream-inference-builder` indicates the server is connected.
+
+3. **Start using the MCP tools:**
+
+   Start a new Cursor agent and invoke the tools by mentioning "deepstream inference builder" in your prompt:
+   - "Show me what sample configurations are available from the inference builder?"
+   - "Generate a DeepStream object detection pipeline using the inference builder with PeopleNet transformer model from NGC."
+
+### Set Up for Claude Code
+
+1. **Generate the MCP configuration:**
+
+   For a global configuration:
+   ```bash
+   python3 mcp/setup_mcp.py ~/.claude/.mcp.json
+   ```
+
+   For a project-specific configuration:
+   ```bash
+   python3 mcp/setup_mcp.py /path/to/your_project/.mcp.json
+   ```
+
+2. **Start Claude Code from your project folder and Verify the MCP server is connected:**
+
+   Run `/mcp` in the Claude Code console. You should see:
+   ```
+   ❯ deepstream-inference-builder · ✔ connected
+   ```
+
+3. **Start using the MCP tools:**
+
+   Simply ask Claude Code to perform tasks by mentioning "deepstream inference builder" in your prompt:
+   - "Show me what sample configurations are available from the inference builder?"
+   - "Generate a DeepStream object detection pipeline using the inference builder with PeopleNet transformer model from NGC."
+
+### Available MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `generate_inference_pipeline` | Generate inference pipelines from YAML configuration files |
+| `build_docker_image` | Build Docker images from generated pipelines |
+| `docker_run_image` | Run Docker images for testing and troubleshooting |
+| `prepare_model_repository` | Download models from NGC or HuggingFace and prepare repositories |
+| `generate_nvinfer_config` | Generate DeepStream nvinfer runtime configuration files |
+
+### Available MCP Resources
+
+| Resource | Description |
+|----------|-------------|
+| `docs://README.md` | Project documentation |
+| `docs://mcp/README-MCP.md` | MCP integration documentation |
+| `schema://config.schema.json` | Configuration schema reference |
+| `samples://config/*` | Sample pipeline configurations |
+| `samples://dockerfile/*` | Sample Dockerfiles |
+| `samples://processor/*` | Sample preprocessors and postprocessors |
+
+### Sample Prompts
+
+You can now try out the [example prompts](mcp/examples.md) using either Cursor or Claude Code.
 
 ## Contributing
 

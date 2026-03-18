@@ -59,13 +59,26 @@ python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml \
     builder/samples/ds_app
 ```
 
+#### For Dgx Spark
+
+```bash
+python builder/main.py builder/samples/ds_app/segmentation/ds_segformer.yaml \
+    -o builder/samples/ds_app \
+    --server-type serverless \
+    -t \
+&& docker build \
+    -t deepstream-app \
+    -f builder/samples/ds_app/Dockerfile.dgxspark \
+    builder/samples/ds_app
+```
+
 ## Run the deepstream app with different inputs:
 
 **Note:** The TensorRT engine is generated during the first time run and it takes several minutes.
 
 **Note:** You can optionally set the `$SAMPLE_INPUT` environment variable to point to your input media directory if you want to perform inference on media files stored on your host machine.
 
-**Note:** By default the inference results are printed to the console, you can save it to a json file if appending `-s result.json` to the commands
+***Note:** To save the inference results, append the `-s result.json` option to your `docker run` command.
 
 ```bash
 # Update this with your actual samples directory path
@@ -91,10 +104,11 @@ If the configuration is successful, you will see this message in the log: `acces
 ```bash
 # media-url: the path or URL to the input media.
 # mime: the media type (e.g., "video/mp4" or "image/jpeg").
-docker run --rm --network=host --gpus all --runtime=nvidia \
+docker run --rm --network=host --gpus all --privileged --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
+    -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,graphics \
     deepstream-app \
     --media-url /opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4 \
     --mime video/mp4
@@ -110,10 +124,11 @@ docker run --rm --network=host --gpus all --runtime=nvidia \
 
 # Note: Replace rtsp://<url_path> with your actual RTSP stream URL
 
-docker run --rm --network=host --gpus all --runtime=nvidia \
+docker run --rm --network=host --gpus all --privileged --runtime=nvidia \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
+    -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,graphics \
     deepstream-app \
     --media-url rtsp://<url_path> \
     --mime video/mp4
@@ -127,11 +142,12 @@ docker run --rm --network=host --gpus all --runtime=nvidia \
 
 # Note /sample_input/test_1.jpg is just a placeholder for any image present in $SAMPLE_INPUT directory
 
-docker run --rm --network=host --gpus all --runtime=nvidia \
+docker run --rm --network=host --gpus all --privileged --runtime=nvidia \
     -v $SAMPLE_INPUT:/sample_input \
     -v $MODEL_REPO:/workspace/models \
     -v /tmp/.X11-unix/:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
+    -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,graphics \
     deepstream-app \
     --media-url /sample_input/test_1.jpg \
     --mime image/jpeg

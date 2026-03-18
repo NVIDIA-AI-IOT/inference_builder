@@ -15,7 +15,6 @@ If you don't have NGC CLI installed, please download and install it from [this p
 ### Image Classification
 - **PCB Classification**: [PCB Classification Model](https://catalog.ngc.nvidia.com/orgs/nvaie/models/pcbclassification)
 
-
 ### Visual Change Detection
 - **Visual Changenet Classification**: [Visual Changenet Classification Model](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/visual_changenet_classification)
 
@@ -31,6 +30,7 @@ If you don't have NGC CLI installed, please download and install it from [this p
 
 ### RT-DETR Detector
 - **RT-DETR**: [TrafficCamNet Lite](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite)
+- **RT-DETR**: [PeopleNet Transformer](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/peoplenet_transformer)
 
 ## Getting Started
 
@@ -59,6 +59,16 @@ parameters:
     - nvdsinfer_config.yaml  # Path to the nvinfer configuration file
 ```
 
+### Preprocess Configuration
+
+Used to define preprocessing operations that run before inference. This is required when non-image tensors must be injected into the pipeline (e.g., for models that require additional metadata or custom tensor inputs). Refer to [nvdspreprocess plugin documentation](https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvdspreprocess.html) for more details.
+
+```yaml
+parameters:
+  preprocess_config_path:
+    - nvdspreprocess_config.yaml  # Path to the nvdspreprocess configuration file
+```
+
 ### Tracker Configuration
 
 Used for object tracking along with inference using nvtracker. This enables multi-object tracking across frames.
@@ -71,6 +81,17 @@ tracker_config:
   height: 1088 # Tracker height
   display_tracking_id: true # Display tracking id in object text
 ```
+
+### Analytics Configuration
+
+Used for object activity analysis such as line-crossing, ROI enetering/exiting, crowding and direction detection.
+
+```yaml
+analytics_config:
+  config_file_path: /opt/nvidia/deepstream/deepstream/sources/apps/sample_apps/deepstream-nvdsanalytics-test/config_nvdsanalytics.txt # Path to the nvdsanalytics configuration file
+  gpu_id: 0 # GPU core id for analytics running
+```
+
 
 ### Message Broker Configuration
 
@@ -163,7 +184,7 @@ parameters:
 
 Batch timeout specifies the time in microseconds to wait for batched buffers to be sent out after the first buffer is available.
 
-- **Default value:** 33000 microseconds
+- **Default value:** `1000 * max_batch_size` microseconds
 - **Set to -1:** Wait infinitely for batch formation
 
 > **Warning:** If your `max_batch_size` in the models section is greater than the number of streams you're running, do not set the timeout to -1. This will cause the pipeline to wait infinitely for batch formation and become unresponsive. In such scenarios, set an appropriate timeout value.

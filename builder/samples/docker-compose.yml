@@ -1,5 +1,5 @@
 ################################################################################
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: LicenseRef-NvidiaProprietary
 #
 # NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
@@ -11,30 +11,6 @@
 ################################################################################
 
 services:
-  ms-vila:
-    build:
-      context: vila
-      target: api_server
-      dockerfile: Dockerfile
-    image: ms-vila:0.7.0
-    volumes:
-      # correct the below mapping for your vila checkpoints
-      - '~/.cache/model-repo/vila/:/config/models/vila'
-
-    ipc: host
-    # init: true
-    ports:
-      - "8800-8803:8000-8003"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              # count: 1
-              device_ids: ['0']
-              capabilities: [gpu]
-    environment:
-      DEBUG: 0
   ms-nvclip:
     build:
       context: nvclip
@@ -79,6 +55,7 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     environment:
+      HTTP_PORT: 8003
       DEBUG: 0
   tao-cv:
     user: nvs:1000
@@ -95,7 +72,7 @@ services:
     ipc: host
     # init: true
     ports:
-      - "8800:8000"
+      - "8800-8803:8000-8003"
     deploy:
       resources:
         reservations:
@@ -152,3 +129,27 @@ services:
               capabilities: [gpu]
     environment:
       DEBUG: 0
+  ms-vllm:
+    build:
+      context: vllm
+      target: inference_base
+      dockerfile: Dockerfile
+    image: ms-vllm
+    volumes:
+      - '~/.cache/model-repo:/workspace/model-repo'
+    ipc: host
+    # init: true
+    ports:
+      - "8800-8803:8000-8003"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              #count: 1
+              capabilities: [gpu]
+    environment:
+      DEBUG: 0
+      # number of codec instances based on the hardware specification
+      N_CODEC_INSTANCES: 7
