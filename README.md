@@ -203,5 +203,5 @@ Contributions are welcome! Please feel free to submit a PR.
 
 The project is under active development and the following features are expected to be supported in the near future:
 
-- Support for more backends and frameworks such as VLLM and onnx runtime.
+- Support for more backends and frameworks such as SGLANG.
 - Support for more model types such as speech models.
