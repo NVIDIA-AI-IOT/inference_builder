@@ -1796,59 +1796,49 @@ class DockerBuildTester:
                             config_dir = Path(test_config.get("_config_dir", ".")).resolve()
                             validation_folder = (config_dir / auto_validation_path).resolve()
 
-                            # Fixed script name is test_runner.py (generated during build via -v flag)
-                            # It's located in the validation folder subdirectories (e.g., gdino/.tmp/test_runner.py)
-                            # Determine which subdirectory based on TAO_MODEL_NAME
-                            tao_model_name = test_config.get("env", {}).get("TAO_MODEL_NAME", "")
-                            if not tao_model_name:
-                                logger.error("❌ TAO_MODEL_NAME not specified in test_config.env")
+                            validation_script_path = validation_folder / ".tmp" / "test_runner.py"
+
+                            if not validation_script_path.exists():
+                                logger.error(f"❌ Validation script not found: {validation_script_path}")
                                 client_rc = 1
                                 client_stdout = ""
-                                client_stderr = "TAO_MODEL_NAME not specified"
+                                client_stderr = f"Validation script not found: {validation_script_path}"
                             else:
-                                validation_script_path = validation_folder / ".tmp" / "test_runner.py"
+                                logger.info(f"🔧 Running validation script: {validation_script_path}")
 
-                                if not validation_script_path.exists():
-                                    logger.error(f"❌ Validation script not found: {validation_script_path}")
-                                    client_rc = 1
-                                    client_stdout = ""
-                                    client_stderr = f"Validation script not found: {validation_script_path}"
+                                # Set up environment variables for validation script
+                                validation_env = os.environ.copy()
+                                if "env" in test_config:
+                                    validation_env.update({k: str(v) for k, v in test_config["env"].items()})
+
+                                # Add service host for validation script to connect to server
+                                # The validation script expects TEST_HOST environment variable
+                                # Use HTTP_PORT from test config env, default to 8000
+                                validation_env["TEST_HOST"] = f"http://{service_host}:{http_port}"
+
+                                # Run validation script with Python
+                                validation_proc = subprocess.run(
+                                    ["python", str(validation_script_path)],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=max(60, timeout),
+                                    cwd=str(validation_script_path.parent),
+                                    env=validation_env
+                                )
+                                client_rc = validation_proc.returncode
+                                client_stdout = validation_proc.stdout
+                                client_stderr = validation_proc.stderr
+
+                                if client_rc == 0:
+                                    logger.info("✅ Validation script completed successfully")
+                                    if client_stdout:
+                                        logger.info(f"Validation output:\n{client_stdout}")
                                 else:
-                                    logger.info(f"🔧 Running validation script: {validation_script_path}")
-
-                                    # Set up environment variables for validation script
-                                    validation_env = os.environ.copy()
-                                    if "env" in test_config:
-                                        validation_env.update({k: str(v) for k, v in test_config["env"].items()})
-
-                                    # Add service host for validation script to connect to server
-                                    # The validation script expects TEST_HOST environment variable
-                                    # Use HTTP_PORT from test config env, default to 8000
-                                    validation_env["TEST_HOST"] = f"http://{service_host}:{http_port}"
-
-                                    # Run validation script with Python
-                                    validation_proc = subprocess.run(
-                                        ["python", str(validation_script_path)],
-                                        capture_output=True,
-                                        text=True,
-                                        timeout=max(60, timeout),
-                                        cwd=str(validation_script_path.parent),
-                                        env=validation_env
-                                    )
-                                    client_rc = validation_proc.returncode
-                                    client_stdout = validation_proc.stdout
-                                    client_stderr = validation_proc.stderr
-
-                                    if client_rc == 0:
-                                        logger.info("✅ Validation script completed successfully")
-                                        if client_stdout:
-                                            logger.info(f"Validation output:\n{client_stdout}")
-                                    else:
-                                        logger.error(f"❌ Validation script failed with return code {client_rc}")
-                                        if client_stderr:
-                                            logger.error(f"Validation stderr:\n{client_stderr}")
-                                        if client_stdout:
-                                            logger.error(f"Validation stdout:\n{client_stdout}")
+                                    logger.error(f"❌ Validation script failed with return code {client_rc}")
+                                    if client_stderr:
+                                        logger.error(f"Validation stderr:\n{client_stderr}")
+                                    if client_stdout:
+                                        logger.error(f"Validation stdout:\n{client_stdout}")
                         except subprocess.TimeoutExpired:
                             logger.error("❌ Validation script timed out")
                             client_rc = 1
