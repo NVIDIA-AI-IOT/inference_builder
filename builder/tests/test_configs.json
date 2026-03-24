@@ -61,9 +61,6 @@
       "volumes": {
         "asset_management/models": "/workspace/models"
       },
-      "ports": {
-        "8000": "8000"
-      },
       "test_requests": [
         {
           "payload_path": "asset_management/payloads/assets.jsonl",
@@ -466,9 +463,6 @@
       },
       "volumes": {
         "asset_management/models": "/workspace/models"
-      },
-      "ports": {
-        "8000": "8000"
       },
       "assets": [
         {
