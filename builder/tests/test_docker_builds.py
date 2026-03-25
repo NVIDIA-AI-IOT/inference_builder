@@ -976,7 +976,7 @@ class DockerBuildTester:
                     validation_path = Path(validation_folder).resolve()
 
                 if validation_path.exists():
-                    pre_build_command.extend(["-v", str(validation_path), "--no-docker"])
+                    pre_build_command.extend(["--validation-dir", str(validation_path), "--no-docker"])
                     logger.info(f"📁 Adding validation directory for build: {validation_path}")
                 else:
                     logger.warning(f"⚠️  Auto validation folder not found: {validation_path}")
@@ -1153,7 +1153,7 @@ class DockerBuildTester:
                     validation_path = Path(validation_folder).resolve()
 
                 if validation_path.exists():
-                    pre_build_command.extend(["-v", str(validation_path), "--no-docker"])
+                    pre_build_command.extend(["--validation-dir", str(validation_path), "--no-docker"])
                     logger.info(f"📁 Adding validation directory for build: {validation_path}")
                 else:
                     logger.warning(f"⚠️  Auto validation folder not found: {validation_path}")
