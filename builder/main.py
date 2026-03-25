@@ -254,7 +254,19 @@ def validate_config_against_schema(config_dict: Dict, schema_dir: Path = None) -
         return False
 
 
+def get_version():
+    version_file = Path(__file__).parent.parent / "VERSION"
+    with open(version_file, 'r') as f:
+        return f.read().strip()
+
+
 def build_args(parser):
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"%(prog)s {get_version()}"
+    )
     parser.add_argument(
         "--server-type",
         type=str,
@@ -299,7 +311,6 @@ def build_args(parser):
     )
     parser.add_argument("config", type=str, help="Path the the configuration")
     parser.add_argument(
-        "-v",
         "--validation-dir",
         type=str,
         help="valid validation directory path to build validator"

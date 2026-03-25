@@ -1184,7 +1184,7 @@ class InferenceBuilderMCPServer:
             cmd.append("-t")
 
         if "validation_dir" in arguments:
-            cmd.extend(["-v", arguments["validation_dir"]])
+            cmd.extend(["--validation-dir", arguments["validation_dir"]])
 
         if arguments.get("no_docker", False):
             cmd.append("--no-docker")
