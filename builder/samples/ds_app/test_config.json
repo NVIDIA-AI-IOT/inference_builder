@@ -28,6 +28,7 @@
         "--text",
         "car,person"
       ],
+      "expected_results": 1443,
       "prerequisite_script": null,
       "models": {
         "gdino": {
@@ -149,6 +150,7 @@
         "--mime",
         "video/mp4"
       ],
+      "expected_results": 1443,
       "prerequisite_script": null,
       "models": {
         "rtdetr": {
@@ -186,6 +188,7 @@
         "--source-config",
         "/workspace/test_data/source_config.yaml"
       ],
+      "expected_results": 1443,
       "prerequisite_script": null,
       "models": {
         "rtdetr": {

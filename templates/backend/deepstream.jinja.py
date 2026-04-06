@@ -457,7 +457,13 @@ class BulkVideoInputPool(TensorInputPool):
         else:
             pipeline.start()
         self._pipeline = pipeline
-        return list(range(len(url_list))) if url_list else list(range(self._batch_size))
+        if url_list:
+            return list(range(len(url_list)))
+        elif source_config_file:
+            return list(range(total_streams))
+        else:
+            logger.error("No input source provided: expected either media URLs or a source config file")
+            return []
 
     def stop(self, reason: str):
         if self._pipeline:

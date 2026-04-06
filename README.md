@@ -192,7 +192,45 @@ Ensure that you are in the repository's root directory.
 
 ### Sample Prompts
 
-You can now try out the [example prompts](mcp/examples.md) using either Cursor or Claude Code.
+You can now try out the [example prompts](prompts.md) using either Cursor or Claude Code.
+
+## Agent Skills Integration
+
+Inference Builder also supports [Claude Agent Skills](https://www.anthropic.com/news/skills), Anthropic's technology that lets Claude be customized with domain-specific expertise. Agent Skills provide a portable way to use Inference Builder across Claude's apps (web, mobile), Claude Code, and the API.
+
+### What's Included
+
+The Agent Skill includes:
+- **SKILL.md**: Skill documentation with workflow guidance, project layout, and non-obvious knowledge
+- **`.skill_config`**: Auto-generated config with project root path, venv activation, and CLI entry point
+- **Schemas**: JSON schemas for configuration validation
+- **Samples**: Example configurations, Dockerfiles, and processors organized by category
+
+The skill directs agents to use the Inference Builder CLI (`builder/main.py`) directly, discovering available commands and flags via `--help` at runtime.
+
+### Quick Setup
+
+Install the skill to Claude's default skills directory:
+
+```bash
+cd skills
+./setup_skill.sh
+```
+
+This installs the skill to `~/.claude/skills/inference-builder/`.
+
+To install to a custom location:
+
+```bash
+./setup_skill.sh /path/to/your/skills
+# → Creates /path/to/your/skills/inference-builder/
+```
+
+For detailed skill documentation, see [`skills/inference-builder/SKILL.md`](skills/inference-builder/SKILL.md).
+
+### Sample Prompts
+
+You can now try out the [example prompts](prompts.md) using Claude Code.
 
 ## Contributing
 
