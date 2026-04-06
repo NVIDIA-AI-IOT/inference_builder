@@ -46,7 +46,7 @@ The Agent is expected to fix all the build and runtime errors while doing the sm
 
 ###  3. Create a Deepstream Inference Application with Customized Logic
 
-***Use deepstream inferenc builder tool to create an object detection pipeline with PeopleNet transformer model from NGC; the pipeline accepts video url as input and output detected bounding boxes. Count the number of people in each frame and raise an alarm whenever the number exceeds 10 by writing it down to a file. Do a smoke test once done.***
+***Use deepstream inference builder tool to create an object detection pipeline with PeopleNet transformer model from NGC; the pipeline accepts video url as input and output detected bounding boxes. Count the number of people in each frame and raise an alarm whenever the number exceeds 10 by writing it down to a file. Do a smoke test once done.***
 
 The Agent is expected to draft a plan based on the prompt and generates required files accordingly (file names may differ in each run unless explicitly specified):
 
@@ -64,7 +64,7 @@ The Agent is expected to fix all the build and runtime errors while doing the sm
 
 #### 4.1. Start with the Master Prompt as below
 
-***Locate the MCP tool deepstream-inference-builder and complete the task: Start a new project under name rtvi_vlm and create a video summarization/caption microservice there using Qwen3-VL-2B-Instruct model driven by vllm backend and Deepstream accelerated decoder. The microservice supports adding/deleting RTSP streams as assets and generating video caption for added streams. The given RTSP stream will be chunked to a batch of frames with a given interval for summarization. I also want to build a container image for the microservice to run on B200. Do a smoke test on the image once done.***
+***Complete the task using deepstream inference builder: Start a new project under name rtvi_vlm and create a video summarization/caption microservice there using Qwen3-VL-2B-Instruct model driven by vllm backend and Deepstream accelerated decoder. The microservice supports adding/deleting RTSP streams as assets and generating video caption for added streams. The given RTSP stream will be chunked to a batch of frames with a given interval for summarization. I also want to build a container image for the microservice to run on B200. Do a smoke test on the image once done.***
 
 The Agent is expected to understand the prompt and creates a folder named “rtvi_vlm” and generates all the files there:
 - config.yaml (pipeline configuration yaml)

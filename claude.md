@@ -145,6 +145,24 @@ Existing responder templates for reference:
 
 ## Coding Convention
 
+### Documentation and Schema Consistency
+
+Any code change that affects behavior, configuration, or APIs MUST include
+corresponding updates to documentation and schemas. This is critical:
+
+- **Schema changes**: If a new field is added to config YAML, test config, or
+  any structured input, update the relevant JSON schema under `schemas/`.
+- **Documentation changes**: If behavior, workflow, or configuration options
+  change, update `schemas/README.md`, `claude.md`, and `skills/inference-builder/SKILL.md` as
+  applicable.
+- **Sample updates**: If a new feature or backend is added, add or update
+  samples under `builder/samples/` with working examples.
+- **Test updates**: If a new feature is testable, add test cases to the
+  relevant test config JSON files.
+
+Do not consider a code change complete until docs, schemas, and tests are
+consistent with the new behavior.
+
 ### Naming
 
 - Functions and variables: `snake_case`
@@ -233,8 +251,10 @@ For each test case:
    - Serverless: runs to completion, checks exit code and error exports
    - HTTP server: runs detached with `--network=host`, probes health endpoint,
      sends `test_requests`, then stops container
-5. If `auto_validation` is set, runs the validation script on the host
-6. Collect logs and determine pass/fail
+5. If `expected_results` is set, count NDJSON objects in the result file and
+   fail if the count does not match
+6. If `auto_validation` is set, runs the validation script on the host
+7. Collect logs and determine pass/fail
 
 ### Networking
 

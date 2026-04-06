@@ -2298,6 +2298,37 @@ class DockerBuildTester:
                     return False, error_msg, str(log_file)
                 logger.info(f"📄 Result file OK: {result_export_file} ({file_size} bytes)")
 
+                # Validate expected number of NDJSON results if specified
+                expected_results = test_config.get("expected_results")
+                if expected_results is not None:
+                    try:
+                        with open(result_export_file, 'r') as f:
+                            content = f.read()
+                        decoder = json.JSONDecoder()
+                        ndjson_count = 0
+                        idx = 0
+                        while idx < len(content):
+                            remaining = content[idx:].lstrip()
+                            if not remaining:
+                                break
+                            _, end = decoder.raw_decode(remaining)
+                            ndjson_count += 1
+                            idx = len(content) - len(remaining) + end
+                        if ndjson_count != expected_results:
+                            error_msg = (
+                                f"Expected {expected_results} NDJSON result(s) but got {ndjson_count} "
+                                f"in {result_export_file}"
+                            )
+                            logger.error(f"❌ {error_msg}")
+                            logger.info(f"📄 Logs saved to: {log_file}")
+                            return False, error_msg, str(log_file)
+                        logger.info(f"📄 NDJSON result count OK: {ndjson_count} (expected {expected_results})")
+                    except json.JSONDecodeError as e:
+                        error_msg = f"Failed to parse NDJSON result file {result_export_file}: {e}"
+                        logger.error(f"❌ {error_msg}")
+                        logger.info(f"📄 Logs saved to: {log_file}")
+                        return False, error_msg, str(log_file)
+
             # Check for errors using the exported error JSON file (if ERROR_EXPORT_PATH was configured)
             has_errors = False
             error_details = []
