@@ -1,0 +1,31 @@
+{
+    "evals": [
+      {
+        "name": "information",
+        "input": "one sentence summary of inference builder",
+        "expected_output": "The inference-builder generates deployable Vision AI pipelines with high-performance video and streaming capabilities on NVIDIA GPUs, creating GPU-accelerated inference microservices for vision, video, or streaming workloads.",
+        "assertions": [
+          {"type": "contains", "text": "Vision AI"},
+          {"type": "contains", "text": "video"},
+          {"type": "contains", "text": "streaming"}
+        ]
+      },
+      {
+        "name": "sanity-check",
+        "input": "do a sanity check of the inference builder CLI",
+        "expected_output": " Results: 20/20 Passed (2 Skipped by design)  ",
+        "assertions": [
+          {"type": "contains", "text": "passed"},
+          {"type": "not_contains_pattern", "pattern": "failed|failure"}
+        ]
+      },
+      {
+        "name": "dry-run",
+        "input": "Using inference builder to generate a dummy inference pipeline and dry run it",
+        "expected_output": "Everything worked end-to-end.",
+        "assertions": [
+          {"type": "contains", "text": "worked"}
+        ]
+      }
+    ]
+  }
