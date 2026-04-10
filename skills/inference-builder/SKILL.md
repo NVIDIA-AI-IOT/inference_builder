@@ -7,7 +7,10 @@ description: |
   video, or streaming workloads; write or edit pipeline YAML configs; build
   Docker images for GPU inference; work with models from NGC or HuggingFace;
   or deploy with DeepStream, Triton, vLLM, TensorRT-LLM, or PyTorch backends.
-version: "${VERSION}"
+owner: "chunlinl@nvidia.com"
+service: "inference"
+version: "1.0.0"
+reviewed: "2026-04-09"
 author: NVIDIA
 tags:
   - inference
