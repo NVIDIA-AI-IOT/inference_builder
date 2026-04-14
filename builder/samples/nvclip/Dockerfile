@@ -70,6 +70,6 @@ RUN touch /workspace/start_server.sh && \
 #    while true; do sleep 5; done
 EOF
 
-ENTRYPOINT ["/workspace/start_server.sh"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec /workspace/start_server.sh \"$@\"", "--"]
 #ENTRYPOINT ["/bin/bash"]
 CMD []

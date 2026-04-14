@@ -48,6 +48,6 @@ ENV TORCH_CUDA_ARCH_LIST="7.5 8.0 8.6 9.0 10.0"
 #ENV NVDS_ENABLE_LATENCY_MEASUREMENT=1
 #ENV NVDS_ENABLE_COMPONENT_LATENCY_MEASUREMENT=1
 
-ENTRYPOINT ["python3", "/workspace/__main__.py"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec python3 /workspace/__main__.py \"$@\"", "--"]
 #ENTRYPOINT ["/bin/bash"]
 CMD []

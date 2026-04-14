@@ -83,7 +83,7 @@ python builder/main.py --help
 
 | Path | What lives there |
 |------|-----------------|
-| `builder/samples/` | Working examples for every backend — start here when creating a new config |
+| `builder/samples/` | Working examples for every backend — read `builder/samples/README.md` for the full index, then start from the closest matching example |
 | `schemas/config.schema.json` | Main config schema — all fields, data types, and validation rules |
 | `schemas/README.md` | Comprehensive reference: backends, parameters, data types, preprocessors, responders, routing |
 | `schemas/backends/` | Per-backend schemas and parameter definitions |

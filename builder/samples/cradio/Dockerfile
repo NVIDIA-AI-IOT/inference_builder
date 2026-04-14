@@ -98,5 +98,5 @@ ENV GST_PLUGIN_PATH=/opt/nvidia/deepstream/deepstream/lib/gst-plugins
 ENV LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream/lib:$LD_LIBRARY_PATH
 ENV NVSTREAMMUX_ADAPTIVE_BATCHING=yes
 
-ENTRYPOINT ["python3", "/workspace/__main__.py"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec python3 /workspace/__main__.py \"$@\"", "--"]
 CMD []
