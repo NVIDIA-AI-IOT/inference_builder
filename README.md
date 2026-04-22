@@ -39,6 +39,31 @@ sudo apt install protobuf-compiler
 sudo apt install python3.12-venv python3.12-dev
 ```
 
+Docker environment must be properly set up with below packages for building and running the examples:
+
+- **Docker**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
+- **Docker Compose**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
+- **NVIDIA Container Toolkit**: [Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+
+Ensure nvidia runtime added to `/etc/docker/daemon.json` to run GPU-enabled containers
+
+```bash
+{
+    "runtimes": {
+        "nvidia": {
+            "args": [],
+            "path": "nvidia-container-runtime"
+        }
+    }
+}
+```
+
+The `docker` group must exist in your system, please check if it has been created using `getent group docker`. Your current user must belong to the `docker` group, If not, run the command below, then log out and back in for the group change to take effect.
+
+```bash
+sudo usermod -aG docker $USER
+```
+
 **Note for TEGRA users:** If you're using a TEGRA device, you'll also need to install the Docker buildx plugin:
 
 ```bash
@@ -64,32 +89,6 @@ pip3 install -r requirements.txt
 ```
 
 ## Play with the examples
-
-Docker environment must be properly set up with below packages for building and running the examples:
-
-- **Docker**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
-- **Docker Compose**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
-- **NVIDIA Container Toolkit**: [Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
-
-
-Ensure nvidia runtime added to `/etc/docker/daemon.json` to run GPU-enabled containers
-
-```bash
-{
-    "runtimes": {
-        "nvidia": {
-            "args": [],
-            "path": "nvidia-container-runtime"
-        }
-    }
-}
-```
-
-The `docker` group must exist in your system, please check if it has been created using `getent group docker`. Your current user must belong to the `docker` group, If not, run the command below, then log out and back in for the group change to take effect.
-
-```bash
-sudo usermod -aG docker $USER
-```
 
 Now you can try [our examples](builder/samples/README.md) to learn more. These examples span all supported backends and demonstrate their distinct inference flows.
 
