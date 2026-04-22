@@ -45,6 +45,8 @@ sudo apt install python3.12-venv python3.12-dev
 sudo apt install docker-buildx
 ```
 
+Download and install the NGC CLI from the [NGC page](https://org.ngc.nvidia.com/setup/installers/cli) and follow the [NGC CLI Guide](https://docs.ngc.nvidia.com/cli/index.html) to set up the tool.
+
 ### Clone the repository
 
 ```bash
