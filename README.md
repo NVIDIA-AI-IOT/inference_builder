@@ -115,60 +115,74 @@ Before setting up MCP, ensure you have completed the [Getting Started](#getting-
 
 Ensure that you are in the repository's root directory.
 
-### Set Up for Cursor
+### Start the MCP Server
 
-1. **Generate the MCP configuration**
+Use the provided management script from the repository root:
 
-   For a global configuration (available across all projects):
-   ```bash
-   python3 mcp/setup_mcp.py ~/.cursor/mcp.json
-   ```
+```bash
+# Start (runs in background)
+MCP_API_KEY=MY_SECRET ./mcp/server_manager.sh start --port 8000
 
-   For a project-specific configuration:
-   ```bash
-   python3 mcp/setup_mcp.py /path/to/your_project/.cursor/mcp.json
-   ```
+# Check status
+./mcp/server_manager.sh status
 
-2. **Open your project folder and verify the MCP server is successfully loaded**
+# Tail logs
+./mcp/server_manager.sh logs
 
-   In Cursor, navigate to **File > Preferences > Cursor Settings > MCP**. You should see:
+# Stop
+./mcp/server_manager.sh stop
+```
 
-   ![MCP Server](mcp.png)
+Omit `MCP_API_KEY` to allow unauthenticated access. Use `--workspace-root` to set a custom directory for per-session workspaces.
 
-   A green status icon next to `deepstream-inference-builder` indicates the server is connected.
+### Connect to the MCP Server
 
-3. **Start using the MCP tools:**
+#### Cursor
 
-   Start a new Cursor agent and invoke the tools by mentioning "deepstream inference builder" in your prompt:
-   - "Show me what sample configurations are available from the inference builder?"
-   - "Generate a DeepStream object detection pipeline using the inference builder with PeopleNet transformer model from NGC."
+Add the following to `~/.cursor/mcp.json` (global) or `<project>/.cursor/mcp.json` (project-specific):
 
-### Set Up for Claude Code
+```json
+{
+  "mcpServers": {
+    "deepstream-inference-builder": {
+      "url": "http://<host>:8000/mcp",
+      "headers": { "Authorization": "Bearer MY_SECRET" }
+    }
+  }
+}
+```
 
-1. **Generate the MCP configuration:**
+Then navigate to **File > Preferences > Cursor Settings > MCP**. A green status icon next to `deepstream-inference-builder` confirms the connection:
 
-   For a global configuration:
-   ```bash
-   python3 mcp/setup_mcp.py ~/.claude/.mcp.json
-   ```
+![MCP Server](mcp.png)
 
-   For a project-specific configuration:
-   ```bash
-   python3 mcp/setup_mcp.py /path/to/your_project/.mcp.json
-   ```
+#### Claude Code
 
-2. **Start Claude Code from your project folder and Verify the MCP server is connected:**
+Run the following command to register the server:
 
-   Run `/mcp` in the Claude Code console. You should see:
-   ```
-   ❯ deepstream-inference-builder · ✔ connected
-   ```
+```bash
+# User-level (available in all projects)
+claude mcp add --transport http --scope user \
+  deepstream-inference-builder http://<host>:8000/mcp \
+  --header "Authorization: Bearer MY_SECRET"
 
-3. **Start using the MCP tools:**
+# Project-level
+claude mcp add --transport http --scope project \
+  deepstream-inference-builder http://<host>:8000/mcp \
+  --header "Authorization: Bearer MY_SECRET"
+```
 
-   Simply ask Claude Code to perform tasks by mentioning "deepstream inference builder" in your prompt:
-   - "Show me what sample configurations are available from the inference builder?"
-   - "Generate a DeepStream object detection pipeline using the inference builder with PeopleNet transformer model from NGC."
+Omit `--header` if no API key was set on the server. Then verify the connection by running `/mcp` in the Claude Code console:
+
+```
+❯ deepstream-inference-builder · ✔ connected
+```
+
+### Start Using the MCP Tools
+
+Invoke the tools by mentioning "deepstream inference builder" in your prompt:
+- "Show me what sample configurations are available from the inference builder?"
+- "Generate a DeepStream object detection pipeline using the inference builder with PeopleNet transformer model from NGC."
 
 ### Available MCP Tools
 

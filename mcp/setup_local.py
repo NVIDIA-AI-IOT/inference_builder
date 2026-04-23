@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """
-Setup script for Inference Builder MCP Integration
+Setup script for Inference Builder MCP Integration (local / stdio transport)
 
-This script helps install dependencies and configure the MCP integration
-for use with MCP-compatible clients such as Cursor and Claude Code.
+Configures an MCP-compatible client (Cursor, Claude Code, etc.) to launch the
+MCP server as a local subprocess over stdio.  For remote HTTP/SSE deployments
+use mcp/server_manager.sh instead.
 
 Usage:
-    python setup_mcp.py [CONFIG_PATH]
+    python setup_local.py [CONFIG_PATH]
 
 Arguments:
     CONFIG_PATH  Path to the MCP config file (default: ~/.cursor/mcp.json)
 
 Examples:
-    Cursor (global):    python setup_mcp.py ~/.cursor/mcp.json
-    Cursor (project):   python setup_mcp.py /path/to/project/.cursor/mcp.json
-    Claude Code:        python setup_mcp.py ~/.claude/.mcp.json
+    Cursor (global):    python setup_local.py ~/.cursor/mcp.json
+    Cursor (project):   python setup_local.py /path/to/project/.cursor/mcp.json
+    Claude Code:        python setup_local.py ~/.claude/.mcp.json
 """
 
 import argparse
@@ -149,11 +150,11 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    python setup_mcp.py                                  # Default: ~/.cursor/mcp.json
-    python setup_mcp.py ~/.cursor/mcp.json               # Cursor (global)
-    python setup_mcp.py .cursor/mcp.json                 # Cursor (project-specific)
-    python setup_mcp.py ~/.claude/.mcp.json              # Claude Code (global)
-    python setup_mcp.py .mcp.json                        # Claude Code (project-specific)
+    python setup_local.py                                  # Default: ~/.cursor/mcp.json
+    python setup_local.py ~/.cursor/mcp.json               # Cursor (global)
+    python setup_local.py .cursor/mcp.json                 # Cursor (project-specific)
+    python setup_local.py ~/.claude/.mcp.json              # Claude Code (global)
+    python setup_local.py .mcp.json                        # Claude Code (project-specific)
         """
     )
     parser.add_argument(

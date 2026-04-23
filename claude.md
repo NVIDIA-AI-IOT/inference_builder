@@ -143,6 +143,15 @@ Existing responder templates for reference:
 - add_file.jinja.py / del_file.jinja.py / list_files.jinja.py - file asset management
 - add_live_stream.jinja.py / del_live_stream.jinja.py / list_live_streams.jinja.py - live stream management
 
+### Extending the MCP Server
+
+To add a new tool:
+
+1. Add the tool definition to the `list_tools` method in `mcp/mcp_server.py` — specify `name`, `description`, and `inputSchema`.
+2. Add a dispatch branch in `call_tool` that routes the tool name to an implementation method.
+3. Implement the tool logic as an `async` method on `InferenceBuilderMCPServer`.
+4. Add tests in `mcp/test_mcp_server.py`.
+
 ## Coding Convention
 
 ### Documentation and Schema Consistency
@@ -154,7 +163,8 @@ corresponding updates to documentation and schemas. This is critical:
   any structured input, update the relevant JSON schema under `schemas/`.
 - **Documentation changes**: If behavior, workflow, or configuration options
   change, update `schemas/README.md`, `claude.md`, and `skills/inference-builder/SKILL.md` as
-  applicable.
+  applicable. For MCP tool or workflow changes, also update `mcp/README-MCP.md` (agent reference)
+  and `mcp/usage.md` (human reference).
 - **Sample updates**: If a new feature or backend is added, add or update
   samples under `builder/samples/` with working examples.
 - **Test updates**: If a new feature is testable, add test cases to the
