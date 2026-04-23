@@ -21,13 +21,17 @@ This module provides an MCP server that exposes Inference Builder functionality
 to MCP-compatible clients like Cursor.
 """
 
+import argparse
 import asyncio
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict
 from mcp.server import Server
+from mcp.server.sse import SseServerTransport
 from mcp.server.stdio import stdio_server
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.types import (
     CallToolRequest,
     CallToolResult,
@@ -37,6 +41,12 @@ from mcp.types import (
     TextContent,
     Resource,
 )
+from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response as StarletteResponse
+from starlette.routing import Mount, Route
 import subprocess
 import logging
 import time
@@ -84,9 +94,18 @@ ALLOWED_SERVERS = load_allowed_servers()
 class InferenceBuilderMCPServer:
     """MCP Server that exposes Inference Builder functionality"""
 
-    def __init__(self):
+    def __init__(self, workspace_root: Path | None = None, model_root: Path | None = None):
         self.server = Server("deepstream-inference-builder")
         self.logger = logging.getLogger("deepstream-inference-builder")
+        # Per-client workspace support (SSE transport only)
+        self._workspace_root = workspace_root
+        self._session_workspaces: dict[str, Path] = {}
+        # Shared model repository root (across all sessions)
+        self._model_root = model_root
+        # Base URL set by run_sse_server so tools can construct download links
+        self._base_url: str | None = None
+        # System info collected once at startup
+        self._system_info: dict | None = None
 
         # Register handlers using decorators
         self._setup_handlers()
@@ -175,9 +194,10 @@ class InferenceBuilderMCPServer:
                         uri="docs://mcp/README-MCP.md",
                         name="MCP Integration Documentation",
                         description=(
-                            "Detailed documentation for MCP server integration. "
-                            "Includes tool reference with parameters, resource navigation guide, "
-                            "usage examples, workflow integration, and troubleshooting."
+                            "Agent reference for the MCP server. "
+                            "Covers the typical development workflow (project setup, sample exploration, "
+                            "schema navigation, pipeline generation, container build, finalisation), "
+                            "version control integration, and troubleshooting common issues."
                         ),
                         mimeType="text/markdown"
                     ),
@@ -578,25 +598,28 @@ class InferenceBuilderMCPServer:
                 Tool(
                     name="generate_inference_pipeline",
                     description=(
-                        "Generate a deployable inference service from a YAML configuration file. "
-                        "Outputs a complete project with model serving code, API endpoints, and deployment files. "
+                        "Generate a deployable inference application or microservice from a YAML configuration file. "
+                        "Outputs a tar.gz archive named after the 'name' field in the pipeline config "
+                        "(e.g. '{name}.tgz'), written to the session workspace. "
+                        "The structured response includes url in the form "
+                        "'http://{mcp_server}/{filename}' — replace {mcp_server} with the MCP server "
+                        "address and fetch via HTTP GET with the mcp-session-id header. "
                         "Read 'samples://*' resources for example configurations, "
                         "or 'schema://config.schema.json' resource for the full configuration schema."
                     ),
                     inputSchema={
                         "type": "object",
                         "properties": {
-                            "config_file": {
+                            "config": {
                                 "type": "string",
                                 "description": (
-                                    "Path to the YAML configuration file defining the pipeline. "
-                                    "If the user has not provided a config file, generate one based on "
-                                    "their requirements: read 'schema://config.schema.json' for the full schema, "
+                                    "Pipeline YAML configuration as inline text. "
+                                    "If the user has not provided a config, generate one based on their "
+                                    "requirements: read 'schema://config.schema.json' for the full schema, "
                                     "'schema://index.json' to find backend-specific parameter schemas "
                                     "(maps backend type to 'schema://backends/parameters/*'), "
                                     "'schema://readme' for documentation, and 'samples://*' resources for "
-                                    "reference examples. Create the YAML file at a suitable path, then provide "
-                                    "that path here."
+                                    "reference examples."
                                 )
                             },
                             "server_type": {
@@ -613,89 +636,33 @@ class InferenceBuilderMCPServer:
                                     "between 'serverless' and 'fastapi' before proceeding."
                                 )
                             },
-                            "output_dir": {
-                                "type": "string",
-                                "description": (
-                                    "The user's project directory where generated artifacts will be placed. "
-                                    "This directory will contain configurations, custom processors, Dockerfiles, "
-                                    "and other files for the inference project. A subdirectory named after the "
-                                    "pipeline (from config YAML) will be created here, or a tar.gz archive if "
-                                    "tar_output is enabled. If the project location is unclear, ask the user to "
-                                    "specify it, or prompt them to confirm after creating a new project directory."
-                                ),
-                                "default": "."
-                            },
                             "api_spec": {
                                 "type": "string",
                                 "description": (
-                                    "Path to OpenAPI specification file (YAML/JSON). "
+                                    "OpenAPI specification as inline YAML/JSON text. "
                                     "Required for 'fastapi', 'triton', and 'nim' server types. "
                                     "Not needed for 'serverless' type. If the user has not provided an "
                                     "OpenAPI spec, attempt to generate one based on their requirements. "
                                     "If the given information is insufficient to generate a valid spec "
                                     "(e.g., missing endpoint definitions, request/response schemas), "
-                                    "ask the user to provide an OpenAPI specification file."
+                                    "ask the user to provide an OpenAPI specification."
                                 )
                             },
                             "custom_modules": {
                                 "type": "array",
                                 "items": {"type": "string"},
                                 "description": (
-                                    "List of paths to custom Python module files for preprocessors and "
-                                    "postprocessors. Each module must define classes with a 'name' attribute "
-                                    "and '__call__' method to be registered in the pipeline. Determine if "
-                                    "processors are needed based on the user's requirements and pipeline "
-                                    "structure (e.g., input transformations, output formatting). If processors "
-                                    "are required, read 'samples://processor/*' resources for reference examples, "
-                                    "then generate the Python files accordingly, save them in the project "
-                                    "directory, and include their paths here."
+                                    "List of custom Python processor modules as inline code snippets. "
+                                    "Each module must define classes with a 'name' attribute and '__call__' "
+                                    "method to be registered in the pipeline. Determine if processors are "
+                                    "needed based on the user's requirements and pipeline structure "
+                                    "(e.g., input transformations, output formatting). If processors are "
+                                    "required, read 'samples://processor/*' resources for reference examples "
+                                    "and generate the Python code accordingly."
                                 )
                             },
-                            "exclude_lib": {
-                                "type": "boolean",
-                                "default": False,
-                                "description": (
-                                    "If true, exclude the common utility library from generated code. "
-                                    "Use when deploying to an environment where the library is already installed."
-                                )
-                            },
-                            "tar_output": {
-                                "type": "boolean",
-                                "default": False,
-                                "description": (
-                                    "If true, output a tar.gz archive instead of a directory. "
-                                    "This affects how the generated pipeline is copied into the container "
-                                    "image in the Dockerfile: use COPY with directory when false, or ADD "
-                                    "with tar.gz extraction when true. Set to true when transferring the "
-                                    "pipeline to a remote build system."
-                                )
-                            },
-                            "validation_dir": {
-                                "type": "string",
-                                "description": (
-                                    "Path to output directory for API validation/test artifacts. "
-                                    "When provided, generates OpenAPI client code and test cases "
-                                    "for validating the inference endpoints."
-                                )
-                            },
-                            "no_docker": {
-                                "type": "boolean",
-                                "default": False,
-                                "description": (
-                                    "If true, use locally installed OpenAPI Generator CLI instead of Docker. "
-                                    "Requires 'openapi-generator-cli' to be installed and in PATH."
-                                )
-                            },
-                            "test_cases_abs_path": {
-                                "type": "boolean",
-                                "default": False,
-                                "description": (
-                                    "If true, use absolute paths in generated test_cases.yaml. "
-                                    "Use when test files are located outside the validation directory."
-                                )
-                            }
                         },
-                        "required": ["config_file"]
+                        "required": ["config"]
                     }
                 ),
                 Tool(
@@ -704,10 +671,7 @@ class InferenceBuilderMCPServer:
                         "Build a Docker image from a generated inference "
                         "pipeline. The Dockerfile is expected to consume the "
                         "tar.gz archive produced by 'generate_inference_pipeline' "
-                        "when 'tar_output' is true (for example, using "
-                        "'ADD <pipeline>.tar.gz /app') rather than copying a "
-                        "loose directory of files. Agents should prefer "
-                        "tar_output=true for Docker-based deployments."
+                        "(for example, using 'ADD <pipeline>.tar.gz /app')."
                     ),
                     inputSchema={
                         "type": "object",
@@ -719,16 +683,16 @@ class InferenceBuilderMCPServer:
                             "dockerfile": {
                                 "type": "string",
                                 "description": (
-                                    "Path to Dockerfile. Always generate the Dockerfile based on user "
-                                    "requirements and 'samples://dockerfile/*' resources. "
+                                    "Dockerfile as inline text. Written to the session workspace, "
+                                    "which also contains the pipeline tar.gz from 'generate_inference_pipeline' "
+                                    "and serves as the Docker build context. "
+                                    "Always generate the Dockerfile based on user requirements and "
+                                    "'samples://dockerfile/*' resources. "
                                     "**Before choosing a Dockerfile template, read 'docs://platform-guide.md' "
                                     "to identify the correct base image and template for the target hardware** "
                                     "(x86_64 datacenter, Jetson/Tegra, or arm-sbsa servers like GB10/GB300/DGX Spark). "
                                     "Consider model backend (triton, vllm, tensorrt-llm, deepstream), server type "
-                                    "(serverless, fastapi), and hardware platform. "
-                                    "The Dockerfile MUST be placed in the output_dir where the generated "
-                                    "pipeline resides, as its parent directory becomes the Docker build "
-                                    "context for properly transferring the pipeline code into the container."
+                                    "(serverless, fastapi), and hardware platform."
                                 )
                             }
                         },
@@ -748,7 +712,10 @@ class InferenceBuilderMCPServer:
                         "tensors via /dev/shm without hitting the default "
                         "64 MB Docker limit. "
                         "Use this after 'prepare_model_repository' and "
-                        "'build_docker_image' have completed."
+                        "'build_docker_image' have completed. "
+                        "The structured response includes url in the form "
+                        "'http://{mcp_server}/logs/{container}.log' — replace {mcp_server} with the "
+                        "MCP server address and fetch via HTTP GET with the mcp-session-id header."
                     ),
                     inputSchema={
                         "type": "object",
@@ -760,24 +727,15 @@ class InferenceBuilderMCPServer:
                                     "(for example, 'my-inference-service:latest')."
                                 )
                             },
-                            "model_repo_host": {
-                                "type": "string",
-                                "description": (
-                                    "Optional host path to a prepared model repository "
-                                    "directory (for example, produced by "
-                                    "'prepare_model_repository'). If provided, it will "
-                                    "be mounted into the container at "
-                                    "model_repo_container via a Docker volume."
-                                )
-                            },
                             "model_repo_container": {
                                 "type": "string",
                                 "description": (
-                                    "Container path where the model repository should "
-                                    "be mounted (for example, '/models'). Used only "
-                                    "when model_repo_host is provided."
+                                    "Container path where the server's model repository is mounted. "
+                                    "Must exactly match the 'model_repo' field in the pipeline config — "
+                                    "that value is baked into the generated application when generate_inference_pipeline is invoked "
+                                    "cannot be overridden at runtime. "
+                                    "Omit if the pipeline requires no model repository."
                                 ),
-                                "default": "/models"
                             },
                             "server_type": {
                                 "type": "string",
@@ -820,15 +778,6 @@ class InferenceBuilderMCPServer:
                                     "type": "string"
                                 }
                             },
-                            "gpus": {
-                                "type": "string",
-                                "description": (
-                                    "GPU devices to use for the container, passed as "
-                                    "`--gpus` (for example, 'all', 'device=0', "
-                                    "'device=0,1')."
-                                ),
-                                "default": "all"
-                            },
                             "timeout": {
                                 "type": "integer",
                                 "description": (
@@ -844,6 +793,70 @@ class InferenceBuilderMCPServer:
                     }
                 ),
                 Tool(
+                    name="docker_stop_container",
+                    description=(
+                        "Stop and remove a running Docker container by name. "
+                        "Use this to stop a container started by docker_run_image — "
+                        "pass the container_name from that tool's structured response."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "container_name": {
+                                "type": "string",
+                                "description": "Name of the container to stop and remove.",
+                            },
+                            "remove_image": {
+                                "type": "boolean",
+                                "description": "If true, also remove the Docker image after the container is stopped. Defaults to false.",
+                                "default": False,
+                            },
+                        },
+                        "required": ["container_name"],
+                    },
+                ),
+                Tool(
+                    name="docker_fetch_log",
+                    description=(
+                        "Fetch logs from a running or stopped Docker container. "
+                        "Use tail to limit the number of lines returned, since to fetch only "
+                        "new output since a previous call (pass the last returned timestamp), "
+                        "and follow_seconds to stream live output for a fixed window before "
+                        "returning. Timestamps are always included in the output so the caller "
+                        "can pass them back via since for incremental polling."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "container_name": {
+                                "type": "string",
+                                "description": "Name of the container to fetch logs from.",
+                            },
+                            "tail": {
+                                "type": "integer",
+                                "description": "Number of lines to return from the end of the log. Omit to return all available lines (or all since the since timestamp).",
+                                "minimum": 1,
+                            },
+                            "since": {
+                                "type": "string",
+                                "description": (
+                                    "Return only log lines after this point. Accepts a Docker "
+                                    "timestamp (e.g. '2024-01-15T10:30:00Z') or a relative "
+                                    "duration (e.g. '5s', '2m', '1h'). Pass the last "
+                                    "timestamp from a previous call to poll incrementally."
+                                ),
+                            },
+                            "follow_seconds": {
+                                "type": "integer",
+                                "description": "Follow the log stream for this many seconds before returning. Useful for capturing live output from a running container. Maximum 60.",
+                                "minimum": 1,
+                                "maximum": 60,
+                            },
+                        },
+                        "required": ["container_name"],
+                    },
+                ),
+                Tool(
                     name="prepare_model_repository",
                     description=(
                         "Optionally prepare a model repository directory for deployment. "
@@ -852,8 +865,12 @@ class InferenceBuilderMCPServer:
                         "configuration files (such as DeepStream nvdsinfer_config.yaml and "
                         "nvdspreprocess_config*.yaml) into a model repository layout that "
                         "matches the generated pipeline and Dockerfile. Use this when the "
-                        "user does not already have a model repository prepared."
-                        "It is recommended to mount the model repository as a volume when running the Docker image."
+                        "user does not already have a model repository prepared. "
+                        "It is recommended to mount the model repository as a volume when running the Docker image. "
+                        "**IMPORTANT: If the NGC model path or version is ambiguous or unknown, search NGC before "
+                        "calling this tool. Use the NGC CLI to find the correct values: "
+                        "'ngc registry model info <org>/<team>/<model_name>' to list available versions. "
+                        "Always confirm the exact registry path and version tag before downloading.**"
                     ),
                     inputSchema={
                         "type": "object",
@@ -864,22 +881,29 @@ class InferenceBuilderMCPServer:
                                     "List of model configurations to prepare, following the same "
                                     "structure as the 'models' section in builder/tests/"
                                     "test_docker_builds.py. Each item is an object with fields: "
-                                    "'name' (required, model name), 'source' (optional, 'NGC' or "
-                                    "'HF', default 'NGC'), 'target' (required, directory where the "
-                                    "prepared model repository should be created), 'path' (for NGC: "
+                                    "'name' (required, model identifier matching the name used in the "
+                                    "pipeline config; the generated pipeline looks for model files in a "
+                                    "folder with this name inside the model repository directory), "
+                                    "'source' (optional, 'NGC' or "
+                                    "'HF', default 'NGC'), 'path' (for NGC: "
                                     "registry model path; for HF: repo id like "
                                     "'Qwen/Qwen2.5-VL-3B-Instruct'), 'version' (for NGC), "
-                                    "'configs' (optional, path relative to config_dir of a directory "
-                                    "of runtime config files to copy into the final model repository), and "
-                                    "'post_script' (optional, shell command to execute after model download "
-                                    "for post-processing steps)."
+                                    "'configs' (optional, dict of {filename: inline_content} for "
+                                    "runtime config files to write into the model repository), and "
+                                    "'post_script' (optional, inline shell script to execute after model download)."
                                 ),
                                 "items": {
                                     "type": "object",
                                     "properties": {
                                         "name": {
                                             "type": "string",
-                                            "description": "Model name (used as the final directory name).",
+                                            "description": (
+                                                "The model identifier used in the pipeline configuration file "
+                                                "to reference this model. The generated pipeline expects model "
+                                                "files to be located in a folder with this exact name inside "
+                                                "the model repository directory. Must match the name used in "
+                                                "the pipeline configuration."
+                                            ),
                                         },
                                         "source": {
                                             "type": "string",
@@ -887,13 +911,6 @@ class InferenceBuilderMCPServer:
                                             "description": (
                                                 "Model source: 'NGC' for NVIDIA NGC registry models, "
                                                 "or 'HF' for Hugging Face models."
-                                            ),
-                                        },
-                                        "target": {
-                                            "type": "string",
-                                            "description": (
-                                                "Target directory on the local filesystem where the prepared "
-                                                "model repository should be created."
                                             ),
                                         },
                                         "path": {
@@ -912,38 +929,27 @@ class InferenceBuilderMCPServer:
                                             ),
                                         },
                                         "configs": {
-                                            "type": "string",
+                                            "type": "object",
+                                            "additionalProperties": {"type": "string"},
                                             "description": (
-                                                "Optional path (relative to config_dir) to a directory containing "
-                                                "runtime configuration files (for example, DeepStream "
-                                                "nvdsinfer_config.yaml, nvdspreprocess_config*.yaml, label files) "
-                                                "that should be copied into the final model repository."
+                                                "Optional dict of runtime configuration files to write into the "
+                                                "model repository. Keys are destination filenames (for example, "
+                                                "'nvdsinfer_config.yaml', 'labels.txt'). Values are inline file "
+                                                "content written directly to the model directory."
                                             ),
                                         },
                                         "post_script": {
                                             "type": "string",
                                             "description": (
-                                                "Optional shell command or script to execute after the model is downloaded. "
-                                                "This can be used for post-processing steps like installing additional "
-                                                "dependencies, converting model formats, or applying patches. "
-                                                "The script is executed with the model's target directory as the current "
-                                                "working directory."
+                                                "Optional shell script as inline content to execute after the "
+                                                "model is downloaded. Written to post_script.sh in the model "
+                                                "directory and executed from there."
                                             ),
                                         },
                                     },
-                                    "required": ["name", "target"],
+                                    "required": ["name"],
                                 },
                             },
-                            "config_dir": {
-                                "type": "string",
-                                "description": (
-                                    "Base directory used to resolve relative 'configs' "
-                                    "paths in model_configs. Typically this is the "
-                                    "directory containing your pipeline/test "
-                                    "configuration files."
-                                ),
-                                "default": "."
-                            }
                         },
                         "required": ["model_configs"]
                     }
@@ -956,24 +962,23 @@ class InferenceBuilderMCPServer:
                         "in the model repository. It defines inference parameters such as model file paths, "
                         "precision mode, network type, input dimensions, and custom parsers. "
                         "The generated file should be referenced via 'infer_config_path' in the DeepStream "
-                        "backend parameters. See 'samples://runtime_config/*' resources for examples."
-                        "**IMPORTANT: Before generating a new config file, first call 'prepare_model_repository' to download the model and check for existing nvinfer configuration files.** "
-                        "Models from NGC typically include a configuration file (YAML or TXT) with all required inference parameters - always prefer using this provided configuration when available. "),
+                        "backend parameters. "
+                        "**IMPORTANT: Before calling this tool, you MUST read at least one relevant example "
+                        "from 'samples://runtime_config/*' resources to understand the expected structure and "
+                        "parameter conventions. Also search NGC for model information and check whether an "
+                        "nvinfer configuration file (YAML or TXT) is already provided with the model. "
+                        "If one exists, use the information it contains for that model.** "),
                     inputSchema={
                         "type": "object",
                         "properties": {
-                            "output_path": {
-                                "type": "string",
-                                "description": (
-                                    "Path where the generated nvdsinfer_config.yaml file should be saved. "
-                                    "This should typically be in your model repository directory."
-                                )
-                            },
                             "onnx_file": {
                                 "type": "string",
+                                "pattern": "\\.onnx$",
                                 "description": (
-                                    "Name of the ONNX model file (e.g., 'model.onnx'). "
-                                    "This file should exist in the same directory as the config file."
+                                    "Name of the ONNX model file. **Must end with `.onnx`** — "
+                                    "other formats (.etlt, .caffemodel, .trt, .engine, etc.) are "
+                                    "not accepted. Use read_model_file to list the model directory "
+                                    "and identify the correct .onnx filename if not known."
                                 )
                             },
                             "precision_mode": {
@@ -1100,8 +1105,46 @@ class InferenceBuilderMCPServer:
                                 )
                             }
                         },
-                        "required": ["output_path", "onnx_file", "network_type", "input_dims", "label_file"]
+                        "required": ["onnx_file", "network_type", "input_dims", "label_file"]
                     }
+                ),
+                Tool(
+                    name="get_system_info",
+                    description=(
+                        "Query hardware and software information from the deployment machine where "
+                        "the MCP server is running — which may be a remote machine, NOT necessarily "
+                        "the same machine as the agent or user. Use this before building a Docker "
+                        "image to identify the correct base image and platform flags for the target "
+                        "hardware. Returns GPU model, driver and CUDA version, CPU architecture "
+                        "(x86_64 / aarch64), OS distribution, and Docker version."
+                    ),
+                    inputSchema={"type": "object", "properties": {}},
+                ),
+                Tool(
+                    name="read_model_file",
+                    description=(
+                        "Read the content of a file from the shared model root "
+                        "(MCP_MODEL_ROOT). Use this to inspect files downloaded by "
+                        "prepare_model_repository, such as nvinfer configuration files, "
+                        "label files, or any other model artifacts. Paths must be relative "
+                        "to the model root — absolute paths and path traversal (e.g. '../') "
+                        "are not allowed. For example, after prepare_model_repository "
+                        "downloads a model named 'trafficcamnet', its files are accessible "
+                        "at 'trafficcamnet/{filename}'."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                                "description": (
+                                    "Relative path to the file within the model root "
+                                    "(for example, 'trafficcamnet/nvdsinfer_config.yaml')."
+                                ),
+                            }
+                        },
+                        "required": ["path"],
+                    },
                 ),
             ]
         )
@@ -1125,10 +1168,18 @@ class InferenceBuilderMCPServer:
                 result = await self._build_docker_image(arguments)
             elif name == "docker_run_image":
                 result = await self._docker_run_image(arguments)
+            elif name == "docker_stop_container":
+                result = await self._docker_stop_container(arguments)
+            elif name == "docker_fetch_log":
+                result = await self._docker_fetch_log(arguments)
             elif name == "prepare_model_repository":
                 result = await self._prepare_model_repository(arguments)
             elif name == "generate_nvinfer_config":
                 result = await self._generate_deepstream_nvinfer_config(arguments)
+            elif name == "get_system_info":
+                result = await self._get_system_info()
+            elif name == "read_model_file":
+                result = await self._read_file(arguments)
             else:
                 raise ValueError(f"Unknown tool: {name}")
 
@@ -1139,7 +1190,7 @@ class InferenceBuilderMCPServer:
                 bool(getattr(result, "isError", False)),
                 duration_ms,
             )
-            return result
+            return self._inject_session_context(result)
         except Exception as e:
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             self.logger.exception(
@@ -1153,13 +1204,125 @@ class InferenceBuilderMCPServer:
                 isError=True
             )
 
+    async def _log(self, message: str, level: str = "info") -> None:
+        """Send a log notification to the connected MCP client.
+
+        Always writes to the local logger first.  When running under the SSE/HTTP
+        transport the message is also forwarded to the client as an MCP
+        ``notifications/message`` event so the user sees real-time progress.
+        Silently ignored when there is no active request context (stdio transport).
+        """
+        self.logger.info("[%s] %s", level, message)
+        try:
+            ctx = self.server.request_context
+            await ctx.session.send_log_message(level=level, data=message)
+        except Exception:
+            pass  # no request context in stdio mode — local log is sufficient
+
+    def _get_session_id(self) -> str | None:
+        """Return the ``mcp-session-id`` for the current HTTP request, or None.
+
+        Returns None when running over stdio or when the transport is stateless.
+        """
+        try:
+            ctx = self.server.request_context
+            if ctx.request is not None:
+                return ctx.request.headers.get("mcp-session-id")
+        except Exception:
+            pass
+        return None
+
+    def _inject_session_context(self, result: "CallToolResult") -> "CallToolResult":
+        """Append session_id metadata to every tool response when in HTTP mode."""
+        import json
+        sid = self._get_session_id()
+        if not sid:
+            return result
+        meta = TextContent(type="text", text=json.dumps({"session_id": sid}))
+        return CallToolResult(
+            content=[*result.content, meta],
+            isError=getattr(result, "isError", False),
+        )
+
+    def _get_session_workspace(self) -> Path | None:
+        """Return (and lazily create) the workspace directory for the current session.
+
+        The workspace is ``{workspace_root}/{session_id}/``.  Returns None when
+        workspace_root is not configured or when there is no active HTTP session
+        (e.g. stdio transport or stateless mode).
+        """
+        if self._workspace_root is None:
+            return None
+        session_id = self._get_session_id()
+        if session_id is None:
+            return None
+        if session_id not in self._session_workspaces:
+            ws = self._workspace_root / session_id
+            ws.mkdir(parents=True, exist_ok=True)
+            self.logger.info("workspace_created session=%s path=%s", session_id, ws)
+            self._session_workspaces[session_id] = ws
+        return self._session_workspaces[session_id]
+
+    def _sweep_stale_workspaces(self) -> None:
+        """Delete any workspace directories left over from a previous server run."""
+        import shutil
+        if self._workspace_root is None or not self._workspace_root.exists():
+            return
+        for child in self._workspace_root.iterdir():
+            if child.is_dir():
+                try:
+                    shutil.rmtree(child)
+                    self.logger.info("stale_workspace_removed path=%s", child)
+                except Exception as exc:
+                    self.logger.warning("stale_workspace_remove_failed path=%s: %s", child, exc)
+
+    async def _cleanup_session(self, session_id: str) -> None:
+        """Remove the workspace for a session that has explicitly disconnected."""
+        import shutil
+        ws = self._session_workspaces.pop(session_id, None)
+        if ws is not None and ws.exists():
+            try:
+                await asyncio.get_running_loop().run_in_executor(None, shutil.rmtree, ws)
+                self.logger.info("workspace_removed session=%s path=%s", session_id, ws)
+            except Exception as exc:
+                self.logger.warning("workspace_remove_failed session=%s: %s", session_id, exc)
+
+    async def _run_subprocess(self, *args, **kwargs) -> subprocess.CompletedProcess:
+        """Run subprocess.run() in a thread-pool executor.
+
+        Identical call signature and return/exception behaviour to
+        subprocess.run() — the only difference is that the asyncio event loop
+        is not blocked while the child process executes, so concurrent HTTP
+        clients are served normally during long-running tool calls.
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, lambda: subprocess.run(*args, **kwargs)
+        )
+
     async def _generate_pipeline(
         self, arguments: Dict[str, Any]
     ) -> CallToolResult:
         """Generate inference pipeline"""
-        config_file = arguments["config_file"]
         server_type = arguments.get("server_type", "serverless")
-        output_dir = arguments.get("output_dir", ".")
+
+        workspace = self._get_session_workspace()
+        output_dir = str(workspace) if workspace else "."
+
+        ws = Path(output_dir)
+        ws.mkdir(parents=True, exist_ok=True)
+
+        config_file = str(ws / "pipeline_config.yaml")
+        Path(config_file).write_text(arguments["config"])
+
+        api_spec_file: str | None = None
+        if "api_spec" in arguments:
+            api_spec_file = str(ws / "api_spec.yaml")
+            Path(api_spec_file).write_text(arguments["api_spec"])
+
+        await self._log(
+            f"generate_inference_pipeline: server_type={server_type} output_dir={output_dir}"
+        )
 
         # Build command - use the same Python executable as the parent process
         cmd = [
@@ -1170,31 +1333,19 @@ class InferenceBuilderMCPServer:
         ]
 
         # Add optional arguments
-        if "api_spec" in arguments:
-            cmd.extend(["-a", arguments["api_spec"]])
+        if api_spec_file is not None:
+            cmd.extend(["-a", api_spec_file])
 
-        if "custom_modules" in arguments:
-            for module in arguments["custom_modules"]:
-                cmd.extend(["-c", module])
+        for idx, module in enumerate(arguments.get("custom_modules", [])):
+            snippet_file = ws / f"custom_module_{idx}.py"
+            snippet_file.write_text(module)
+            cmd.extend(["-c", str(snippet_file)])
 
-        if arguments.get("exclude_lib", False):
-            cmd.append("-x")
-
-        if arguments.get("tar_output", False):
-            cmd.append("-t")
-
-        if "validation_dir" in arguments:
-            cmd.extend(["-v", arguments["validation_dir"]])
-
-        if arguments.get("no_docker", False):
-            cmd.append("--no-docker")
-
-        if arguments.get("test_cases_abs_path", False):
-            cmd.append("--test-cases-abs-path")
+        cmd.append("-t")
 
         # Execute the command - inherit the current process environment
-
-        result = subprocess.run(
+        await self._log(f"Running: {' '.join(cmd)}")
+        result = await self._run_subprocess(
             cmd,
             capture_output=True,
             text=True,
@@ -1203,7 +1354,26 @@ class InferenceBuilderMCPServer:
             check=False,
         )
 
+        import json as _json
+        import yaml as _yaml
+
         if result.returncode == 0:
+            await self._log(f"generate_inference_pipeline succeeded: output_dir={output_dir}")
+
+            # Derive artifact path from pipeline name in the config.
+            # builder/main.py writes: output_dir/{name}.tgz
+            try:
+                with open(config_file) as _f:
+                    _cfg = _yaml.safe_load(_f)
+                pipeline_name = _cfg.get("name") if isinstance(_cfg, dict) else None
+            except Exception:
+                pipeline_name = None
+
+            if pipeline_name:
+                artifact_path = str(Path(output_dir).resolve() / f"{pipeline_name}.tgz")
+            else:
+                artifact_path = output_dir
+
             return CallToolResult(
                 content=[
                     TextContent(
@@ -1212,10 +1382,35 @@ class InferenceBuilderMCPServer:
                              f"Output directory: {output_dir}\n\n"
                              f"Command executed: {' '.join(cmd)}\n\n"
                              f"Output:\n{result.stdout}"
-                    )
+                    ),
+                    TextContent(
+                        type="text",
+                        text=_json.dumps({
+                            "status": "success",
+                            "url": f"http://{{mcp_server}}/{Path(artifact_path).name}" if self._get_session_id() else artifact_path,
+                        }, indent=2),
+                    ),
                 ]
             )
         else:
+            await self._log(
+                f"generate_inference_pipeline failed (exit {result.returncode})", level="error"
+            )
+            try:
+                with open(config_file) as _f:
+                    _cfg = _yaml.safe_load(_f)
+                pipeline_name = _cfg.get("name") if isinstance(_cfg, dict) else None
+            except Exception:
+                pipeline_name = None
+            log_name = f"{pipeline_name}-generate.log" if pipeline_name else "generate_pipeline.log"
+            url = None
+            workspace = self._get_session_workspace()
+            if workspace is not None:
+                log_dir = workspace / "logs"
+                log_dir.mkdir(exist_ok=True)
+                (log_dir / log_name).write_text(result.stderr)
+                if self._get_session_id():
+                    url = f"http://{{mcp_server}}/logs/{log_name}"
             return CallToolResult(
                 content=[
                     TextContent(
@@ -1225,7 +1420,14 @@ class InferenceBuilderMCPServer:
                             f"Error:\n{result.stderr}\n\n"
                             f"Command: {' '.join(cmd)}"
                         )
-                    )
+                    ),
+                    TextContent(
+                        type="text",
+                        text=_json.dumps({
+                            "status": "error",
+                            **({"url": url} if url else {}),
+                        }, indent=2),
+                    ),
                 ],
                 isError=True
             )
@@ -1250,13 +1452,28 @@ class InferenceBuilderMCPServer:
     ) -> CallToolResult:
         """Run a Docker image for testing/troubleshooting."""
         image_name = arguments["image_name"]
-        model_repo_host = arguments.get("model_repo_host")
-        model_repo_container = arguments.get("model_repo_container", "/models")
+        model_repo_container = arguments.get("model_repo_container")
         server_type = arguments.get("server_type", "serverless")
         env_vars = arguments.get("env") or {}
         cmd_args = arguments.get("cmd") or []
-        gpus = arguments.get("gpus", "all")
         timeout = int(arguments.get("timeout", 300))
+
+        # Select the GPU with the most free memory
+        gpu_device = None
+        try:
+            smi = await self._run_subprocess(
+                ["nvidia-smi", "--query-gpu=index,memory.free", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, check=False,
+            )
+            # override only when nvidia-smi cooperates
+            if smi.returncode == 0 and smi.stdout.strip():
+                best = max(
+                    (line.split(",") for line in smi.stdout.strip().splitlines()),
+                    key=lambda p: int(p[1].strip()),
+                )
+                gpu_device = best[0].strip()
+        except Exception:
+            pass
 
         # Base docker run command (no shell, argument list only)
         # Use --ipc=host so the container shares the host's /dev/shm.
@@ -1272,18 +1489,20 @@ class InferenceBuilderMCPServer:
             "--name", container_name,
         ]
 
-        # GPU configuration
-        if gpus:
-            cmd.extend(["--gpus", str(gpus)])
+        if gpu_device is None:
+            # fall back to --gpus all, FIXME: in some casesnvidia-smi returns empty memory usage
+            cmd.extend(["--gpus", "all"])
+        else:
+            # use the selected GPU
+            cmd.extend(["--gpus", f"device={gpu_device}"])
 
         # Network: for serverless we still use host network so local clients can connect
         cmd.append("--network=host")
 
-        # Volume for model repository if provided
-        if model_repo_host:
-            host_path = str(Path(model_repo_host).expanduser().resolve())
-            volume_arg = f"{host_path}:{model_repo_container}"
-            cmd.extend(["-v", volume_arg])
+        # Mount model repository if configured, non-empty, and container path is specified
+        if (model_repo_container and self._model_root
+                and self._model_root.is_dir() and any(self._model_root.iterdir())):
+            cmd.extend(["-v", f"{self._model_root}:{model_repo_container}"])
 
         # Environment variables
         if isinstance(env_vars, dict):
@@ -1296,14 +1515,17 @@ class InferenceBuilderMCPServer:
             cmd.extend([str(a) for a in cmd_args])
 
         self.logger.info(
-            "docker_run_invoked image=%s model_repo_host=%s cmd=%s",
+            "docker_run_invoked image=%s cmd=%s",
             image_name,
-            model_repo_host,
             " ".join(cmd),
+        )
+        await self._log(
+            f"Starting Docker container '{container_name}' from image '{image_name}' "
+            f"(timeout={timeout}s)"
         )
 
         try:
-            result = subprocess.run(
+            result = await self._run_subprocess(
                 cmd,
                 capture_output=True,
                 text=True,
@@ -1324,45 +1546,56 @@ class InferenceBuilderMCPServer:
                 isError=True,
             )
         except subprocess.TimeoutExpired:
+            await self._log(
+                f"Docker run timed out after {timeout}s for '{image_name}'", level="warning"
+            )
             is_serverless = server_type == "serverless"
             if is_serverless:
                 # Serverless containers should finish within the timeout.
                 # The `docker run` client is dead but the container keeps
                 # running (and holding GPU memory).  Force-remove it.
-                cleanup_msg = ""
+                import json as _json
+                # Fetch logs before removing so the client can diagnose the timeout
+                logs_result = await self._run_subprocess(
+                    ["docker", "logs", "--timestamps", container_name],
+                    capture_output=True, text=True, check=False,
+                )
+                logs = (logs_result.stdout + logs_result.stderr).strip() or None
+
+                container_removed = False
                 try:
-                    subprocess.run(
+                    await self._run_subprocess(
                         ["docker", "rm", "-f", container_name],
-                        capture_output=True,
-                        timeout=30,
-                        check=False,
+                        capture_output=True, timeout=30, check=False,
                     )
-                    cleanup_msg = (
-                        f" The orphaned container '{container_name}' has "
-                        "been force-removed."
-                    )
+                    container_removed = True
                 except Exception as cleanup_exc:
-                    cleanup_msg = (
-                        f" WARNING: failed to remove orphaned container "
-                        f"'{container_name}': {cleanup_exc}. "
-                        "Please remove it manually with: "
-                        f"docker rm -f {container_name}"
-                    )
                     self.logger.warning(
                         "Failed to remove timed-out container %s: %s",
-                        container_name,
-                        cleanup_exc,
+                        container_name, cleanup_exc,
                     )
+                # Save logs to workspace
+                log_path = None
+                workspace = self._get_session_workspace()
+                if workspace is not None and logs:
+                    log_dir = workspace / "logs"
+                    log_dir.mkdir(exist_ok=True)
+                    log_file = log_dir / f"{container_name}.log"
+                    log_file.write_text(logs)
+                    log_path = f"http://{{mcp_server}}/logs/{container_name}.log"
+
                 return CallToolResult(
                     content=[
                         TextContent(
                             type="text",
-                            text=(
-                                f"Docker run timed out after {timeout} seconds "
-                                f"for image '{image_name}'.{cleanup_msg} You may "
-                                "want to increase the timeout or inspect the "
-                                "image logs manually."
-                            ),
+                            text=_json.dumps({
+                                "container_name": container_name,
+                                "image_name": image_name,
+                                "status": "timeout",
+                                "container_removed": container_removed,
+                                "logs": logs,
+                                **({"url": log_path} if log_path else {}),
+                            }, indent=2),
                         )
                     ],
                     isError=True,
@@ -1371,6 +1604,7 @@ class InferenceBuilderMCPServer:
                 # Non-serverless (persistent) servers are expected to keep
                 # running past the timeout — that means the server started
                 # successfully.  Leave the container running.
+                import json as _json
                 return CallToolResult(
                     content=[
                         TextContent(
@@ -1382,7 +1616,16 @@ class InferenceBuilderMCPServer:
                                 f"{timeout}s). To stop it later: "
                                 f"docker rm -f {container_name}"
                             ),
-                        )
+                        ),
+                        TextContent(
+                            type="text",
+                            text=_json.dumps({
+                                "container_name": container_name,
+                                "image_name": image_name,
+                                "gpu_device": gpu_device,
+                                "status": "running",
+                            }, indent=2),
+                        ),
                     ],
                     isError=False,
                 )
@@ -1397,6 +1640,11 @@ class InferenceBuilderMCPServer:
                 isError=True,
             )
 
+        await self._log(
+            f"Docker run finished for '{image_name}' (exit code {result.returncode})",
+            level="info" if result.returncode == 0 else "error",
+        )
+        import json as _json
         text = (
             f"docker run command: {' '.join(cmd)}\n\n"
             f"exit code: {result.returncode}\n\n"
@@ -1404,9 +1652,189 @@ class InferenceBuilderMCPServer:
             f"stderr:\n{result.stderr}"
         )
 
+        # Save logs to session workspace so they can be fetched via the /logs endpoint
+        log_path = None
+        workspace = self._get_session_workspace()
+        if workspace is not None:
+            log_dir = workspace / "logs"
+            log_dir.mkdir(exist_ok=True)
+            log_file = log_dir / f"{container_name}.log"
+            log_file.write_text(text)
+            log_path = f"http://{{mcp_server}}/logs/{container_name}.log"
+
         return CallToolResult(
-            content=[TextContent(type="text", text=text)],
+            content=[
+                TextContent(type="text", text=text),
+                TextContent(type="text", text=_json.dumps({
+                    "container_name": container_name,
+                    "image_name": image_name,
+                    "gpu_device": gpu_device,
+                    "status": "exited",
+                    "exit_code": result.returncode,
+                    **({"url": log_path} if log_path else {}),
+                }, indent=2)),
+            ],
             isError=result.returncode != 0,
+        )
+
+    async def _docker_stop_container(self, arguments: Dict[str, Any]) -> CallToolResult:
+        """Stop and remove a running Docker container, optionally removing the image."""
+        import json as _json
+        container_name = arguments["container_name"]
+        remove_image = arguments.get("remove_image", False)
+        await self._log(f"Stopping container '{container_name}'")
+
+        # First, get the image name before removing the container (needed if remove_image=True)
+        image_name = None
+        if remove_image:
+            inspect = await self._run_subprocess(
+                ["docker", "inspect", "--format", "{{.Config.Image}}", container_name],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if inspect.returncode == 0:
+                image_name = inspect.stdout.strip()
+
+        try:
+            result = await self._run_subprocess(
+                ["docker", "rm", "-f", container_name],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            if result.returncode != 0:
+                return CallToolResult(
+                    content=[
+                        TextContent(type="text", text=f"Failed to stop container '{container_name}': {result.stderr.strip()}"),
+                        TextContent(type="text", text=_json.dumps({
+                            "container_name": container_name,
+                            "status": "error",
+                            "error": result.stderr.strip(),
+                        }, indent=2)),
+                    ],
+                    isError=True,
+                )
+
+            structured: Dict[str, Any] = {"container_name": container_name, "status": "removed"}
+            messages = [f"Container '{container_name}' stopped and removed."]
+
+            if remove_image and image_name:
+                await self._log(f"Removing image '{image_name}'")
+                rmi = await self._run_subprocess(
+                    ["docker", "rmi", image_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+                if rmi.returncode == 0:
+                    structured["image_name"] = image_name
+                    structured["image_status"] = "removed"
+                    messages.append(f"Image '{image_name}' removed.")
+                else:
+                    structured["image_name"] = image_name
+                    structured["image_status"] = "error"
+                    structured["image_error"] = rmi.stderr.strip()
+                    messages.append(f"Failed to remove image '{image_name}': {rmi.stderr.strip()}")
+
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text="\n".join(messages)),
+                    TextContent(type="text", text=_json.dumps(structured, indent=2)),
+                ]
+            )
+        except FileNotFoundError:
+            return CallToolResult(
+                content=[TextContent(type="text", text="Docker not found. Please ensure Docker is installed.")],
+                isError=True,
+            )
+        except Exception as exc:
+            return CallToolResult(
+                content=[TextContent(type="text", text=f"Exception stopping container '{container_name}': {exc}")],
+                isError=True,
+            )
+
+    async def _docker_fetch_log(self, arguments: Dict[str, Any]) -> CallToolResult:
+        """Fetch logs from a Docker container, with optional tail/since/follow."""
+        import json as _json
+        container_name = arguments["container_name"]
+        tail = arguments.get("tail")
+        since = arguments.get("since")
+        follow_seconds = arguments.get("follow_seconds")
+
+        cmd = ["docker", "logs", "--timestamps", container_name]
+        if tail is not None:
+            cmd.extend(["--tail", str(tail)])
+        if since is not None:
+            cmd.extend(["--since", since])
+        if follow_seconds is not None:
+            cmd.append("--follow")
+
+        timeout = (follow_seconds or 0) + 10
+
+        await self._log(f"Fetching logs for container '{container_name}'")
+        try:
+            result = await self._run_subprocess(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        except FileNotFoundError:
+            return CallToolResult(
+                content=[TextContent(type="text", text="Docker not found. Please ensure Docker is installed.")],
+                isError=True,
+            )
+        except Exception as exc:
+            return CallToolResult(
+                content=[TextContent(type="text", text=f"Exception fetching logs for '{container_name}': {exc}")],
+                isError=True,
+            )
+
+        # docker logs writes log lines to stderr by default; stdout is only used
+        # when the container was started with a TTY.  Merge both streams so callers
+        # always see all output regardless of how the container was started.
+        log_text = (result.stdout or "") + (result.stderr or "")
+
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text=f"Failed to fetch logs for '{container_name}': {error_msg}"),
+                    TextContent(type="text", text=_json.dumps({
+                        "container_name": container_name,
+                        "status": "error",
+                        "error": error_msg,
+                    }, indent=2)),
+                ],
+                isError=True,
+            )
+
+        lines = log_text.splitlines()
+        # Extract the timestamp of the last line so the caller can use it for incremental polling
+        last_timestamp = None
+        for line in reversed(lines):
+            parts = line.split(" ", 1)
+            if parts and parts[0].endswith("Z"):
+                last_timestamp = parts[0]
+                break
+
+        structured: Dict[str, Any] = {
+            "container_name": container_name,
+            "line_count": len(lines),
+        }
+        if last_timestamp:
+            structured["last_timestamp"] = last_timestamp
+
+        return CallToolResult(
+            content=[
+                TextContent(type="text", text=log_text if log_text.strip() else "(no log output)"),
+                TextContent(type="text", text=_json.dumps(structured, indent=2)),
+            ]
         )
 
     async def _prepare_model_repository(
@@ -1422,7 +1850,6 @@ class InferenceBuilderMCPServer:
         # Backward-compat: accept legacy 'models_config' dict keyed by model name.
         model_configs = arguments.get("model_configs")
         legacy_models_config = arguments.get("models_config")
-        config_dir_arg = arguments.get("config_dir", ".")
 
         if model_configs is None and legacy_models_config is not None:
             # Convert dict[name -> config] into list[{name, ...config}]
@@ -1450,15 +1877,24 @@ class InferenceBuilderMCPServer:
                 ]
             )
 
-        # Resolve config_dir relative to project root (repo root)
-        project_root = Path(__file__).resolve().parents[1]
-        config_dir = Path(config_dir_arg)
-        if not config_dir.is_absolute():
-            config_dir = (project_root / config_dir).resolve()
+        if self._model_root is None:
+            return CallToolResult(
+                content=[TextContent(type="text", text=(
+                    "Model root is not configured. "
+                    "Start the server with --model-root or set MCP_MODEL_ROOT."
+                ))],
+                isError=True,
+            )
+
+        model_root = self._model_root
+        model_root.mkdir(parents=True, exist_ok=True)
 
         messages: list[str] = []
+        model_results: list[dict] = []
+        total = len(model_configs)
+        await self._log(f"prepare_model_repository: processing {total} model(s)")
 
-        for model_info in model_configs:
+        for idx, model_info in enumerate(model_configs, start=1):
             try:
                 if not isinstance(model_info, dict):
                     messages.append(
@@ -1473,26 +1909,19 @@ class InferenceBuilderMCPServer:
                     )
                     continue
 
+                await self._log(f"[{idx}/{total}] Preparing model '{model_name}'")
+
                 source = str(model_info.get("source", "NGC")).upper()
-                target = model_info.get("target")
-                if not target:
-                    messages.append(
-                        f"❌ Skipping model '{model_name}': missing required 'target'"
-                    )
-                    continue
+                final_model_dir = model_root / model_name
 
-                target_dir = Path(target).expanduser()
-                final_model_dir = target_dir / model_name
-
-                # Create target parent directory
-                target_dir.mkdir(parents=True, exist_ok=True)
-
-                if final_model_dir.exists():
+                # Skip download only if the directory exists AND contains files.
+                if final_model_dir.is_dir() and any(final_model_dir.rglob("*")):
                     messages.append(
                         f"✅ Model '{model_name}' already exists at {final_model_dir}, "
                         f"skipping download"
                     )
                 else:
+                    final_model_dir.mkdir(parents=True, exist_ok=True)
                     if source == "HF":
                         # Hugging Face model download, based on DockerBuildTester.download_models
                         hf_repo = model_info.get("path")
@@ -1549,7 +1978,7 @@ class InferenceBuilderMCPServer:
                             "download-version",
                             full_ngc_path,
                         ]
-                        result = subprocess.run(
+                        result = await self._run_subprocess(
                             download_cmd,
                             capture_output=True,
                             text=True,
@@ -1584,43 +2013,32 @@ class InferenceBuilderMCPServer:
                             )
                             continue
 
-                # Copy configs into final_model_dir if specified
-                configs_rel = model_info.get("configs")
-                if configs_rel:
-                    source_configs = (config_dir / configs_rel).resolve()
-                    if source_configs.exists():
-                        messages.append(
-                            f"📄 Copying runtime configs from {source_configs} "
-                            f"to {final_model_dir}"
-                        )
+                configs_dict = model_info.get("configs")
+                if configs_dict and isinstance(configs_dict, dict):
+                    for dest_name, cfg_value in configs_dict.items():
+                        dest = final_model_dir / dest_name
                         try:
-                            for item in source_configs.iterdir():
-                                dest = final_model_dir / item.name
-                                if item.is_file():
-                                    shutil.copy2(str(item), str(dest))
-                                elif item.is_dir():
-                                    shutil.copytree(
-                                        str(item), str(dest), dirs_exist_ok=True
-                                    )
+                            final_model_dir.mkdir(parents=True, exist_ok=True)
+                            dest.write_text(cfg_value)
+                            messages.append(f"📄 Wrote config → {dest_name}")
                         except Exception as exc:
                             messages.append(
-                                f"⚠️ Failed to copy configs for '{model_name}': {exc}"
+                                f"⚠️ Failed to write config '{dest_name}' for '{model_name}': {exc}"
                             )
-                    else:
-                        messages.append(
-                            f"⚠️ Config path not found for model '{model_name}': "
-                            f"{source_configs}"
-                        )
 
-                # Execute post-script if specified
                 post_script = model_info.get("post_script")
                 if post_script:
+                    script_path = final_model_dir / "post_script.sh"
+                    final_model_dir.mkdir(parents=True, exist_ok=True)
+                    script_path.write_text(post_script)
+                    script_path.chmod(0o755)
+                    script_cmd = str(script_path)
                     messages.append(
-                        f"🔧 Executing post-script for '{model_name}': {post_script}"
+                        f"🔧 Executing post-script for '{model_name}': {script_cmd}"
                     )
                     try:
-                        script_result = subprocess.run(
-                            post_script,
+                        script_result = await self._run_subprocess(
+                            script_cmd,
                             shell=True,
                             capture_output=True,
                             text=True,
@@ -1655,12 +2073,35 @@ class InferenceBuilderMCPServer:
                     f"✅ Prepared model repository for '{model_name}' at "
                     f"{final_model_dir}"
                 )
+                await self._log(f"[{idx}/{total}] Model '{model_name}' ready at {final_model_dir}")
+                files = sorted(
+                    str(f.relative_to(final_model_dir))
+                    for f in final_model_dir.rglob("*") if f.is_file()
+                )
+                model_results.append({
+                    "name": model_name,
+                    "host_path": str(final_model_dir),
+                    "files": files,
+                    "status": "success",
+                })
 
             except Exception as exc:  # Catch-all per model
                 messages.append(
                     f"❌ Exception while preparing model '{model_name}': {exc}"
                 )
+                try:
+                    _failed_path = str(final_model_dir)
+                except NameError:
+                    _failed_path = None
+                model_results.append({
+                    "name": model_name,
+                    "host_path": _failed_path,
+                    "files": [],
+                    "status": "failed",
+                    "error": str(exc),
+                })
 
+        import json as _json
         summary = "\n".join(messages)
         return CallToolResult(
             content=[
@@ -1670,7 +2111,11 @@ class InferenceBuilderMCPServer:
                         "Model repository preparation completed.\n\n"
                         f"{summary}"
                     ),
-                )
+                ),
+                TextContent(
+                    type="text",
+                    text=_json.dumps({"models": model_results}, indent=2),
+                ),
             ]
         )
 
@@ -1679,41 +2124,34 @@ class InferenceBuilderMCPServer:
     ) -> CallToolResult:
         """Build Docker image from generated pipeline"""
         image_name = arguments["image_name"]
-        dockerfile = arguments["dockerfile"]
 
-        # Validate Dockerfile exists
-        dockerfile_path = Path(dockerfile)
-        if not dockerfile_path.exists():
-            return CallToolResult(
-                content=[
-                    TextContent(
-                        type="text",
-                        text=f"Dockerfile not found: {dockerfile}. Please "
-                             f"provide a valid Dockerfile path."
-                    )
-                ],
-                isError=True
-            )
+        ws = self._get_session_workspace()
+        if ws is None:
+            import tempfile
+            ws = Path(tempfile.mkdtemp(prefix="ib-docker-"))
+        ws.mkdir(parents=True, exist_ok=True)
+        dockerfile_path = ws / "Dockerfile"
+        dockerfile_path.write_text(arguments["dockerfile"])
 
-        # Use Dockerfile's parent directory as build context
-        build_context = str(dockerfile_path.parent)
+        build_context = str(ws)
 
         # Build Docker image
         cmd = [
             "docker", "build",
-            "-f", dockerfile,
+            "-f", str(dockerfile_path),
             "-t", image_name,
             build_context
         ]
         self.logger.info(
             "docker_build_invoked image=%s dockerfile=%s context=%s",
             image_name,
-            dockerfile,
+            dockerfile_path,
             build_context,
         )
+        await self._log(f"Building Docker image '{image_name}' (context: {build_context})")
 
         try:
-            result = subprocess.run(
+            result = await self._run_subprocess(
                 cmd,
                 capture_output=True,
                 text=True,
@@ -1722,6 +2160,7 @@ class InferenceBuilderMCPServer:
             )
 
             if result.returncode == 0:
+                await self._log(f"Docker image '{image_name}' built successfully")
                 return CallToolResult(
                     content=[
                         TextContent(
@@ -1736,6 +2175,10 @@ class InferenceBuilderMCPServer:
                     ]
                 )
             else:
+                await self._log(
+                    f"Docker build failed for '{image_name}' (exit {result.returncode})",
+                    level="error",
+                )
                 return CallToolResult(
                     content=[
                         TextContent(
@@ -1761,6 +2204,122 @@ class InferenceBuilderMCPServer:
                 isError=True
             )
 
+    async def _collect_system_info(self) -> None:
+        """Collect system info once at startup and cache in self._system_info."""
+        import platform
+
+        async def _run(cmd):
+            try:
+                r = await self._run_subprocess(
+                    cmd, capture_output=True, text=True, check=False, timeout=10
+                )
+                return r.stdout.strip() if r.returncode == 0 else None
+            except Exception:
+                return None
+
+        # GPU info: one row per GPU
+        smi_out = await _run([
+            "nvidia-smi",
+            "--query-gpu=name,driver_version,memory.total,compute_cap",
+            "--format=csv,noheader,nounits",
+        ])
+        gpus = []
+        if smi_out:
+            for line in smi_out.splitlines():
+                parts = [p.strip() for p in line.split(",")]
+                if len(parts) == 4:
+                    gpus.append({
+                        "name": parts[0],
+                        "driver_version": parts[1],
+                        "memory_mib": parts[2],
+                        "compute_capability": parts[3],
+                    })
+
+        # CUDA version from the plain nvidia-smi output header
+        smi_header = await _run(["nvidia-smi"])
+        cuda_version = None
+        if smi_header:
+            for line in smi_header.splitlines():
+                if "CUDA Version" in line:
+                    cuda_version = line.split(":")[-1].strip()
+                    break
+
+        # Docker version
+        docker_out = await _run(["docker", "--version"])
+
+        # OS info from /etc/os-release
+        os_info = {}
+        try:
+            with open("/etc/os-release") as f:
+                for line in f:
+                    k, _, v = line.strip().partition("=")
+                    os_info[k] = v.strip('"')
+        except Exception:
+            pass
+
+        self._system_info = {
+            "arch": platform.machine(),
+            "os": {
+                "id": os_info.get("ID"),
+                "version": os_info.get("VERSION_ID"),
+                "pretty_name": os_info.get("PRETTY_NAME"),
+            },
+            "cuda_version": cuda_version,
+            "gpus": gpus,
+            "docker": docker_out,
+        }
+        self.logger.info("system_info_collected arch=%s gpus=%d", self._system_info["arch"], len(gpus))
+
+    async def _get_system_info(self) -> CallToolResult:
+        import json as _json
+        if self._system_info is None:
+            # Still collecting — wait up to 30s for the background task to finish
+            for _ in range(30):
+                await asyncio.sleep(1)
+                if self._system_info is not None:
+                    break
+        return CallToolResult(
+            content=[TextContent(type="text", text=_json.dumps(self._system_info, indent=2))]
+        )
+
+    async def _read_file(self, arguments: Dict[str, Any]) -> CallToolResult:
+        """Read a file from the shared model root."""
+        import json as _json
+
+        def _result(data: dict, is_error: bool = False) -> CallToolResult:
+            return CallToolResult(
+                content=[TextContent(type="text", text=_json.dumps(data, indent=2))],
+                isError=is_error,
+            )
+
+        if self._model_root is None:
+            return _result({"path": arguments.get("path"), "error": (
+                "Model root is not configured. "
+                "Start the server with --model-root or set MCP_MODEL_ROOT."
+            )}, is_error=True)
+
+        rel_path = arguments["path"]
+        model_root = self._model_root.resolve()
+
+        try:
+            target = (model_root / rel_path).resolve()
+            target.relative_to(model_root)  # path-traversal guard
+        except ValueError:
+            return _result({"path": rel_path, "error": f"Access denied: '{rel_path}' is outside the model root."}, is_error=True)
+
+        if not target.is_file():
+            return _result({"path": rel_path, "error": f"File not found: '{rel_path}'"}, is_error=True)
+
+        # Detect binary files by checking for null bytes in the first chunk
+        try:
+            raw = target.read_bytes()
+            if b"\x00" in raw[:8192]:
+                return _result({"path": rel_path, "error": f"'{rel_path}' is a binary file and cannot be read as text."}, is_error=True)
+            text = raw.decode("utf-8", errors="replace")
+            return _result({"path": rel_path, "content": text})
+        except Exception as exc:
+            return _result({"path": rel_path, "error": f"Failed to read '{rel_path}': {exc}"}, is_error=True)
+
     async def _generate_deepstream_nvinfer_config(
         self, arguments: Dict[str, Any]
     ) -> CallToolResult:
@@ -1768,8 +2327,15 @@ class InferenceBuilderMCPServer:
         import yaml
 
         # Extract required parameters
-        output_path = arguments["output_path"]
         onnx_file = arguments["onnx_file"]
+        if not onnx_file.endswith(".onnx"):
+            return CallToolResult(
+                content=[TextContent(type="text", text=(
+                    f"Invalid onnx_file '{onnx_file}': must end with '.onnx'. "
+                    f"Use read_model_file to inspect the model directory and locate the correct .onnx file."
+                ))],
+                isError=True,
+            )
         network_type = arguments["network_type"]
         input_dims = arguments["input_dims"]
         label_file = arguments["label_file"]
@@ -1919,75 +2485,394 @@ class InferenceBuilderMCPServer:
         yaml_content = yaml.dump(config, default_flow_style=False, sort_keys=False)
         full_content = header + yaml_content
 
-        # Write to file
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text=(
+                        f"Successfully generated DeepStream nvinfer configuration!\n\n"
+                        f"Configuration summary:\n"
+                        f"  - Network type: {network_type_names[network_type]} ({network_type})\n"
+                        f"  - Precision mode: {precision_names[precision_mode]} ({precision_mode})\n"
+                        f"  - ONNX file: {onnx_file}\n"
+                        f"  - Input dimensions: {input_dims}\n"
+                        f"  - Label file: {label_file}\n"
+                        f"  - Scale factor: {net_scale_factor}\n"
+                        + (f"  - Per-channel offsets: {offsets}\n" if offsets else "  - Per-channel offsets: NOT SET (no mean subtraction)\n")
+                        + (f"  - Number of classes: {num_classes}\n" if num_classes else "")
+                        + (f"  - Input from metadata: {bool(input_tensor_from_meta)}\n" if input_tensor_from_meta else "")
+                        + (f"  - Output as metadata: {bool(output_tensor_meta)} (raw tensors in DS META)\n" if output_tensor_meta else "")
+                        + (f"  - Custom library: {custom_lib_path}\n" if custom_lib_path else "")
+                        + (f"  - Custom parse function: {custom_parse_func}\n" if custom_parse_func else "")
+                        + "\n⚠️  IMPORTANT: Verify that net-scale-factor and per-channel offsets match your model's training normalization!\n"
+                        + "   - net-scale-factor must match the scaling applied during training\n"
+                        + "   - offsets must match any per-channel mean subtraction used during training\n"
+                        + "   - If training used no mean subtraction, offsets should not be set (or set to 0;0;0)\n"
+                        + f"\nGenerated configuration (nvdsinfer_config.yaml):\n\n{full_content}"
+                    )
+                )
+            ]
+        )
+
+
+class ApiKeyMiddleware(BaseHTTPMiddleware):
+    """ASGI middleware that enforces Bearer-token authentication.
+
+    When an *api_key* is configured on the server, every incoming request must
+    carry an ``Authorization: Bearer <api_key>`` header.  Requests that are
+    missing the header or carry a different token are rejected immediately with
+    HTTP 401 Unauthorized.
+    """
+
+    def __init__(self, app, api_key: str) -> None:
+        super().__init__(app)
+        self._api_key = api_key
+
+    async def dispatch(self, request: Request, call_next):
+        auth_header = request.headers.get("Authorization", "")
+        prefix = "Bearer "
+        if not auth_header.startswith(prefix) or auth_header[len(prefix):] != self._api_key:
+            return StarletteResponse("Unauthorized", status_code=401)
+        return await call_next(request)
+
+
+def create_sse_app(
+    server: "InferenceBuilderMCPServer",
+    api_key: str | None = None,
+) -> Starlette:
+    """Build a Starlette ASGI application that exposes the MCP server over HTTP.
+
+    Two transports are available simultaneously:
+
+    **Streamable HTTP** (preferred — Claude Code and MCP SDK ≥ 1.0)
+
+    * ``POST /mcp``  – Client sends JSON-RPC requests; server responds with
+                       JSON or an SSE stream depending on the ``Accept`` header.
+    * ``GET  /mcp``  – Client opens a long-lived SSE channel for server-push
+                       notifications (optional, used alongside POST).
+
+    **Legacy SSE transport** (older clients)
+
+    * ``GET  /sse``       – Client opens a persistent SSE stream.
+    * ``POST /messages/`` – Client POSTs JSON-RPC requests tagged with the
+                            ``session_id`` received from the SSE stream.
+
+    Args:
+        server:  The :class:`InferenceBuilderMCPServer` instance to expose.
+        api_key: Optional Bearer token.  When provided, every request must
+                 carry ``Authorization: Bearer <api_key>`` or receive 401.
+    """
+    import contextlib
+
+    # --- Streamable HTTP transport (Claude Code / newer MCP clients) -----------
+    session_manager = StreamableHTTPSessionManager(
+        app=server.server,
+        stateless=False,  # enables mcp-session-id tracking for per-client workspace
+    )
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app):
+        asyncio.ensure_future(server._collect_system_info())
+        server._sweep_stale_workspaces()
+        async with session_manager.run():
+            yield
+
+    # --- Legacy SSE transport --------------------------------------------------
+    sse_transport = SseServerTransport("/messages/")
+
+    async def handle_sse(request: Request) -> StarletteResponse:
+        async with sse_transport.connect_sse(
+            request.scope, request.receive, request._send
+        ) as streams:
+            init_options = server.server.create_initialization_options()
+            await server.server.run(streams[0], streams[1], init_options)
+        return StarletteResponse()
+
+    # Sentinel response used by endpoints that send the ASGI response themselves.
+    # Starlette requires endpoints to return a Response object; returning this
+    # no-op subclass prevents a double-send when session_manager.handle_request
+    # (or connect_sse) has already written headers+body to the send callable.
+    class _AlreadyHandled(StarletteResponse):
+        async def __call__(self, scope, receive, send) -> None:
+            pass
+
+    async def handle_mcp(request: Request) -> _AlreadyHandled:
+        if request.method == "DELETE":
+            session_id = request.headers.get("mcp-session-id")
+            if session_id:
+                await server._cleanup_session(session_id)
+        await session_manager.handle_request(request.scope, request.receive, request._send)
+        return _AlreadyHandled()
+
+    # --- Artifact download endpoint -------------------------------------------
+    # GET /{path:path}
+    # Unified session workspace browser — lists directories as JSON, serves files
+    # with auto-detected MIME type.  Session is identified via the mcp-session-id
+    # header so no session ID appears in the URL.
+    import mimetypes
+    from starlette.responses import FileResponse, JSONResponse
+
+    async def handle_workspace(request: Request) -> StarletteResponse:
+        session_id = request.headers.get("mcp-session-id")
+        if not session_id:
+            return JSONResponse({"error": "Missing mcp-session-id header"}, status_code=400)
+
+        workspace = server._session_workspaces.get(session_id)
+        if workspace is None:
+            return JSONResponse({"error": "Session not found"}, status_code=404)
+
+        rel = request.path_params.get("path", "")
+        target = (workspace / rel).resolve() if rel else workspace.resolve()
+
+        # Reject path traversal
         try:
-            output_file = Path(output_path)
-            output_file.parent.mkdir(parents=True, exist_ok=True)
+            target.relative_to(workspace.resolve())
+        except ValueError:
+            return JSONResponse({"error": "Invalid path"}, status_code=400)
 
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write(full_content)
+        if not target.exists():
+            return JSONResponse({"error": "Not found"}, status_code=404)
 
-            return CallToolResult(
-                content=[
-                    TextContent(
-                        type="text",
-                        text=(
-                            f"Successfully generated DeepStream nvinfer configuration!\n\n"
-                            f"Output file: {output_path}\n\n"
-                            f"Configuration summary:\n"
-                            f"  - Network type: {network_type_names[network_type]} ({network_type})\n"
-                            f"  - Precision mode: {precision_names[precision_mode]} ({precision_mode})\n"
-                            f"  - ONNX file: {onnx_file}\n"
-                            f"  - Input dimensions: {input_dims}\n"
-                            f"  - Label file: {label_file}\n"
-                            f"  - Scale factor: {net_scale_factor}\n"
-                            + (f"  - Per-channel offsets: {offsets}\n" if offsets else "  - Per-channel offsets: NOT SET (no mean subtraction)\n")
-                            + (f"  - Number of classes: {num_classes}\n" if num_classes else "")
-                            + (f"  - Input from metadata: {bool(input_tensor_from_meta)}\n" if input_tensor_from_meta else "")
-                            + (f"  - Output as metadata: {bool(output_tensor_meta)} (raw tensors in DS META)\n" if output_tensor_meta else "")
-                            + (f"  - Custom library: {custom_lib_path}\n" if custom_lib_path else "")
-                            + (f"  - Custom parse function: {custom_parse_func}\n" if custom_parse_func else "")
-                            + "\n⚠️  IMPORTANT: Verify that net-scale-factor and per-channel offsets match your model's training normalization!\n"
-                            + "   - net-scale-factor must match the scaling applied during training\n"
-                            + "   - offsets must match any per-channel mean subtraction used during training\n"
-                            + "   - If training used no mean subtraction, offsets should not be set (or set to 0;0;0)\n"
-                            + f"\nGenerated content:\n\n{full_content}"
-                        )
-                    )
-                ]
-            )
-        except Exception as e:
-            return CallToolResult(
-                content=[
-                    TextContent(
-                        type="text",
-                        text=f"Failed to write configuration file:\n\n{str(e)}"
-                    )
-                ],
-                isError=True
-            )
+        if target.is_dir():
+            entries = []
+            for entry in sorted(target.iterdir()):
+                info: Dict[str, Any] = {"name": entry.name, "type": "directory" if entry.is_dir() else "file"}
+                if entry.is_file():
+                    info["size"] = entry.stat().st_size
+                entries.append(info)
+            return JSONResponse({"path": f"/{rel}", "entries": entries})
+
+        mime_type, _ = mimetypes.guess_type(target.name)
+        if mime_type is None:
+            mime_type = "text/plain" if target.suffix in (".log", ".txt", ".yaml", ".yml", ".json") else "application/octet-stream"
+
+        return FileResponse(path=str(target), media_type=mime_type)
+
+    # ---------------------------------------------------------------------------
+    routes = [
+        # Streamable HTTP — single Route (no Starlette 307 redirect), all methods
+        Route("/mcp", endpoint=handle_mcp, methods=["GET", "POST", "DELETE"]),
+        # Legacy SSE — separate GET (stream) and POST (messages) endpoints
+        Route("/sse", endpoint=handle_sse, methods=["GET"]),
+        Mount("/messages/", app=sse_transport.handle_post_message),
+        # Session workspace browser — list directories, download files
+        Route("/{path:path}", endpoint=handle_workspace, methods=["GET"]),
+    ]
+
+    middleware: list[Middleware] = []
+    if api_key:
+        middleware.append(Middleware(ApiKeyMiddleware, api_key=api_key))
+
+    return Starlette(routes=routes, middleware=middleware, lifespan=lifespan)
+
+
+async def run_sse_server(
+    server: "InferenceBuilderMCPServer",
+    host: str = "0.0.0.0",
+    port: int = 8000,
+    api_key: str | None = None,
+) -> None:
+    """Run the MCP server with SSE/HTTP transport using uvicorn.
+
+    Args:
+        server:  The :class:`InferenceBuilderMCPServer` instance to serve.
+        host:    Network interface to bind (default ``0.0.0.0``).
+        port:    TCP port to listen on (default ``8000``).
+        api_key: Optional Bearer token for authentication (see
+                 :func:`create_sse_app`).
+    """
+    import socket
+    import uvicorn
+
+    logger = logging.getLogger("deepstream-inference-builder")
+
+    # Resolve a human-readable address for the config banner.
+    display_host = host if host not in ("0.0.0.0", "::") else socket.gethostbyname(socket.gethostname())
+
+    server._base_url = f"http://{display_host}:{port}"
+    app = create_sse_app(server, api_key=api_key)
+    config = uvicorn.Config(app, host=host, port=port, log_level="info")
+    uv_server = uvicorn.Server(config)
+
+    # Print the startup banner after uvicorn has finished its own setup but
+    # before it blocks in the serve loop.  We hook into the lifespan startup
+    # by monkey-patching startup() — simplest approach without subclassing.
+    _original_startup = uv_server.startup
+
+    async def _startup_with_banner(sockets=None):
+        await _original_startup(sockets=sockets)
+        banner_lines = [
+            "",
+            "=" * 62,
+            "  Inference Builder MCP Server — HTTP transport",
+            "=" * 62,
+            f"  Streamable HTTP : http://{display_host}:{port}/mcp   (Claude Code)",
+            f"  Legacy SSE      : http://{display_host}:{port}/sse   (older clients)",
+            f"  Bind address    : {host}:{port}",
+            f"  Auth            : {'Bearer token (MCP_API_KEY / --api-key)' if api_key else 'none (open access)'}",
+            f"  Workspaces      : {server._workspace_root or 'disabled (--workspace-root not set)'}",
+            "=" * 62,
+            "",
+            "  Claude Code / cursor-mcp-config.json snippet:",
+            "  {",
+            '    "mcpServers": {',
+            '      "deepstream-inference-builder": {',
+            f'        "url": "http://{display_host}:{port}/mcp"' + ("," if api_key else ""),
+        ]
+        if api_key:
+            banner_lines += [
+                '        "headers": {',
+                '          "Authorization": "Bearer <your-api-key>"',
+                "        }",
+            ]
+        banner_lines += [
+            "      }",
+            "    }",
+            "  }",
+            "=" * 62,
+            "",
+        ]
+        print("\n".join(banner_lines), flush=True)
+
+    uv_server.startup = _startup_with_banner
+    await uv_server.serve()
 
 
 async def main():
-    """Main entry point for the MCP server"""
+    """Main entry point for the MCP server."""
+    parser = argparse.ArgumentParser(
+        description="Inference Builder MCP Server",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Transport modes\n"
+            "---------------\n"
+            "  stdio  Local client only. The MCP client (e.g. Claude Code) launches\n"
+            "         this process directly and communicates over stdin/stdout.\n"
+            "         No network port is opened. Workspace management is disabled.\n\n"
+            "  sse    HTTP server for one or more remote clients. Two endpoints are\n"
+            "         exposed on the same port:\n"
+            "           POST/GET /mcp  — Streamable HTTP (Claude Code, MCP SDK ≥ 1.0)\n"
+            "           GET  /sse      — Legacy SSE stream  (older clients)\n"
+            "           POST /messages/ — Legacy SSE messages\n"
+            "         Each client is assigned a unique mcp-session-id and gets an\n"
+            "         isolated workspace directory under --workspace-root.\n\n"
+            "Environment variables (SSE mode)\n"
+            "--------------------------------\n"
+            "  MCP_API_KEY         Bearer token clients must send in the\n"
+            "                      Authorization header (same as --api-key).\n"
+            "  MCP_WORKSPACE_ROOT  Base directory for per-client workspaces\n"
+            f"                      (default: {Path(tempfile.gettempdir()) / 'inference-builder-workspaces'}).\n\n"
+            "Examples\n"
+            "--------\n"
+            "  # Local client via stdio (default)\n"
+            "  python mcp_server.py\n\n"
+            "  # Remote clients on port 8888, open access\n"
+            "  python mcp_server.py --transport sse --port 8888\n\n"
+            "  # Remote clients with Bearer-token auth\n"
+            "  python mcp_server.py --transport sse --port 8888 --api-key MY_SECRET\n"
+            "  MCP_API_KEY=MY_SECRET python mcp_server.py --transport sse --port 8888\n\n"
+            "  # Custom workspace root\n"
+            "  python mcp_server.py --transport sse --port 8888 \\\n"
+            "      --workspace-root /var/tmp/ib-workspaces\n"
+            "  MCP_WORKSPACE_ROOT=/var/tmp/ib-workspaces \\\n"
+            "      python mcp_server.py --transport sse --port 8888\n\n"
+            "Client config snippet (Claude Code / cursor-mcp-config.json)\n"
+            "--------------------------------------------------------------\n"
+            '  { "mcpServers": { "deepstream-inference-builder": {\n'
+            '      "url": "http://<host>:<port>/mcp",\n'
+            '      "headers": { "Authorization": "Bearer <token>" } } } }\n'
+        ),
+    )
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "sse"],
+        default="stdio",
+        help=(
+            "Transport type: 'stdio' for a single local client (default), "
+            "'sse' for one or more remote clients over HTTP."
+        ),
+    )
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Network interface to bind in SSE mode (default: 0.0.0.0 — all interfaces).",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="TCP port to listen on in SSE mode (default: 8000).",
+    )
+    parser.add_argument(
+        "--api-key",
+        default=os.environ.get("MCP_API_KEY"),
+        metavar="TOKEN",
+        help=(
+            "Bearer token remote clients must supply via 'Authorization: Bearer TOKEN'. "
+            "Defaults to MCP_API_KEY env var. Omit to allow unauthenticated access. "
+            "SSE mode only."
+        ),
+    )
+    parser.add_argument(
+        "--workspace-root",
+        default=os.environ.get(
+            "MCP_WORKSPACE_ROOT",
+            str(Path(tempfile.gettempdir()) / "inference-builder-workspaces"),
+        ),
+        metavar="DIR",
+        help=(
+            "Base directory under which a private workspace folder is created "
+            "for each connected client (named by mcp-session-id). "
+            "Tools that accept output_dir will default to the session workspace "
+            "when the caller does not specify one. "
+            "Defaults to MCP_WORKSPACE_ROOT env var, or "
+            f"{Path(tempfile.gettempdir()) / 'inference-builder-workspaces'}. "
+            "Only applies to SSE transport."
+        ),
+    )
+    parser.add_argument(
+        "--model-root",
+        default=os.environ.get(
+            "MCP_MODEL_ROOT",
+            str(Path(tempfile.gettempdir()) / "inference-builder-models"),
+        ),
+        metavar="DIR",
+        help=(
+            "Shared directory where prepare_model_repository downloads models. "
+            "Shared across all client sessions; files are accessible via read_model_file. "
+            "Defaults to MCP_MODEL_ROOT env var, or "
+            f"{Path(tempfile.gettempdir()) / 'inference-builder-models'}."
+        ),
+    )
+    args = parser.parse_args()
+
     logging.basicConfig(
         level=logging.DEBUG,
         format=("%(asctime)s %(levelname)s %(name)s - %(message)s"),
     )
     logger = logging.getLogger("deepstream-inference-builder")
     logger.info("starting_mcp_server")
-    server = InferenceBuilderMCPServer()
+
+    # Workspace is only meaningful for SSE transport (requires mcp-session-id).
+    # In stdio mode there is a single local client and no session identity,
+    # so workspace management is left entirely to the caller.
+    workspace_root = Path(args.workspace_root) if args.transport == "sse" else None
+    model_root = Path(args.model_root)
+    server = InferenceBuilderMCPServer(workspace_root=workspace_root, model_root=model_root)
     logger.info("server_created")
 
-    async with stdio_server() as (read_stream, write_stream):
-        logger.info("stdio_server_started")
-        init_options = server.server.create_initialization_options()
-        logger.info("initialization_options_created")
-        await server.server.run(
-            read_stream,
-            write_stream,
-            init_options,
-        )
+    if args.transport == "sse":
+        await run_sse_server(server, host=args.host, port=args.port, api_key=args.api_key)
+    else:
+        async with stdio_server() as (read_stream, write_stream):
+            logger.info("stdio_server_started")
+            init_options = server.server.create_initialization_options()
+            logger.info("initialization_options_created")
+            await server.server.run(
+                read_stream,
+                write_stream,
+                init_options,
+            )
 
 
 if __name__ == "__main__":

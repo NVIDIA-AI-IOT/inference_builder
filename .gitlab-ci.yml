@@ -92,6 +92,97 @@ cache:
 
 
 # ------------------------------
+# MCP Server Unit Tests
+# ------------------------------
+test:mcp:
+  stage: test
+  image: python:3.12-slim
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: unix:///var/run/docker.sock
+  before_script:
+    - *setup_docker_buildkit
+    - *setup_python
+  script:
+    - echo "Running MCP server unit tests..."
+    - cd mcp
+    - python -m unittest test_mcp_server -v
+    - echo "MCP tests completed"
+  artifacts:
+    name: "mcp-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - mcp/.mcp_server.log
+    when: always
+    expire_in: 1 week
+  timeout: 10m
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+  tags:
+    - os/linux
+    - type/docker
+    - gpu   # GPU-tagged runners are where the Docker socket is available;
+            # the tests themselves pass gpus=None so no GPU is consumed.
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+# ------------------------------
+# MCP Client Integration Test
+# ------------------------------
+test:mcp-client:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends python3-dev python3-pip gcc g++ make cmake libssl-dev curl
+    - pip3 install --upgrade pip --break-system-packages || pip3 install --upgrade pip
+    - "if [ -f requirements.txt ]; then pip install -r <(grep -v '^opencv-python' requirements.txt) --break-system-packages || pip install -r requirements.txt; fi"
+  script:
+    - echo "Starting MCP server in HTTP mode..."
+    - ./mcp/server_manager.sh start --port 8000
+    - echo "Waiting for server to accept connections..."
+    - |-
+      for i in $(seq 1 15); do
+        STATUS=$(curl -s --max-time 2 -o /dev/null -w "%{http_code}" -X POST http://localhost:8000/mcp -H "Content-Type: application/json" -d '{}' 2>/dev/null || true)
+        if echo "$STATUS" | grep -qE '^[1-5]'; then
+          echo "Server is ready (HTTP $STATUS on attempt $i)"
+          break
+        fi
+        echo "Attempt $i: not ready yet (status='$STATUS'), retrying in 2s..."
+        sleep 2
+      done
+    - STATUS=$(curl -s --max-time 2 -o /dev/null -w "%{http_code}" -X POST http://localhost:8000/mcp -H "Content-Type: application/json" -d '{}' 2>/dev/null || true)
+    - echo "$STATUS" | grep -qE '^[1-5]' || { echo "Server did not come up after 30s"; cat mcp/.mcp_server.log; exit 1; }
+    - echo "Running MCP client integration test..."
+    - python mcp/test_mcp_client.py --url http://localhost:8000/mcp
+  after_script:
+    - ./mcp/server_manager.sh stop || true
+    - echo "=== MCP server log ===" && cat mcp/.mcp_server.log || true
+  artifacts:
+    name: "mcp-client-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - mcp/.mcp_server.log
+    when: always
+    expire_in: 1 week
+  timeout: 10m
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+  tags:
+    - os/linux
+    - type/docker
+    - gpu
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+# ------------------------------
 # Standard Test Suite
 # ------------------------------
 test:standard:
