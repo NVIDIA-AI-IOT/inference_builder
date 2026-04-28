@@ -1490,7 +1490,7 @@ class InferenceBuilderMCPServer:
         ]
 
         if gpu_device is None:
-            # fall back to --gpus all, FIXME: in some casesnvidia-smi returns empty memory usage
+            # fall back to --gpus all, FIXME: in some cases nvidia-smi returns empty memory usage
             cmd.extend(["--gpus", "all"])
         else:
             # use the selected GPU

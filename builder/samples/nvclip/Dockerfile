@@ -32,9 +32,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     python-magic==0.4.27 \
     Pillow==11.1.0 \
     open_clip_torch==3.2.0 \
-    numpy==1.26.4 \
     omegaconf==2.3.0 \
-    transformers==4.48.1 \
+    transformers==4.54.1 \
     fastapi==0.115.12 \
     uvicorn==0.29.0 \
     tensorrt==10.14.1.48.post1 --extra-index-url https://pypi.nvidia.com \

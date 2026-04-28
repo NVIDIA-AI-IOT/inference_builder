@@ -33,7 +33,6 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     annotated-types==0.7.0 \
     python-magic==0.4.27 \
     torch==2.4.0 \
-    numpy==1.26.4 \
     omegaconf==2.3.0 \
     fastapi==0.115.12 \
     uvicorn==0.29.0

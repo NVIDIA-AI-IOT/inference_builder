@@ -102,6 +102,36 @@
     }
   },
   {
+    "name": "unicode_string_io_test",
+    "description": "Test TYPE_STRING requests and responses preserve Unicode text",
+    "build_args": {
+      "TEST_APP_NAME": "unicode_strings",
+      "CACHE_BUSTER": "unicode_string_io",
+      "SERVER_TYPE": "fastapi",
+      "OPENAPI_SPEC": "builder/samples/dummy/openapi.yaml"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 10,
+      "volumes": {
+        "unicode_strings/models": "/workspace/models"
+      },
+      "env": {
+        "DEBUG": "0"
+      },
+      "test_requests": [
+        {
+          "payload_path": "unicode_strings/payloads/payloads.jsonl",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json; charset=utf-8"
+          }
+        }
+      ],
+      "cmd": []
+    }
+  },
+  {
     "name": "fastapi_concurrency_test",
     "description": "Build concurrency app and run threaded client",
     "build_args": {

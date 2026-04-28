@@ -22,7 +22,13 @@ import threading
 from queue import Queue, Empty, Full
 from abc import ABC, abstractmethod
 from config import global_config
-from .utils import get_logger, split_tensor_in_dict, FutureConsumer, QueueConsumer
+from .utils import (
+    ensure_unicode_array,
+    get_logger,
+    split_tensor_in_dict,
+    FutureConsumer,
+    QueueConsumer,
+)
 from .codec import ImageDecoder
 import custom
 from omegaconf import OmegaConf
@@ -90,10 +96,10 @@ np_datatype_mapping = {
     "TYPE_FP16": np.float16,
     "TYPE_FP32": np.float32,
     "TYPE_FP64": np.float64,
-    "TYPE_STRING": np.string_,
+    "TYPE_STRING": np.str_,
     "TYPE_CUSTOM_DS_IMAGE": np.ubyte,
-    "TYPE_CUSTOM_DS_MIME": np.string_,
-    "TYPE_CUSTOM_DS_MEDIA_URL": np.string_,
+    "TYPE_CUSTOM_DS_MIME": np.str_,
+    "TYPE_CUSTOM_DS_MEDIA_URL": np.str_,
     "TYPE_CUSTOM_DS_SOURCE_CONFIG": str,
     "TYPE_BF16": None,
     "TYPE_CUSTOM_OBJECT": None
@@ -1638,14 +1644,16 @@ class ModelOperator:
                     logger.info("%s from preprocessed is not found in the model input config, adding it as a passthrough tensor", key)
                     passthrough_tensor[key] = value
                 else:
-                    data_type = i_config["data_type"]
+                    data_type_name = i_config["data_type"]
                     if isinstance(value, np.ndarray):
-                        data_type = np_datatype_mapping[data_type]
-                        if value.dtype != data_type:
+                        data_type = np_datatype_mapping[data_type_name]
+                        if data_type in (str, np.str_):
+                            data[key] = ensure_unicode_array(value)
+                        elif data_type is not None and value.dtype != data_type:
                             data[key] = value.astype(data_type)
                     elif isinstance(value, torch.Tensor):
-                        data_type = torch_datatype_mapping[data_type]
-                        if value.dtype != data_type:
+                        data_type = torch_datatype_mapping[data_type_name]
+                        if data_type is not None and value.dtype != data_type:
                             data[key] = value.to(data_type)
             for key in passthrough_tensor:
                 data.pop(key)

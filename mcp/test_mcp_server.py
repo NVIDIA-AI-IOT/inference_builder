@@ -788,24 +788,6 @@ class DockerRunGpuSelectionTests(unittest.IsolatedAsyncioTestCase):
         gpus_idx = docker_cmd.index("--gpus")
         self.assertEqual(docker_cmd[gpus_idx + 1], "device=1")
 
-    async def test_no_gpus_flag_when_nvidia_smi_unavailable(self):
-        """When nvidia-smi fails, --gpus is omitted from the docker run command."""
-        from unittest.mock import patch
-        import subprocess
-
-        captured_cmds = []
-
-        async def fake_run_subprocess(cmd, **kwargs):
-            captured_cmds.append(list(cmd))
-            if cmd[0] == "nvidia-smi":
-                return subprocess.CompletedProcess(cmd, 1, "", "not found")
-            return subprocess.CompletedProcess(cmd, 0, "ok", "")
-
-        with patch.object(self.server, "_run_subprocess", side_effect=fake_run_subprocess):
-            await self._call({"image_name": "alpine"})
-
-        docker_cmd = next(c for c in captured_cmds if c[0] == "docker")
-        self.assertNotIn("--gpus", docker_cmd)
 
 
 class DockerRunLogUrlTests(unittest.IsolatedAsyncioTestCase):

@@ -20,16 +20,22 @@
 # =============================================================================
 #
 # This script sets up the inference-builder Agent Skill by copying all
-# necessary files including schemas and samples to a destination directory.
+# necessary files including schemas and samples to the location discovered by
+# the selected agent.
 #
 # Usage:
-#   ./setup_skill.sh [destination_directory]
+#   ./setup_skill.sh --agent claude|codex [project_home]
 #
-# If no destination is provided, defaults to ~/.claude/skills/inference-builder/
-# which is Claude's personal skills directory.
+# If no project_home is provided:
+#   claude -> ~/.claude/skills/inference-builder/
+#   codex  -> ${CODEX_HOME:-~/.codex}/skills/inference-builder/
+#
+# If project_home is provided:
+#   claude -> <project_home>/.claude/skills/inference-builder/
+#   codex  -> <project_home>/skills/inference-builder/
 #
 # The script will create the following structure:
-#   <destination>/
+#   <agent-specific-skill-path>/
 #   ├── SKILL.md                    # Skill documentation
 #   ├── schemas/                    # JSON schemas
 #   └── samples/                    # Sample resources organized by category
@@ -78,30 +84,42 @@ COUNT_RUNTIME_CONFIGS=0
 COUNT_RUNTIME_PREPROCESS=0
 COUNT_OPENAPI=0
 
-# Default destination (Claude's personal skills directory)
-DEFAULT_DEST="$HOME/.claude/skills"
+# Default agent homes/skill roots
+CLAUDE_DEFAULT_SKILLS_ROOT="$HOME/.claude/skills"
+CODEX_DEFAULT_HOME="${CODEX_HOME:-$HOME/.codex}"
 
 # Skill folder name
 SKILL_NAME="inference-builder"
 
 # Set by validate_sources()
 SKILL_VERSION=""
+AGENT=""
+PROJECT_HOME=""
+SKILLS_ROOT=""
 
 # Function to print usage
 print_usage() {
-    echo "Usage: $0 [destination_directory]"
+    echo "Usage: $0 --agent claude|codex [project_home]"
     echo ""
-    echo "Set up the inference-builder Agent Skill at the specified location."
-    echo "The script will create an 'inference-builder' subdirectory inside the destination."
+    echo "Set up the inference-builder Agent Skill at the location discovered by the selected agent."
+    echo ""
+    echo "Options:"
+    echo "  --agent claude|codex    Agent skill layout to target (required)"
+    echo "  -h, --help              Show this help message"
     echo ""
     echo "Arguments:"
-    echo "  destination_directory   Parent directory for the skill"
-    echo "                          (default: ~/.claude/skills/)"
+    echo "  project_home            Optional project or agent home root."
+    echo "                          Claude installs to: <project_home>/.claude/skills/"
+    echo "                          Codex installs to:  <project_home>/skills/"
+    echo "                          If omitted, installs to the agent default:"
+    echo "                            Claude: ~/.claude/skills/"
+    echo "                            Codex:  ${CODEX_HOME:-$HOME/.codex}/skills/"
     echo ""
     echo "Examples:"
-    echo "  $0                                    # Installs to ~/.claude/skills/inference-builder/"
-    echo "  $0 ~/my-skills                        # Installs to ~/my-skills/inference-builder/"
-    echo "  $0 /tmp/test                          # Installs to /tmp/test/inference-builder/"
+    echo "  $0 --agent claude                    # Installs to ~/.claude/skills/inference-builder/"
+    echo "  $0 --agent codex                     # Installs to ${CODEX_HOME:-$HOME/.codex}/skills/inference-builder/"
+    echo "  $0 --agent claude /tmp/myproject     # Installs to /tmp/myproject/.claude/skills/inference-builder/"
+    echo "  $0 --agent codex /tmp/myproject      # Installs to /tmp/myproject/skills/inference-builder/"
 }
 
 # Function to log messages
@@ -120,6 +138,90 @@ log_error() {
 log_section() {
     echo ""
     echo -e "${CYAN}▶ $1${NC}"
+}
+
+# Parse command-line arguments.
+parse_args() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help)
+                print_usage
+                exit 0
+                ;;
+            --agent)
+                if [ $# -lt 2 ]; then
+                    log_error "--agent requires a value: claude or codex"
+                    exit 1
+                fi
+                AGENT="$2"
+                shift 2
+                ;;
+            --agent=*)
+                AGENT="${1#--agent=}"
+                shift
+                ;;
+            --)
+                shift
+                if [ $# -gt 0 ]; then
+                    if [ -n "$PROJECT_HOME" ]; then
+                        log_error "Only one project_home may be provided"
+                        exit 1
+                    fi
+                    PROJECT_HOME="$1"
+                    shift
+                fi
+                if [ $# -gt 0 ]; then
+                    log_error "Unexpected extra arguments: $*"
+                    exit 1
+                fi
+                ;;
+            -*)
+                log_error "Unknown option: $1"
+                echo ""
+                print_usage
+                exit 1
+                ;;
+            *)
+                if [ -n "$PROJECT_HOME" ]; then
+                    log_error "Only one project_home may be provided"
+                    exit 1
+                fi
+                PROJECT_HOME="$1"
+                shift
+                ;;
+        esac
+    done
+
+    if [ -z "$AGENT" ]; then
+        log_error "Missing required option: --agent claude|codex"
+        echo ""
+        print_usage
+        exit 1
+    fi
+
+    AGENT="$(printf '%s' "$AGENT" | tr '[:upper:]' '[:lower:]')"
+    case "$AGENT" in
+        claude|codex)
+            ;;
+        *)
+            log_error "Unsupported agent: $AGENT (expected claude or codex)"
+            exit 1
+            ;;
+    esac
+
+    if [ -n "$PROJECT_HOME" ]; then
+        if [ "$AGENT" = "codex" ]; then
+            SKILLS_ROOT="$PROJECT_HOME/skills"
+        else
+            SKILLS_ROOT="$PROJECT_HOME/.claude/skills"
+        fi
+    elif [ "$AGENT" = "codex" ]; then
+        SKILLS_ROOT="$CODEX_DEFAULT_HOME/skills"
+        log_info "No project_home specified, using Codex default: $SKILLS_ROOT"
+    else
+        SKILLS_ROOT="$CLAUDE_DEFAULT_SKILLS_ROOT"
+        log_info "No project_home specified, using Claude default: $SKILLS_ROOT"
+    fi
 }
 
 # Parse skill version from SKILL.md YAML frontmatter (field: version)
@@ -306,6 +408,11 @@ print_summary() {
     echo -e "${BLUE}  Inference Builder Agent Skill — skill v${SKILL_VERSION}, tool v${TOOL_VERSION} — Setup Complete${NC}"
     echo -e "${BLUE}════════════════════════════════════════════════════════════${NC}"
     echo ""
+    echo -e "  ${GREEN}Target agent:${NC} $AGENT"
+    if [ -n "$PROJECT_HOME" ]; then
+        echo -e "  ${GREEN}Project home:${NC} $PROJECT_HOME"
+    fi
+    echo -e "  ${GREEN}Skills root:${NC} $SKILLS_ROOT"
     echo -e "  ${GREEN}Location:${NC} $DEST_DIR"
     echo ""
     echo -e "  ${CYAN}Summary:${NC}"
@@ -330,20 +437,9 @@ print_summary() {
 
 # Main execution
 main() {
-    if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-        print_usage
-        exit 0
-    fi
+    parse_args "$@"
 
-    # Use provided destination or default to Claude's skills directory
-    if [ $# -eq 0 ]; then
-        SKILLS_ROOT="$DEFAULT_DEST"
-        log_info "No destination specified, using Claude's default: $SKILLS_ROOT"
-    else
-        SKILLS_ROOT="$1"
-    fi
-
-    # Append skill name to create full destination path
+    # Append skill name to create the final agent-specific skill path
     DEST_DIR="${SKILLS_ROOT}/${SKILL_NAME}"
 
     echo ""
@@ -353,15 +449,19 @@ main() {
     echo ""
 
     log_info "Project root: $PROJECT_ROOT"
-    log_info "Skills directory: $SKILLS_ROOT"
+    log_info "Target agent: $AGENT"
+    if [ -n "$PROJECT_HOME" ]; then
+        log_info "Project home: $PROJECT_HOME"
+    fi
+    log_info "Skills root: $SKILLS_ROOT"
     log_info "Skill destination: $DEST_DIR"
 
     # Validate sources
     validate_sources
 
-    # Create destination directory
+    # Create agent-specific skill directory
     if [ -d "$DEST_DIR" ]; then
-        log_warn "Destination directory exists. Files may be overwritten."
+        log_warn "Skill directory exists. Files may be overwritten."
     fi
     mkdir -p "$DEST_DIR"
 

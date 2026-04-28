@@ -154,7 +154,8 @@ test:mcp-client:
         echo "Attempt $i: not ready yet (status='$STATUS'), retrying in 2s..."
         sleep 2
       done
-    - STATUS=$(curl -s --max-time 2 -o /dev/null -w "%{http_code}" -X POST http://localhost:8000/mcp -H "Content-Type: application/json" -d '{}' 2>/dev/null || true)
+    - |-
+      STATUS=$(curl -s --max-time 2 -o /dev/null -w "%{http_code}" -X POST http://localhost:8000/mcp -H "Content-Type: application/json" -d '{}' 2>/dev/null || true)
     - echo "$STATUS" | grep -qE '^[1-5]' || { echo "Server did not come up after 30s"; cat mcp/.mcp_server.log; exit 1; }
     - echo "Running MCP client integration test..."
     - python mcp/test_mcp_client.py --url http://localhost:8000/mcp

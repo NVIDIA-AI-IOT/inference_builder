@@ -19,7 +19,7 @@
 import json
 from .data_model import {{ triton.request_class }}, {{ triton.response_class }}, {{ triton.streaming_response_class }}
 from config import global_config
-from lib.utils import create_jinja2_env, convert_list, get_logger
+from lib.utils import create_jinja2_env, convert_list, get_logger, to_unicode_string
 from typing import Dict, Any, Optional, List, Union
 import numpy as np
 import torch
@@ -75,8 +75,8 @@ class TritonInferenceHandlerBridge(TritonInferenceHandler):
                 expected_type = type_map[name]
                 if isinstance(value, np.ndarray) or isinstance(value, torch.Tensor):
                     l = value.tolist()
-                    if expected_type == "TYPE_STRING" and value.dtype != np.string_:
-                        l = [i.decode("utf-8", "ignore") for i in l]
+                    if expected_type == "TYPE_STRING":
+                        l = convert_list(l, to_unicode_string)
                     streamed[name] = l
                 else:
                     streamed[name] = value
@@ -104,8 +104,8 @@ class TritonInferenceHandlerBridge(TritonInferenceHandler):
             expected_type = type_map[name]
             if isinstance(acc[name], np.ndarray):
                 l = acc[name].tolist()
-                if acc[name].dtype != np.string_ and expected_type == "TYPE_STRING":
-                    acc[name] = convert_list(l, lambda i: i.decode("utf-8", "ignore"))
+                if expected_type == "TYPE_STRING":
+                    acc[name] = convert_list(l, to_unicode_string)
                 elif len(acc[name].shape) == 1 and len(l) == 1:
                     acc[name] = l[0]
                 else:
