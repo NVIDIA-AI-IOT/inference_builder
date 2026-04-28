@@ -19,6 +19,10 @@ import sys
 import torch
 
 
+class PathSecurityError(ValueError):
+    """Raised when a user-supplied path fails security checks."""
+
+
 def validate_directory_path(dir_path):
     """
     Validate directory path to prevent OS access violations.
@@ -27,28 +31,28 @@ def validate_directory_path(dir_path):
     Returns:
         str: Validated and sanitized directory path
     Raises:
-        ValueError: If path is invalid or potentially dangerous
+        PathSecurityError: If path is invalid or potentially dangerous
     """
     if not dir_path:
-        raise ValueError("Directory path cannot be empty")
+        raise PathSecurityError("Directory path cannot be empty")
 
     try:
         abs_path = os.path.abspath(dir_path)
         resolved_path = os.path.realpath(abs_path)
     except (OSError, ValueError) as e:
-        raise ValueError(f"Invalid directory path: {e}")
+        raise PathSecurityError(f"Invalid directory path: {e}")
 
     if ".." in os.path.normpath(dir_path):
-        raise ValueError("Path traversal detected in directory path")
+        raise PathSecurityError("Path traversal detected in directory path")
 
     invalid_chars = ['<', '>', ':', '"', '|', '?', '*']
     if any(char in dir_path for char in invalid_chars):
-        raise ValueError("Invalid characters in directory path")
+        raise PathSecurityError("Invalid characters in directory path")
 
     system_dirs = ['/etc', '/sys', '/proc', '/dev', '/boot', '/usr/bin', '/usr/sbin']
     for sys_dir in system_dirs:
         if resolved_path.startswith(sys_dir):
-            raise ValueError(f"Access to system directory {sys_dir} is not allowed")
+            raise PathSecurityError(f"Access to system directory {sys_dir} is not allowed")
 
     return resolved_path
 
@@ -123,6 +127,9 @@ if __name__ == "__main__":
 
     try:
         export_onnx(args.output_dir, args.resolution, args.model_path)
-    except ValueError as e:
+    except PathSecurityError as e:
         print(f"Security validation failed: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"ONNX export failed: {e}")
         sys.exit(1)

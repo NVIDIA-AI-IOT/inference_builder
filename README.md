@@ -156,6 +156,28 @@ Then navigate to **File > Preferences > Cursor Settings > MCP**. A green status 
 
 ![MCP Server](mcp.png)
 
+#### Codex
+
+Run the following command to register the server:
+
+```bash
+# With MCP_API_KEY enabled on the server
+export MCP_API_KEY=MY_SECRET
+codex mcp add deepstream-inference-builder \
+  --url http://<host>:8000/mcp \
+  --bearer-token-env-var MCP_API_KEY
+
+# Without MCP_API_KEY
+codex mcp add deepstream-inference-builder \
+  --url http://<host>:8000/mcp
+```
+
+Verify the connection is configured:
+
+```bash
+codex mcp list
+```
+
 #### Claude Code
 
 Run the following command to register the server:
@@ -171,7 +193,6 @@ claude mcp add --transport http --scope project \
   deepstream-inference-builder http://<host>:8000/mcp \
   --header "Authorization: Bearer MY_SECRET"
 ```
-
 Omit `--header` if no API key was set on the server. Then verify the connection by running `/mcp` in the Claude Code console:
 
 ```
@@ -211,7 +232,7 @@ You can now try out the [example prompts](prompts.md) using either Cursor or Cla
 
 ## Agent Skills Integration
 
-Inference Builder also supports [Claude Agent Skills](https://www.anthropic.com/news/skills), Anthropic's technology that lets Claude be customized with domain-specific expertise. Agent Skills provide a portable way to use Inference Builder across Claude's apps (web, mobile), Claude Code, and the API.
+Inference Builder also supports Agent Skills, letting agents such as Claude and Codex load domain-specific guidance for generating and testing inference pipelines.
 
 ### What's Included
 
@@ -229,17 +250,31 @@ Install the skill to Claude's default skills directory:
 
 ```bash
 cd skills
-./setup_skill.sh
+./setup_skill.sh --agent claude
 ```
 
 This installs the skill to `~/.claude/skills/inference-builder/`.
 
-To install to a custom location:
+Install the skill to Codex's default skills directory:
 
 ```bash
-./setup_skill.sh /path/to/your/skills
-# → Creates /path/to/your/skills/inference-builder/
+cd skills
+./setup_skill.sh --agent codex
 ```
+
+This installs the skill to `${CODEX_HOME:-~/.codex}/skills/inference-builder/`.
+
+To install into a project or agent home:
+
+```bash
+./setup_skill.sh --agent claude /path/to/your/project
+# → Creates /path/to/your/project/.claude/skills/inference-builder/
+
+./setup_skill.sh --agent codex /path/to/your/codex-home
+# → Creates /path/to/your/codex-home/skills/inference-builder/
+```
+
+For Codex custom homes, launch Codex with the same `CODEX_HOME` value so it discovers the installed skill.
 
 For detailed skill documentation, see [`skills/inference-builder/SKILL.md`](skills/inference-builder/SKILL.md).
 
