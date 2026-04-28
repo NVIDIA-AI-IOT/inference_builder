@@ -4,13 +4,14 @@
 FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS inference_base
 
 # Install Python dependencies required by this pipeline.
+# Use `python3 -m pip` so packages land on the same interpreter as `python3`
+# (DeepStream images may otherwise report numpy missing for trust_remote_code checks).
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install \
+    python3 -m pip install \
     torch==2.7.0 \
-    numpy==1.26.4 \
     omegaconf==2.3.0 \
     transformers==4.54.1 \
-    opencv-python
+    opencv-python==4.11.0.86
 
 # Build TensorRT OSS to provide customized plugins (e.g. for PeopleNet
 # Transformer ONNX model) and the trtexec tool.
@@ -75,7 +76,7 @@ RUN mkdir ds_tao_apps_src && \
 
 # Install Python dependencies for the polygraphy backend
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --extra-index-url https://pypi.nvidia.com \
+    python3 -m pip install --extra-index-url https://pypi.nvidia.com \
     Pillow==11.1.0 \
     timm \
     torchvision \
@@ -98,5 +99,5 @@ ENV GST_PLUGIN_PATH=/opt/nvidia/deepstream/deepstream/lib/gst-plugins
 ENV LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream/lib:$LD_LIBRARY_PATH
 ENV NVSTREAMMUX_ADAPTIVE_BATCHING=yes
 
-ENTRYPOINT ["python3", "/workspace/__main__.py"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec python3 /workspace/__main__.py \"$@\"", "--"]
 CMD []

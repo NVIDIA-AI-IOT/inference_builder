@@ -51,7 +51,6 @@ RUN --mount=type=cache,target=/root/.cache/pip pip install qwen-vl-utils[decord]
     aiohttp==3.11.0 \
     annotated-types==0.7.0 \
     python-magic==0.4.27 \
-    numpy==1.26.4 \
     omegaconf==2.3.0
 
 WORKDIR /workspace
@@ -84,5 +83,5 @@ RUN touch /workspace/start_server.sh && \
 #    while true; do sleep 5; done
 EOF
 
-ENTRYPOINT ["/workspace/start_server.sh"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec /workspace/start_server.sh \"$@\"", "--"]
 CMD []

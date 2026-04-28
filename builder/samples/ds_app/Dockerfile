@@ -30,10 +30,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
     --extra-index-url https://download.pytorch.org/whl/cu130 \
     torch==2.9.0+cu130 \
-    numpy==1.26.4 \
     omegaconf==2.3.0 \
     transformers==4.54.1 \
-    opencv-python
+    opencv-python==4.11.0.86
 
 # Build TensorRT OSS to provide customized plugins (e.g. for ONNX) and
 # the trtexec tool. The version and GPU architectures are controlled
@@ -125,6 +124,6 @@ ENV NVSTREAMMUX_ADAPTIVE_BATCHING=yes
 #ENV NVDS_ENABLE_LATENCY_MEASUREMENT=1
 #ENV NVDS_ENABLE_COMPONENT_LATENCY_MEASUREMENT=1
 
-ENTRYPOINT ["python3", "/workspace/__main__.py"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec python3 /workspace/__main__.py \"$@\"", "--"]
 #ENTRYPOINT ["/bin/bash"]
 CMD []

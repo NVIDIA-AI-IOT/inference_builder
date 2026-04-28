@@ -101,7 +101,12 @@ class DummyBackend(ModelBackend):
 
                 if i_shapes[name][i] != -1 and s != i_shapes[name][i]:
                     raise ValueError(f"Input {name} has invalid shape: {tensor.shape}")
-            if isinstance(tensor, np.ndarray) and tensor.dtype != np_datatype_mapping[i_types[name]]:
-                raise ValueError(f"Input {name} has invalid type: {tensor.dtype}")
+            if isinstance(tensor, np.ndarray):
+                expected_type = np_datatype_mapping[i_types[name]]
+                if expected_type in (str, np.str_):
+                    if not is_numpy_string_dtype(tensor.dtype):
+                        raise ValueError(f"Input {name} has invalid type: {tensor.dtype}")
+                elif tensor.dtype != expected_type:
+                    raise ValueError(f"Input {name} has invalid type: {tensor.dtype}")
             if isinstance(tensor, torch.Tensor) and tensor.dtype != torch_datatype_mapping[i_types[name]]:
                 raise ValueError(f"Input {name} has invalid type: {tensor.dtype}")

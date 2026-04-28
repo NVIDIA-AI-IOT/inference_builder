@@ -39,36 +39,11 @@ sudo apt install protobuf-compiler
 sudo apt install python3.12-venv python3.12-dev
 ```
 
-**Note for TEGRA users:** If you're using a TEGRA device, you'll also need to install the Docker buildx plugin:
-
-```bash
-sudo apt install docker-buildx
-```
-
-### Clone the repository
-
-```bash
-git clone https://github.com/NVIDIA-AI-IOT/inference_builder
-```
-
-### Set up the virtual environment
-
-```bash
-cd inference_builder
-git submodule update --init --recursive
-python3 -m venv .venv
-source .venv/bin/activate
-pip3 install -r requirements.txt
-```
-
-## Play with the examples
-
 Docker environment must be properly set up with below packages for building and running the examples:
 
 - **Docker**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
 - **Docker Compose**: [Installation Guide](https://docs.docker.com/desktop/setup/install/linux/ubuntu/)
 - **NVIDIA Container Toolkit**: [Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
-
 
 Ensure nvidia runtime added to `/etc/docker/daemon.json` to run GPU-enabled containers
 
@@ -88,6 +63,32 @@ The `docker` group must exist in your system, please check if it has been create
 ```bash
 sudo usermod -aG docker $USER
 ```
+
+**Note for TEGRA users:** If you're using a TEGRA device, you'll also need to install the Docker buildx plugin:
+
+```bash
+sudo apt install docker-buildx
+```
+
+Download and install the NGC CLI from the [NGC page](https://org.ngc.nvidia.com/setup/installers/cli) and follow the [NGC CLI Guide](https://docs.ngc.nvidia.com/cli/index.html) to set up the tool.
+
+### Clone the repository
+
+```bash
+git clone ssh://git@gitlab-master.nvidia.com:12051/DeepStreamSDK/inference-builder.git inference_builder
+```
+
+### Set up the virtual environment
+
+```bash
+cd inference_builder
+git submodule update --init --recursive
+python3 -m venv .venv
+source .venv/bin/activate
+pip3 install -r requirements.txt
+```
+
+## Play with the examples
 
 Now you can try [our examples](builder/samples/README.md) to learn more. These examples span all supported backends and demonstrate their distinct inference flows.
 
@@ -114,60 +115,95 @@ Before setting up MCP, ensure you have completed the [Getting Started](#getting-
 
 Ensure that you are in the repository's root directory.
 
-### Set Up for Cursor
+### Start the MCP Server
 
-1. **Generate the MCP configuration**
+Use the provided management script from the repository root:
 
-   For a global configuration (available across all projects):
-   ```bash
-   python3 mcp/setup_mcp.py ~/.cursor/mcp.json
-   ```
+```bash
+# Start (runs in background)
+MCP_API_KEY=MY_SECRET ./mcp/server_manager.sh start --port 8000
 
-   For a project-specific configuration:
-   ```bash
-   python3 mcp/setup_mcp.py /path/to/your_project/.cursor/mcp.json
-   ```
+# Check status
+./mcp/server_manager.sh status
 
-2. **Open your project folder and verify the MCP server is successfully loaded**
+# Tail logs
+./mcp/server_manager.sh logs
 
-   In Cursor, navigate to **File > Preferences > Cursor Settings > MCP**. You should see:
+# Stop
+./mcp/server_manager.sh stop
+```
 
-   ![MCP Server](mcp.png)
+Omit `MCP_API_KEY` to allow unauthenticated access. Use `--workspace-root` to set a custom directory for per-session workspaces.
 
-   A green status icon next to `deepstream-inference-builder` indicates the server is connected.
+### Connect to the MCP Server
 
-3. **Start using the MCP tools:**
+#### Cursor
 
-   Start a new Cursor agent and invoke the tools by mentioning "deepstream inference builder" in your prompt:
-   - "Show me what sample configurations are available from the inference builder?"
-   - "Generate a DeepStream object detection pipeline using the inference builder with PeopleNet transformer model from NGC."
+Add the following to `~/.cursor/mcp.json` (global) or `<project>/.cursor/mcp.json` (project-specific):
 
-### Set Up for Claude Code
+```json
+{
+  "mcpServers": {
+    "deepstream-inference-builder": {
+      "url": "http://<host>:8000/mcp",
+      "headers": { "Authorization": "Bearer MY_SECRET" }
+    }
+  }
+}
+```
 
-1. **Generate the MCP configuration:**
+Then navigate to **File > Preferences > Cursor Settings > MCP**. A green status icon next to `deepstream-inference-builder` confirms the connection:
 
-   For a global configuration:
-   ```bash
-   python3 mcp/setup_mcp.py ~/.claude/.mcp.json
-   ```
+![MCP Server](mcp.png)
 
-   For a project-specific configuration:
-   ```bash
-   python3 mcp/setup_mcp.py /path/to/your_project/.mcp.json
-   ```
+#### Codex
 
-2. **Start Claude Code from your project folder and Verify the MCP server is connected:**
+Run the following command to register the server:
 
-   Run `/mcp` in the Claude Code console. You should see:
-   ```
-   ❯ deepstream-inference-builder · ✔ connected
-   ```
+```bash
+# With MCP_API_KEY enabled on the server
+export MCP_API_KEY=MY_SECRET
+codex mcp add deepstream-inference-builder \
+  --url http://<host>:8000/mcp \
+  --bearer-token-env-var MCP_API_KEY
 
-3. **Start using the MCP tools:**
+# Without MCP_API_KEY
+codex mcp add deepstream-inference-builder \
+  --url http://<host>:8000/mcp
+```
 
-   Simply ask Claude Code to perform tasks by mentioning "deepstream inference builder" in your prompt:
-   - "Show me what sample configurations are available from the inference builder?"
-   - "Generate a DeepStream object detection pipeline using the inference builder with PeopleNet transformer model from NGC."
+Verify the connection is configured:
+
+```bash
+codex mcp list
+```
+
+#### Claude Code
+
+Run the following command to register the server:
+
+```bash
+# User-level (available in all projects)
+claude mcp add --transport http --scope user \
+  deepstream-inference-builder http://<host>:8000/mcp \
+  --header "Authorization: Bearer MY_SECRET"
+
+# Project-level
+claude mcp add --transport http --scope project \
+  deepstream-inference-builder http://<host>:8000/mcp \
+  --header "Authorization: Bearer MY_SECRET"
+```
+Omit `--header` if no API key was set on the server. Then verify the connection by running `/mcp` in the Claude Code console:
+
+```
+❯ deepstream-inference-builder · ✔ connected
+```
+
+### Start Using the MCP Tools
+
+Invoke the tools by mentioning "deepstream inference builder" in your prompt:
+- "Show me what sample configurations are available from the inference builder?"
+- "Generate a DeepStream object detection pipeline using the inference builder with PeopleNet transformer model from NGC."
 
 ### Available MCP Tools
 
@@ -192,7 +228,59 @@ Ensure that you are in the repository's root directory.
 
 ### Sample Prompts
 
-You can now try out the [example prompts](mcp/examples.md) using either Cursor or Claude Code.
+You can now try out the [example prompts](prompts.md) using either Cursor or Claude Code.
+
+## Agent Skills Integration
+
+Inference Builder also supports Agent Skills, letting agents such as Claude and Codex load domain-specific guidance for generating and testing inference pipelines.
+
+### What's Included
+
+The Agent Skill includes:
+- **SKILL.md**: Skill documentation with workflow guidance, project layout, and non-obvious knowledge
+- **`.skill_config`**: Auto-generated config with project root path, venv activation, and CLI entry point
+- **Schemas**: JSON schemas for configuration validation
+- **Samples**: Example configurations, Dockerfiles, and processors organized by category
+
+The skill directs agents to use the Inference Builder CLI (`builder/main.py`) directly, discovering available commands and flags via `--help` at runtime.
+
+### Quick Setup
+
+Install the skill to Claude's default skills directory:
+
+```bash
+cd skills
+./setup_skill.sh --agent claude
+```
+
+This installs the skill to `~/.claude/skills/inference-builder/`.
+
+Install the skill to Codex's default skills directory:
+
+```bash
+cd skills
+./setup_skill.sh --agent codex
+```
+
+This installs the skill to `${CODEX_HOME:-~/.codex}/skills/inference-builder/`.
+
+To install into a project or agent home:
+
+```bash
+./setup_skill.sh --agent claude /path/to/your/project
+# → Creates /path/to/your/project/.claude/skills/inference-builder/
+
+./setup_skill.sh --agent codex /path/to/your/codex-home
+# → Creates /path/to/your/codex-home/skills/inference-builder/
+```
+
+For Codex custom homes, launch Codex with the same `CODEX_HOME` value so it discovers the installed skill.
+
+For detailed skill documentation, see [`skills/inference-builder/SKILL.md`](skills/inference-builder/SKILL.md).
+
+### Sample Prompts
+
+You can now try out the [example prompts](prompts.md) using Claude Code.
 
 ## Contributing
 

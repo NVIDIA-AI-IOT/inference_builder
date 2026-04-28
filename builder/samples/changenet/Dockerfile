@@ -34,9 +34,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     torchvision==0.22.0 \
     Pillow==11.1.0 \
     open_clip_torch==2.30.0 \
-    numpy==1.26.4 \
     omegaconf==2.3.0 \
-    transformers==4.48.0 \
+    transformers==4.54.1 \
     fastapi==0.115.12 \
     uvicorn==0.29.0 \
     tritonclient[all]==2.63.0
@@ -81,5 +80,5 @@ RUN touch /workspace/start_server.sh && \
 #    while true; do sleep 5; done
 EOF
 
-ENTRYPOINT ["/workspace/start_server.sh"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec /workspace/start_server.sh \"$@\"", "--"]
 CMD []

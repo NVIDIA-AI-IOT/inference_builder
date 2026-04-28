@@ -182,14 +182,16 @@ class GenericInference(InferenceBase):
                 if key not in data_type_names:
                     logger.warning(f"Invalid output parsed: {key}")
                     continue
-                data_type =  data_type_names[key]
+                data_type_name = data_type_names[key]
                 if isinstance(value, np.ndarray):
-                    data_type = np_datatype_mapping[data_type]
-                    if value.dtype != data_type:
+                    data_type = np_datatype_mapping[data_type_name]
+                    if data_type in (str, np.str_):
+                        processed[key] = ensure_unicode_array(value)
+                    elif data_type is not None and value.dtype != data_type:
                         processed[key]  = value.astype(data_type)
                 elif isinstance(value, torch.Tensor):
-                    data_type = torch_datatype_mapping[data_type]
-                    if value.dtype != data_type:
+                    data_type = torch_datatype_mapping[data_type_name]
+                    if data_type is not None and value.dtype != data_type:
                         processed[key]  = value.to(data_type)
                 else:
                     processed[key] = value
@@ -197,11 +199,8 @@ class GenericInference(InferenceBase):
         def convert_to_list(v, is_string_type):
             """Convert numpy/torch tensor to list with proper string decoding"""
             if isinstance(v, np.ndarray):
-                if is_string_type and (np.issubdtype(v.dtype, np.bytes_) or np.issubdtype(v.dtype, np.str_) or v.dtype == np.object_):
-                    # Decode string arrays
-                    flat_list = v.flatten().tolist()
-                    decoded = [i.decode("utf-8", "ignore") if isinstance(i, bytes) else str(i) for i in flat_list]
-                    return np.array(decoded).reshape(v.shape).tolist()
+                if is_string_type and is_numpy_string_dtype(v.dtype):
+                    return to_unicode_strings(v)
                 else:
                     return v.tolist()
             elif isinstance(v, torch.Tensor):
@@ -218,7 +217,7 @@ class GenericInference(InferenceBase):
                 return v
 
         for key, value in processed.items():
-            is_string_type = key in data_type_names and 'TYPE_STRING' in data_type_names[key]
+            is_string_type = key in data_type_names and is_string_data_type(data_type_names[key])
             if isinstance(value, list):
                 # this is a batch of data
                 processed[key] = [convert_to_list(v, is_string_type) for v in value]

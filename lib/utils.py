@@ -32,11 +32,67 @@ import threading
 kDebug = int(os.getenv("DEBUG", "0"))
 PACKAGE_NAME = "ib"
 
+STRING_DATA_TYPES = {
+    "TYPE_STRING",
+    "TYPE_CUSTOM_BINARY_BASE64",
+    "TYPE_CUSTOM_IMAGE_BASE64",
+    "TYPE_CUSTOM_DS_MIME",
+    "TYPE_CUSTOM_DS_MEDIA_URL",
+    "TYPE_CUSTOM_DS_SOURCE_CONFIG",
+}
+
 class NumpyFlatEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.ndarray):
+            if is_numpy_string_dtype(obj.dtype):
+                return to_unicode_strings(obj.flatten())
             return obj.flatten().tolist()
         return super().default(obj)
+
+
+def is_string_data_type(data_type: str) -> bool:
+    return data_type in STRING_DATA_TYPES
+
+
+def is_numpy_string_dtype(dtype) -> bool:
+    dtype = np.dtype(dtype)
+    return (
+        np.issubdtype(dtype, np.str_) or
+        np.issubdtype(dtype, np.bytes_) or
+        dtype == np.dtype(object)
+    )
+
+
+def to_unicode_string(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, np.bytes_):
+        value = bytes(value)
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return bytes(value).decode("utf-8")
+    return str(value)
+
+
+def ensure_unicode_array(value: np.ndarray) -> np.ndarray:
+    if np.issubdtype(value.dtype, np.str_):
+        return value
+    if np.issubdtype(value.dtype, np.bytes_) or value.dtype == np.dtype(object):
+        decoded = [to_unicode_string(item) for item in value.reshape(-1).tolist()]
+        return np.array(decoded, dtype=np.str_).reshape(value.shape)
+    return value.astype(np.str_)
+
+
+def ensure_utf8_bytes_array(value: np.ndarray) -> np.ndarray:
+    flat = [to_unicode_string(item).encode("utf-8") for item in value.reshape(-1).tolist()]
+    return np.array(flat, dtype=np.object_).reshape(value.shape)
+
+
+def to_unicode_strings(value):
+    if isinstance(value, np.ndarray):
+        return to_unicode_strings(value.tolist())
+    if isinstance(value, list):
+        return [to_unicode_strings(item) for item in value]
+    return to_unicode_string(value)
 
 
 def concat_tensors_in_dict(list_of_tensor_dicts: List) -> Dict:
