@@ -76,7 +76,7 @@ def build_target(target: str, model: Optional[str] = None) -> None:
     ]
 
     if model:
-        cmd.extend(["-v", f"builder/samples/tao/validation/{model}"])
+        cmd.extend(["--validation-dir", f"builder/samples/tao/validation/{model}"])
 
     if target_info.needs_processor:
         cmd.extend(["-c", "builder/samples/tao/processors.py"])
