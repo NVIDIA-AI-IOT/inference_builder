@@ -23,7 +23,8 @@ options:
                         Custom python modules
   -x, --exclude-lib     Do not include common lib to the generated code.
   -t, --tar-output      Zip the output to a single file
-  -v VALIDATION_DIR, --validation-dir VALIDATION_DIR
+  -v, --version         show program's version number and exit
+  --validation-dir VALIDATION_DIR
                         valid validation directory path to build validator
   --no-docker           Use local OpenAPI Generator instead of Docker for OpenAPI client generation
   --test-cases-abs-path

@@ -395,7 +395,7 @@ Create your own test configuration file:
     "build_args": {
       "TEST_APP_NAME": "frame_sampling",
       "TRT_VERSION_MAJOR": "10",
-      "TRT_VERSION_MINOR": "8",
+      "TRT_VERSION_MINOR": "16",
       "CACHE_BUSTER": "my_test"
     },
     "test_config": {

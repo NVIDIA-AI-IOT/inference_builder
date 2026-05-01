@@ -34,11 +34,14 @@ Run `ls $MODEL_REPO/visual_changenet -l`, be sure you have `changenet_768.onnx` 
 
 ## Create the optimized TensorRT Engine:
 
+Use the TensorRT 26.03 container so the generated TensorRT plan matches the
+runtime TensorRT 10.16.0.72 version in the DeepStream base image.
+
 ```bash
 docker login nvcr.io
 docker run -it --rm --gpus all \
 -v ~/.cache/model-repo/visual_changenet/:/changenet \
-nvcr.io/nvidia/tensorrt:25.12-py3 \
+nvcr.io/nvidia/tensorrt:26.03-py3 \
 trtexec --onnx=/changenet/changenet_768.onnx --saveEngine=/changenet/model.plan --fp16
 ```
 
