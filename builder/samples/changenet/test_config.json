@@ -49,10 +49,9 @@
           "target": "/tmp/model-repo",
           "path": "nvidia/tao/visual_changenet_segmentation_landsatscd",
           "version": "deployable_v1.2",
-          "post_script": "docker run --rm --gpus all -v $(pwd):/changenet nvcr.io/nvidia/tensorrt:25.12-py3 trtexec --onnx=/changenet/changenet_768.onnx --saveEngine=/changenet/model.plan --fp16"
+          "post_script": "docker run --rm --gpus all -v $(pwd):/changenet nvcr.io/nvidia/tensorrt:26.03-py3 trtexec --onnx=/changenet/changenet_768.onnx --saveEngine=/changenet/model.plan --fp16"
         }
       }
     }
   }
 ]
-

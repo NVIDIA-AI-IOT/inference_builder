@@ -47,6 +47,8 @@ from huggingface_hub import snapshot_download
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+MODEL_POST_SCRIPT_TIMEOUT_SECONDS = 1800
+
 
 def validate_app_name(app_name: str) -> bool:
     """Validate app name to prevent command injection."""
@@ -693,7 +695,7 @@ class DockerBuildTester:
                                 capture_output=True,
                                 text=True,
                                 cwd=str(final_model_dir),
-                                timeout=600
+                                timeout=MODEL_POST_SCRIPT_TIMEOUT_SECONDS
                             )
                             if script_result.returncode == 0:
                                 logger.info(f"✅ Post-script executed successfully for '{model_name}'")
@@ -708,7 +710,10 @@ class DockerBuildTester:
                                 logger.error(f"❌ {error_msg}")
                                 return False, error_msg
                         except subprocess.TimeoutExpired:
-                            error_msg = f"Post-script timed out for '{model_name}' after 600 seconds"
+                            error_msg = (
+                                f"Post-script timed out for '{model_name}' after "
+                                f"{MODEL_POST_SCRIPT_TIMEOUT_SECONDS} seconds"
+                            )
                             logger.error(f"❌ {error_msg}")
                             return False, error_msg
                         except Exception as e:
@@ -814,7 +819,7 @@ class DockerBuildTester:
                             capture_output=True,
                             text=True,
                             cwd=str(final_model_dir),
-                            timeout=600
+                            timeout=MODEL_POST_SCRIPT_TIMEOUT_SECONDS
                         )
                         if script_result.returncode == 0:
                             logger.info(f"✅ Post-script executed successfully for '{model_name}'")
@@ -829,7 +834,10 @@ class DockerBuildTester:
                             logger.error(f"❌ {error_msg}")
                             return False, error_msg
                     except subprocess.TimeoutExpired:
-                        error_msg = f"Post-script timed out for '{model_name}' after 600 seconds"
+                        error_msg = (
+                            f"Post-script timed out for '{model_name}' after "
+                            f"{MODEL_POST_SCRIPT_TIMEOUT_SECONDS} seconds"
+                        )
                         logger.error(f"❌ {error_msg}")
                         return False, error_msg
                     except Exception as e:

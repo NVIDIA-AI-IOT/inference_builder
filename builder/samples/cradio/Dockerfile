@@ -1,7 +1,7 @@
 # Dockerfile for ds-cradio: PeopleNet Transformer + C-RADIOv3-H pipeline
 # Uses DeepStream/nvinfer for detection and polygraphy (TensorRT) for embeddings
 
-FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS inference_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.1.0-triton-26.04.1-ma-dev45" AS inference_base
 
 # Install Python dependencies required by this pipeline.
 # Use `python3 -m pip` so packages land on the same interpreter as `python3`
@@ -16,21 +16,21 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Build TensorRT OSS to provide customized plugins (e.g. for PeopleNet
 # Transformer ONNX model) and the trtexec tool.
 ARG TRT_VERSION_MAJOR=10
-ARG TRT_VERSION_MINOR=14
-ARG TRT_VERSION_PATCH=1
-ARG TRT_VERSION_BUILD=48
+ARG TRT_VERSION_MINOR=16
+ARG TRT_VERSION_PATCH=0
+ARG TRT_VERSION_BUILD=72
 
 ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
 ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
 ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
 
 ARG CUDA_VERSION_MAJOR=13
-ARG CUDA_VERSION_MINOR=1
-ARG CUDA_VERSION_PATCH=80
-ARG CUDA_VERSION_BUILD=36836380_0
+ARG CUDA_VERSION_MINOR=2
+ARG CUDA_VERSION_PATCH=51
+ARG CUDA_VERSION_BUILD=37434383_0
 ARG CUDA_VERSION_MAJOR_MINOR=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR
 ARG CUDA_VERSION_FULL=$CUDA_VERSION_MAJOR_MINOR.$CUDA_VERSION_PATCH.$CUDA_VERSION_BUILD
-ARG CUDNN_VERSION=9.17.0.29
+ARG CUDNN_VERSION=9.20.0.48
 
 ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
 
@@ -83,7 +83,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     einops \
     onnx \
     onnxscript \
-    tensorrt==10.14.1.48.post1 \
+    tensorrt==10.16.0.72 \
     polygraphy==0.49.24
 
 WORKDIR /workspace

@@ -20,10 +20,10 @@
 # all DeepStream deployments.
 
 # pull the latest DeepStream Triton multiarch image
-FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS cv_tao_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.1.0-triton-26.04.1-ma-dev45" AS cv_tao_base
 
-# Install system dependencies used to build TensorRT OSS plugins and
-# DeepStream TAO post-processors (yaml-cpp, cmake, etc.).
+# Install system dependencies used to build DeepStream TAO post-processors
+# (yaml-cpp, cmake, etc.).
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -48,51 +48,51 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 ENV TRANSFORMERS_CACHE=/tmp
 
-# Build TensorRT OSS to provide customized plugins (e.g., ONNX parser)
-# and the trtexec tool. The version and GPU architectures are controlled
-# by the ARGs below; update them if you target different CUDA/TRT
-# versions or GPU architectures.
-ARG TRT_VERSION_MAJOR=10
-ARG TRT_VERSION_MINOR=14
-ARG TRT_VERSION_PATCH=1
-ARG TRT_VERSION_BUILD=48
-
-ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
-ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
-ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
-
 ARG CUDA_VERSION_MAJOR=13
-ARG CUDA_VERSION_MINOR=1
-ARG CUDA_VERSION_PATCH=80
-ARG CUDA_VERSION_BUILD=36836380_0
+ARG CUDA_VERSION_MINOR=2
+ARG CUDA_VERSION_PATCH=51
+ARG CUDA_VERSION_BUILD=37434383_0
 ARG CUDA_VERSION_MAJOR_MINOR=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR
 ARG CUDA_VERSION_FULL=$CUDA_VERSION_MAJOR_MINOR.$CUDA_VERSION_PATCH.$CUDA_VERSION_BUILD
-ARG CUDNN_VERSION=9.17.0.29
-
-ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
 
 WORKDIR /tmp
-ENV TRT_TAG="release/$TRT_VERSION_MAJOR_MINOR"
-RUN mkdir trt_oss_src && \
-   cd trt_oss_src && \
-   echo "$PWD Building TRT OSS..." && \
-   git clone -b $TRT_TAG https://github.com/nvidia/TensorRT TensorRT && \
-   cd TensorRT && \
-   git submodule update --init --recursive && \
-   mkdir -p build && cd build && \
-   cmake .. \
-    -DGPU_ARCHS="80;86;90;100;120" \
-    -DTRT_LIB_DIR=/usr/lib/x86_64-linux-gnu \
-    -DTRT_OUT_DIR=/tmp/out \
-    -DCUDA_VERSION=$CUDA_VERSION_MAJOR_MINOR \
-    -DCUDNN_VERSION=$CUDNN_VERSION \
-    && for i in {1..50}; do make -j 12 && break; done
-RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
-   cp /tmp/out/libnvinfer_plugin_static.a /usr/lib/x86_64-linux-gnu/libnvinfer_plugin_static.a && \
-   cp /tmp/out/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
-   cp /tmp/out/trtexec /usr/local/bin/ && \
-   cd ../../../ && \
-   rm -rf trt_oss_src
+
+# TensorRT OSS build is disabled by default. The DeepStream 9.1 base image
+# already includes TensorRT plugin/parser libraries and trtexec.
+# Enable the TensorRT OSS build if specific operators required by a model are missing.
+# To re-enable, uncomment and update the block below as needed.
+# ARG TRT_VERSION_MAJOR=10
+# ARG TRT_VERSION_MINOR=16
+# ARG TRT_VERSION_PATCH=0
+# ARG TRT_VERSION_BUILD=72
+#
+# ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
+# ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
+# ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
+# ARG CUDNN_VERSION=9.20.0.48
+#
+# ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
+# ENV TRT_TAG="release/$TRT_VERSION_MAJOR_MINOR"
+# RUN mkdir trt_oss_src && \
+#    cd trt_oss_src && \
+#    echo "$PWD Building TRT OSS..." && \
+#    git clone -b $TRT_TAG https://github.com/nvidia/TensorRT TensorRT && \
+#    cd TensorRT && \
+#    git submodule update --init --recursive && \
+#    mkdir -p build && cd build && \
+#    cmake .. \
+#     -DGPU_ARCHS="80;86;90;100;120" \
+#     -DTRT_LIB_DIR=/usr/lib/x86_64-linux-gnu \
+#     -DTRT_OUT_DIR=/tmp/out \
+#     -DCUDA_VERSION=$CUDA_VERSION_MAJOR_MINOR \
+#     -DCUDNN_VERSION=$CUDNN_VERSION \
+#     && for i in {1..50}; do make -j 12 && break; done
+# RUN cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+#    cp /tmp/out/libnvinfer_plugin_static.a /usr/lib/x86_64-linux-gnu/libnvinfer_plugin_static.a && \
+#    cp /tmp/out/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+#    cp /tmp/out/trtexec /usr/local/bin/ && \
+#    cd ../../../ && \
+#    rm -rf trt_oss_src
 
 # Build DeepStream TAO app post-processors. This must come AFTER the
 # DeepStream SDK is installed in the base image. The resulting
@@ -142,7 +142,7 @@ RUN groupadd --gid 1000 --non-unique nvs && \
 USER nvs:1000
 
 ## Set Environment variables required for DeepStream/Triton runtime.
-ENV LD_LIBRARY_PATH /opt/tritonserver/lib:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/opt/tritonserver/lib:$LD_LIBRARY_PATH
 ENV NVSTREAMMUX_ADAPTIVE_BATCHING=yes
 
 # Create the entrypoint script that prepares the TAO model symlink in

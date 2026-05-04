@@ -196,7 +196,7 @@
         },
         "backend": {
           "type": "string",
-          "description": "Backend type for the model",
+          "description": "Backend type for the model. If the model is not supported by any existing backend template, use 'dummy' and rely on passthrough tensors plus custom postprocessors to process the original inputs",
           "enum": [
             "dummy",
             "vllm",
