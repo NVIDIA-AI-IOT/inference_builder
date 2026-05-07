@@ -112,6 +112,11 @@
           "type": "boolean",
           "description": "Whether this tensor is optional",
           "default": false
+        },
+        "force_cpu": {
+          "type": "boolean",
+          "description": "For model output tensors, force the tensor to be copied to CPU memory before it is returned.",
+          "default": false
         }
       }
     },
@@ -368,4 +373,3 @@
     }
   }
 }
-

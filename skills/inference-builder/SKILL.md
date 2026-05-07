@@ -97,7 +97,10 @@ python builder/main.py --help
 1. **Browse samples & schemas** — find the closest match in `builder/samples/`;
    consult `schemas/config.schema.json` and `schemas/backends/` for field reference
 2. **Write YAML config** — validate against the schema; consult
-   `schemas/README.md` for data types, preprocessors, responders, and routing
+   `schemas/README.md` for data types, preprocessors, responders, and routing.
+   Prefer choices that keep the hot path on GPU and skip avoidable GPU↔CPU
+   round-trips; prefer GPU acceleration across the whole pipeline — decode/
+   encode, scale & color convert, batch, preprocess, infer, track, and overlay
 3. **Generate pipeline** — `python builder/main.py <config.yaml> [options]`
 4. **Prepare model repository** — download models from NGC/HuggingFace into
    the model_repo directory
