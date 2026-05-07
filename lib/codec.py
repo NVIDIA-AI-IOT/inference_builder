@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -98,3 +98,187 @@ class ImageDecoder:
     def decode(self, tensor, format: str):
         self._image_inputs[format].send(tensor)
         return self._image_output.get()
+
+
+class VideoEncodingError(Exception):
+    """Exception raised when video encoding via pyservicemaker fails.
+
+    Attributes:
+        message: Human-readable description of the encoding failure.
+        cause: Optional underlying exception that triggered this error.
+    """
+
+    def __init__(self, message: str, cause: Exception = None):
+        super().__init__(message)
+        self.cause = cause
+
+
+class FrameInput(BufferProvider):
+    """BufferProvider subclass that feeds image tensors into a pyservicemaker encoding pipeline.
+
+    Each call to generate() returns the next frame from an internal queue.
+    Frames are expected to be HWC uint8 RGB torch.Tensor objects (GPU or CPU).
+    The provider wraps each tensor as a Buffer in NV12 color format for H.264 encoding.
+
+    Attributes:
+        height (int): Frame height in pixels.
+        width (int): Frame width in pixels.
+        framerate (int): Frames per second for the output video.
+        device (str): Device where frames reside ('cpu' or 'cuda').
+    """
+
+    def __init__(self, height: int, width: int, framerate: int = 30):
+        super().__init__()
+        self.height = height
+        self.width = width
+        self.framerate = framerate
+        self.device = "cpu"
+        self._queue: Queue = Queue()
+
+    def generate(self, size: int):
+        """Called by pyservicemaker to retrieve the next frame buffer.
+
+        Blocks until a frame is available or the sentinel None is received.
+
+        Args:
+            size: Number of buffers requested (unused; one frame per call).
+
+        Returns:
+            Buffer wrapped in NV12 color format, or None when stream ends.
+        """
+        tensor = self._queue.get()
+        if tensor is None:
+            # Sentinel — no more frames
+            return None
+        # Wrap the tensor as a pyservicemaker Buffer in NV12 color format
+        return tensor.wrap(ColorFormat.NV12)
+
+    def send(self, frame: torch.Tensor) -> None:
+        """Enqueue a frame tensor for encoding.
+
+        Args:
+            frame: HWC uint8 RGB torch.Tensor to encode.
+        """
+        self._queue.put(frame)
+
+    def finish(self) -> None:
+        """Signal end-of-stream to the encoding pipeline."""
+        self._queue.put(None)
+
+
+class VideoEncoder:
+    """Hardware-accelerated H.264 MP4 video encoder using pyservicemaker nvenc.
+
+    Uses pyservicemaker's Flow.encode() API (symmetric to Flow.decode()) to
+    encode a list of image tensors into an H.264 MP4 file via NVIDIA's nvenc
+    hardware encoder.
+
+    Example usage::
+
+        encoder = VideoEncoder(device_id=0)
+        output_path = encoder.encode(frames, "/tmp/output.mp4", fps=30)
+
+    Args:
+        device_id (int): GPU device ID to use for encoding (default: 0).
+    """
+
+    def __init__(self, device_id: int = 0):
+        self._device_id = device_id
+
+    def encode(
+        self,
+        frames: List[torch.Tensor],
+        output_path: str,
+        fps: int = 30,
+        width: int = None,
+        height: int = None,
+    ) -> str:
+        """Encode a list of image tensors into an H.264 MP4 file.
+
+        Derives frame resolution from the first tensor when width/height are not
+        specified. All frames must have identical spatial dimensions.
+
+        Args:
+            frames: Ordered list of HWC uint8 RGB torch.Tensor objects.
+            output_path: Filesystem path for the encoded MP4 output file.
+            fps: Frames per second (default: 30).
+            width: Frame width in pixels. Inferred from frames[0] when None.
+            height: Frame height in pixels. Inferred from frames[0] when None.
+
+        Returns:
+            output_path: The path to the encoded MP4 file.
+
+        Raises:
+            VideoEncodingError: If frames is empty, dimensions are invalid,
+                or the pyservicemaker encoding pipeline fails.
+        """
+        if not frames:
+            raise VideoEncodingError("Cannot encode an empty frame list")
+
+        first = frames[0]
+        if height is None or width is None:
+            if first.ndim != 3 or first.shape[2] != 3:
+                raise VideoEncodingError(
+                    f"Expected HWC uint8 RGB tensor with shape [H, W, 3], "
+                    f"got shape {list(first.shape)}"
+                )
+            height = first.shape[0]
+            width = first.shape[1]
+
+        logger.info(
+            "VideoEncoder: encoding %d frames at %dx%d @ %d fps -> %s",
+            len(frames),
+            width,
+            height,
+            fps,
+            output_path,
+        )
+
+        frame_input = FrameInput(height=height, width=width, framerate=fps)
+        pipeline = Pipeline("video_encoder")
+
+        try:
+            # Mirror of the decode API:
+            # Flow(pipeline).inject([frame_input]).decode().retrieve(...)
+            # Encoding API:
+            # Flow(pipeline).inject([frame_input]).encode(output_path, ...)
+            flow = Flow(pipeline).inject([frame_input]).encode(
+                output_path,
+                codec="h264",
+                bitrate=0,  # auto bitrate
+                framerate=fps,
+            )
+            pipeline.start()
+
+            # Feed all frames to the encoding pipeline
+            for i, frame in enumerate(frames):
+                # Ensure frame is a CPU tensor (pyservicemaker BufferProvider
+                # wraps via DLPack; move to CPU if needed)
+                if hasattr(frame, "cpu"):
+                    frame = frame.cpu()
+                frame_input.send(frame)
+                logger.debug("VideoEncoder: sent frame %d/%d", i + 1, len(frames))
+
+            # Signal end-of-stream and wait for pipeline to flush
+            frame_input.finish()
+
+            # Wait for the flow to complete flushing to disk
+            if hasattr(flow, "wait"):
+                flow.wait()
+            elif hasattr(pipeline, "wait"):
+                pipeline.wait()
+
+        except VideoEncodingError:
+            raise
+        except Exception as exc:
+            raise VideoEncodingError(
+                f"pyservicemaker encoding pipeline failed: {exc}", cause=exc
+            ) from exc
+        finally:
+            try:
+                pipeline.stop()
+            except Exception:
+                pass
+
+        logger.info("VideoEncoder: encoding complete -> %s", output_path)
+        return output_path

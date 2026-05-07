@@ -1,0 +1,150 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Unit tests for config schema validation and ModelOperator.bind_output() dispatch.
+
+T3 acceptance criteria:
+- TYPE_CUSTOM_VIDEO_OUTPUT present in tensorSpec.data_type oneOf.
+- bind_output() with TYPE_CUSTOM_VIDEO_OUTPUT config creates VideoOutputDataFlow.
+- Existing output binding behaviour unchanged for known data types (no regression).
+
+Test tier: Tier 2 (no GPU required).
+
+To run:
+    pytest tests/test_schema_and_bind_output.py -v
+"""
+
+import json
+import pathlib
+
+import pytest
+
+SCHEMA_PATH = pathlib.Path(__file__).parent.parent / "schemas" / "config.schema.json"
+
+
+# ---------------------------------------------------------------------------
+# Schema tests
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaVideoOutputType:
+    """Verify TYPE_CUSTOM_VIDEO_OUTPUT is registered in the config schema."""
+
+    @pytest.fixture(scope="class")
+    def schema(self):
+        with open(SCHEMA_PATH) as f:
+            return json.load(f)
+
+    def test_type_custom_video_output_in_one_of(self, schema):
+        """TYPE_CUSTOM_VIDEO_OUTPUT must appear in tensorSpec.data_type oneOf."""
+        one_of = schema["definitions"]["tensorSpec"]["properties"]["data_type"]["oneOf"]
+        consts = [entry.get("const") for entry in one_of]
+        assert "TYPE_CUSTOM_VIDEO_OUTPUT" in consts, (
+            f"TYPE_CUSTOM_VIDEO_OUTPUT not found in schema. " f"Existing consts: {consts}"
+        )
+
+    def test_type_custom_video_output_has_description(self, schema):
+        """The TYPE_CUSTOM_VIDEO_OUTPUT entry must have a non-empty description."""
+        one_of = schema["definitions"]["tensorSpec"]["properties"]["data_type"]["oneOf"]
+        entry = next((e for e in one_of if e.get("const") == "TYPE_CUSTOM_VIDEO_OUTPUT"), None)
+        assert entry is not None
+        assert "description" in entry
+        assert len(entry["description"]) > 10
+
+    def test_existing_types_still_present(self, schema):
+        """Existing data types must not have been removed."""
+        one_of = schema["definitions"]["tensorSpec"]["properties"]["data_type"]["oneOf"]
+        consts = {entry.get("const") for entry in one_of}
+        required = {
+            "TYPE_UINT8",
+            "TYPE_FP32",
+            "TYPE_STRING",
+            "TYPE_CUSTOM_IMAGE_BASE64",
+            "TYPE_CUSTOM_LONG_VIDEO_ASSETS",
+            "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS",
+        }
+        missing = required - consts
+        assert not missing, f"Previously existing data types removed: {missing}"
+
+
+# ---------------------------------------------------------------------------
+# bind_output() dispatch tests (mocked ModelOperator)
+# ---------------------------------------------------------------------------
+
+
+class TestBindOutputDispatch:
+    """Verify ModelOperator.bind_output() creates the right DataFlow subclass."""
+
+    def _make_operator(self):
+        """Return a ModelOperator with a dummy model config (no GPU work)."""
+        from lib.inference import ModelOperator
+
+        model_config = {
+            "name": "test_model",
+            "backend": "dummy",
+            "input": [{"name": "input", "data_type": "TYPE_FP32", "dims": [-1]}],
+            "output": [{"name": "output", "data_type": "TYPE_FP32", "dims": [-1]}],
+        }
+        op = ModelOperator(model_config=model_config, model_repo="/tmp/models")
+        return op
+
+    def test_bind_output_custom_video_output_creates_video_output_dataflow(self):
+        """bind_output with TYPE_CUSTOM_VIDEO_OUTPUT creates VideoOutputDataFlow."""
+        from lib.inference import VideoOutputDataFlow
+
+        op = self._make_operator()
+        configs = [
+            {"name": "frames_out", "data_type": "TYPE_CUSTOM_VIDEO_OUTPUT", "dims": [-1, -1, 3]}
+        ]
+        flow = op.bind_output(configs)
+        assert isinstance(
+            flow, VideoOutputDataFlow
+        ), f"Expected VideoOutputDataFlow, got {type(flow).__name__}"
+
+    def test_bind_output_plain_type_creates_dataflow(self):
+        """bind_output with TYPE_FP32 creates plain DataFlow (no regression)."""
+        from lib.inference import DataFlow, VideoOutputDataFlow
+
+        op = self._make_operator()
+        configs = [{"name": "output", "data_type": "TYPE_FP32", "dims": [-1]}]
+        flow = op.bind_output(configs)
+        assert isinstance(flow, DataFlow)
+        assert not isinstance(flow, VideoOutputDataFlow)
+
+    def test_bind_output_string_type_creates_dataflow(self):
+        """bind_output with TYPE_STRING creates plain DataFlow (no regression)."""
+        from lib.inference import DataFlow, VideoOutputDataFlow
+
+        op = self._make_operator()
+        configs = [{"name": "text_out", "data_type": "TYPE_STRING", "dims": [-1]}]
+        flow = op.bind_output(configs)
+        assert isinstance(flow, DataFlow)
+        assert not isinstance(flow, VideoOutputDataFlow)
+
+    def test_bind_output_video_output_flow_is_outbound(self):
+        """The VideoOutputDataFlow created by bind_output must have outbound=True."""
+        op = self._make_operator()
+        configs = [
+            {"name": "frames_out", "data_type": "TYPE_CUSTOM_VIDEO_OUTPUT", "dims": [-1, -1, 3]}
+        ]
+        flow = op.bind_output(configs)
+        assert flow._outbound is True
+
+    def test_outbound_dataflow_mapping_contains_video_output(self):
+        """outbound_dataflow_mapping must map TYPE_CUSTOM_VIDEO_OUTPUT."""
+        from lib.inference import VideoOutputDataFlow, outbound_dataflow_mapping
+
+        assert "TYPE_CUSTOM_VIDEO_OUTPUT" in outbound_dataflow_mapping
+        assert outbound_dataflow_mapping["TYPE_CUSTOM_VIDEO_OUTPUT"] is VideoOutputDataFlow

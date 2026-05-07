@@ -132,6 +132,7 @@ class Asset:
 
 class AssetManager:
     _instance = None
+    _lock = threading.Lock()
 
     def __new__(cls):
         if cls._instance is None:
@@ -145,6 +146,7 @@ class AssetManager:
 
         self._asset_dir = DEFAULT_ASSET_DIR
         self._asset_map:Dict[str, Asset] = dict()
+        self._map_lock = threading.Lock()
         os.makedirs(self._asset_dir, exist_ok=True)
         asset_ids = self._get_existing_asset_ids()
         self._asset_map: dict[str, Asset] = {
@@ -192,6 +194,97 @@ class AssetManager:
         logger.info(f"Saved file - asset-id: {asset_id} name: {file_name}")
 
         return self._asset_map[asset_id]
+
+    def create_from_path(
+        self,
+        file_path: str,
+        file_name: str,
+        mime_type: str,
+    ) -> Asset | None:
+        """Create an asset from an existing file on disk.
+
+        Unlike save_file(), which copies data from an UploadFile stream, this
+        method moves a file that already exists on disk (e.g., an MP4 produced
+        by VideoEncoder) into the asset directory.  Moving is preferred over
+        copying to avoid duplicating potentially large video files and to
+        minimise latency before the caller can retrieve the asset.
+
+        This method is thread-safe: concurrent calls from multiple
+        VideoOutputDataFlow instances will each obtain a unique asset ID.
+
+        Args:
+            file_path: Absolute path to the source file to import.
+            file_name: Desired file name within the asset directory
+                (e.g., 'output.mp4').
+            mime_type: MIME type string (e.g., 'video/mp4').
+
+        Returns:
+            The created Asset object, or None if directory creation or the
+            file move fails.
+        """
+        with self._map_lock:
+            asset_id = str(uuid.uuid4())
+            while asset_id in self._asset_map:
+                asset_id = str(uuid.uuid4())
+            asset_dir = os.path.join(self._asset_dir, asset_id)
+            try:
+                os.makedirs(asset_dir)
+            except Exception:
+                logger.error("Failed to create asset directory: %s", asset_dir)
+                return None
+
+        dest_path = os.path.join(asset_dir, file_name)
+        try:
+            shutil.move(file_path, dest_path)
+        except Exception as exc:
+            logger.error("Failed to move file %s -> %s: %s", file_path, dest_path, exc)
+            try:
+                shutil.rmtree(asset_dir, ignore_errors=True)
+            except Exception:
+                pass
+            return None
+
+        try:
+            size = os.path.getsize(dest_path)
+        except Exception:
+            size = 0
+
+        try:
+            mediainfo = MediaInfo.discover(dest_path)
+            duration = mediainfo.duration
+        except Exception as exc:
+            logger.warning("MediaInfo.discover failed for %s: %s", dest_path, exc)
+            duration = 0
+
+        info = {
+            "assetId": asset_id,
+            "path": dest_path,
+            "fileName": file_name,
+            "mimeType": mime_type,
+            "duration": duration,
+            "username": "",
+            "password": "",
+            "description": "",
+            "size": size,
+            "live": False,
+        }
+        try:
+            with open(os.path.join(asset_dir, "info.json"), "w") as f:
+                json.dump(info, f)
+        except Exception as exc:
+            logger.error("Failed to write info.json for asset %s: %s", asset_id, exc)
+            try:
+                shutil.rmtree(asset_dir, ignore_errors=True)
+            except Exception:
+                pass
+            return None
+
+        asset = Asset.fromdir(asset_dir)
+        with self._map_lock:
+            self._asset_map[asset_id] = asset
+
+        logger.info("Created asset from path - asset-id: %s name: %s", asset_id, file_name)
+        return asset
 
     def add_live_stream(self, url: str, description="", username="", password="") -> Asset | None:
         asset_id = str(uuid.uuid4())

@@ -29,7 +29,7 @@ from .utils import (
     FutureConsumer,
     QueueConsumer,
 )
-from .codec import ImageDecoder
+from .codec import ImageDecoder, VideoEncoder, VideoEncodingError
 import custom
 from omegaconf import OmegaConf
 from dataclasses import dataclass
@@ -79,7 +79,8 @@ py_datatype_mapping = {
     "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": str,
     "TYPE_CUSTOM_LONG_VIDEO_ASSETS": str,
     "TYPE_CUSTOM_IMAGE_ASSETS": str,
-    "TYPE_CUSTOM_IMAGE_BASE64": str
+    "TYPE_CUSTOM_IMAGE_BASE64": str,
+    "TYPE_CUSTOM_VIDEO_OUTPUT": str
 }
 
 np_datatype_mapping = {
@@ -947,12 +948,170 @@ class ImageInputDataFlow(DataFlow):
             asset.unlock()
         return result
 
+
+class VideoOutputDataFlow(DataFlow):
+    """Outbound DataFlow subclass that encodes model-output image tensors into an MP4 asset.
+
+    Extends DataFlow with outbound=True.  Overrides _process_custom_data to:
+
+    1. Collect all image tensors from the model (batch mode, HWC uint8 RGB).
+    2. Encode them into an H.264 MP4 file via VideoEncoder (pyservicemaker nvenc).
+    3. Register the MP4 with AssetManager.create_from_path().
+    4. Put the resulting asset_id string on the DataFlow queue for the caller.
+
+    On any failure the method returns an EnhancedError, which DataFlow.put()
+    forwards through the queue so InferenceBase can surface it to the API layer.
+    """
+
+    DEFAULT_FPS = 30
+    OUTPUT_MIME_TYPE = "video/mp4"
+    OUTPUT_FILE_NAME = "output.mp4"
+
+    def __init__(
+        self,
+        configs: List[Dict],
+        tensor_names: List[Tuple[str, str]],
+        key_tensor_type: str,
+        timeout: float = 1.0,
+        device_id: int = 0,
+    ):
+        super().__init__(configs, tensor_names, inbound=False, outbound=True, timeout=timeout)
+        self._video_tensor_type = key_tensor_type
+        self._encoder = VideoEncoder(device_id=device_id)
+        self._video_tensor_names = []
+        for tensor_name in tensor_names:
+            config = next((c for c in configs if c["name"] == tensor_name[1]), None)
+            if config and config["data_type"] == key_tensor_type:
+                self._video_tensor_names.append(tensor_name[1])
+
+    def _process_custom_data(
+        self, tensor, data_type: str
+    ):
+        """Collect tensors, encode to MP4, create asset, return asset_id.
+
+        Args:
+            tensor: A single frame tensor (HWC uint8 RGB torch.Tensor) or a
+                list of such tensors representing the full frame batch.
+            data_type: Must be 'TYPE_CUSTOM_VIDEO_OUTPUT'.
+
+        Returns:
+            str: asset_id if encoding and asset creation succeed.
+            EnhancedError: if encoding fails or asset creation fails.
+        """
+        import tempfile
+
+        if data_type != self._video_tensor_type:
+            return super()._process_custom_data(tensor, data_type)
+
+        # Normalise to a list of tensors
+        if isinstance(tensor, torch.Tensor):
+            frames = [tensor]
+        elif isinstance(tensor, (list, tuple)):
+            frames = list(tensor)
+        else:
+            return ErrorFactory.create(
+                "ERR_DF_002",
+                message=(
+                    f"TYPE_CUSTOM_VIDEO_OUTPUT expects a torch.Tensor or list of "
+                    f"tensors, got {type(tensor).__name__}"
+                ),
+                caller=self,
+                input_data={"input_type": type(tensor).__name__},
+            )
+
+        if not frames:
+            return ErrorFactory.create(
+                "ERR_DF_002",
+                message="TYPE_CUSTOM_VIDEO_OUTPUT received an empty frame list",
+                caller=self,
+            )
+
+        # Derive dimensions from the first frame
+        first = frames[0]
+        if not isinstance(first, torch.Tensor) or first.ndim != 3 or first.shape[2] != 3:
+            return ErrorFactory.create(
+                "ERR_DF_002",
+                message=(
+                    "TYPE_CUSTOM_VIDEO_OUTPUT frames must be HWC uint8 RGB tensors "
+                    f"with shape [H, W, 3], got shape "
+                    f"{list(first.shape) if hasattr(first, 'shape') else 'unknown'}"
+                ),
+                caller=self,
+                input_data={"frame_shape": list(first.shape) if hasattr(first, "shape") else None},
+            )
+
+        height, width = int(first.shape[0]), int(first.shape[1])
+
+        # Write to a temp file; AssetManager.create_from_path() will move it
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".mp4", prefix="venc_")
+        os.close(tmp_fd)  # VideoEncoder opens the path itself
+        try:
+            os.remove(tmp_path)  # remove so encoder creates a clean file
+        except OSError:
+            pass
+
+        try:
+            self._encoder.encode(
+                frames,
+                output_path=tmp_path,
+                fps=self.DEFAULT_FPS,
+                width=width,
+                height=height,
+            )
+        except VideoEncodingError as exc:
+            logger.error("VideoOutputDataFlow: encoding failed: %s", exc)
+            return ErrorFactory.create(
+                "ERR_DF_002",
+                message=f"Video encoding failed: {exc}",
+                caller=self,
+                input_data={"n_frames": len(frames), "width": width, "height": height},
+            )
+        except Exception as exc:
+            logger.exception("VideoOutputDataFlow: unexpected encoding error: %s", exc)
+            return ErrorFactory.from_exception(exc, caller=self)
+
+        asset_manager = AssetManager()
+        asset = asset_manager.create_from_path(
+            file_path=tmp_path,
+            file_name=self.OUTPUT_FILE_NAME,
+            mime_type=self.OUTPUT_MIME_TYPE,
+        )
+        if asset is None:
+            # Cleanup temp file if it still exists (move may have failed)
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except OSError:
+                pass
+            return ErrorFactory.create(
+                "ERR_DF_002",
+                message="AssetManager.create_from_path() failed to create video asset",
+                caller=self,
+                input_data={"tmp_path": tmp_path},
+            )
+
+        logger.info(
+            "VideoOutputDataFlow: created asset %s (%d frames, %dx%d)",
+            asset.id,
+            len(frames),
+            width,
+            height,
+        )
+        return asset.id
+
+
 inbound_dataflow_mapping = {
     "TYPE_CUSTOM_IMAGE_BASE64": ImageInputDataFlow,
     "TYPE_CUSTOM_IMAGE_ASSETS": ImageInputDataFlow,
     "TYPE_CUSTOM_LONG_VIDEO_ASSETS": VideoInputDataFlow,
     "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS": VideoFrameSamplingDataFlow
 }
+
+outbound_dataflow_mapping = {
+    "TYPE_CUSTOM_VIDEO_OUTPUT": VideoOutputDataFlow,
+}
+
+
 class ModelBackend(ABC):
     """Interface for standardizing the model backend """
     def __init__(self, model_config: Dict, model_home: str, device_id=0):
@@ -1331,7 +1490,19 @@ class ModelOperator:
         if not sources:
             sources = [i['name'] for i in configs]
         tensor_names = [(i, o['name']) for i, o in zip(sources, configs)]
-        flow = DataFlow(configs, tensor_names, outbound=True)
+        # Check for custom outbound data flow types
+        tensor_types = [c.get("data_type", "") for c in configs]
+        custom_output_type = None
+        for tensor_type in tensor_types:
+            if tensor_type in outbound_dataflow_mapping:
+                custom_output_type = tensor_type
+                break
+        if custom_output_type is not None:
+            flow = outbound_dataflow_mapping[custom_output_type](
+                configs, tensor_names, custom_output_type
+            )
+        else:
+            flow = DataFlow(configs, tensor_names, outbound=True)
         self._out.append(flow)
         logger.info(f"model {self._model_name} connected to Data flow < {flow.in_names} -> {flow.o_names} >")
         return flow
