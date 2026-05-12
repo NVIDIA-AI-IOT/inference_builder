@@ -33,14 +33,14 @@
       "type": "array",
       "description": "Model input specification",
       "items": {
-        "$ref": "#/definitions/tensorSpec"
+        "$ref": "#/definitions/inputTensorSpec"
       }
     },
     "output": {
       "type": "array",
       "description": "Model output specification",
       "items": {
-        "$ref": "#/definitions/tensorSpec"
+        "$ref": "#/definitions/outputTensorSpec"
       }
     },
     "parameters": {
@@ -90,7 +90,45 @@
           "default": false
         }
       }
+    },
+    "inputTensorSpec": {
+      "description": "Tensor specification for input positions. Output-only data types are not allowed.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/tensorSpec"
+        },
+        {
+          "not": {
+            "required": ["data_type"],
+            "properties": {
+              "data_type": {
+                "const": "TYPE_CUSTOM_VIDEO_OUTPUT"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "outputTensorSpec": {
+      "description": "Tensor specification for output positions. Input-only data types are not allowed.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/tensorSpec"
+        },
+        {
+          "not": {
+            "required": ["data_type"],
+            "properties": {
+              "data_type": {
+                "enum": [
+                  "TYPE_CUSTOM_LONG_VIDEO_ASSETS",
+                  "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS"
+                ]
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }
-

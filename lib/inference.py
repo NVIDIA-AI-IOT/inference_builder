@@ -1026,21 +1026,63 @@ class VideoOutputDataFlow(DataFlow):
                 caller=self,
             )
 
-        # Derive dimensions from the first frame
-        first = frames[0]
-        if not isinstance(first, torch.Tensor) or first.ndim != 3 or first.shape[2] != 3:
-            return ErrorFactory.create(
-                "ERR_DF_002",
-                message=(
-                    "TYPE_CUSTOM_VIDEO_OUTPUT frames must be HWC uint8 RGB tensors "
-                    f"with shape [H, W, 3], got shape "
-                    f"{list(first.shape) if hasattr(first, 'shape') else 'unknown'}"
-                ),
-                caller=self,
-                input_data={"frame_shape": list(first.shape) if hasattr(first, "shape") else None},
-            )
+        height = None
+        width = None
+        for index, frame in enumerate(frames):
+            if not isinstance(frame, torch.Tensor):
+                return ErrorFactory.create(
+                    "ERR_DF_002",
+                    message=(
+                        "TYPE_CUSTOM_VIDEO_OUTPUT frames must be torch.Tensor "
+                        f"objects, got {type(frame).__name__} at index {index}"
+                    ),
+                    caller=self,
+                    input_data={"frame_index": index, "input_type": type(frame).__name__},
+                )
 
-        height, width = int(first.shape[0]), int(first.shape[1])
+            if frame.ndim != 3 or frame.shape[2] != 3:
+                return ErrorFactory.create(
+                    "ERR_DF_002",
+                    message=(
+                        "TYPE_CUSTOM_VIDEO_OUTPUT frames must be HWC uint8 RGB "
+                        f"tensors with shape [H, W, 3], got shape {list(frame.shape)} "
+                        f"at index {index}"
+                    ),
+                    caller=self,
+                    input_data={"frame_index": index, "frame_shape": list(frame.shape)},
+                )
+
+            if frame.dtype != torch.uint8:
+                return ErrorFactory.create(
+                    "ERR_DF_002",
+                    message=(
+                        "TYPE_CUSTOM_VIDEO_OUTPUT frames must have dtype torch.uint8, "
+                        f"got {frame.dtype} at index {index}"
+                    ),
+                    caller=self,
+                    input_data={"frame_index": index, "frame_dtype": str(frame.dtype)},
+                )
+
+            frame_height = int(frame.shape[0])
+            frame_width = int(frame.shape[1])
+            if height is None or width is None:
+                height = frame_height
+                width = frame_width
+            elif frame_height != height or frame_width != width:
+                return ErrorFactory.create(
+                    "ERR_DF_002",
+                    message=(
+                        "TYPE_CUSTOM_VIDEO_OUTPUT frames must all have identical "
+                        f"dimensions, expected [{height}, {width}, 3], got "
+                        f"{list(frame.shape)} at index {index}"
+                    ),
+                    caller=self,
+                    input_data={
+                        "frame_index": index,
+                        "expected_shape": [height, width, 3],
+                        "frame_shape": list(frame.shape),
+                    },
+                )
 
         # Write to a temp file; AssetManager.create_from_path() will move it
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".mp4", prefix="venc_")
@@ -1109,6 +1151,15 @@ inbound_dataflow_mapping = {
 
 outbound_dataflow_mapping = {
     "TYPE_CUSTOM_VIDEO_OUTPUT": VideoOutputDataFlow,
+}
+
+output_only_data_types = {
+    "TYPE_CUSTOM_VIDEO_OUTPUT",
+}
+
+input_only_data_types = {
+    "TYPE_CUSTOM_LONG_VIDEO_ASSETS",
+    "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS",
 }
 
 
@@ -1472,6 +1523,15 @@ class ModelOperator:
         flow = None
         tensor_names = [(i['name'], o) for i, o in zip(configs, targets)]
         tensor_types = [i['data_type'] for i in configs]
+        invalid_output_only_types = [
+            tensor_type for tensor_type in tensor_types if tensor_type in output_only_data_types
+        ]
+        if invalid_output_only_types:
+            invalid_types = ", ".join(sorted(set(invalid_output_only_types)))
+            raise ValueError(
+                f"{invalid_types} can only be used for output tensors; "
+                f"found in input binding for model {self._model_name}"
+            )
         image_tensor_type = None
         for tensor_type in tensor_types:
             if tensor_type in inbound_dataflow_mapping:
@@ -1492,6 +1552,15 @@ class ModelOperator:
         tensor_names = [(i, o['name']) for i, o in zip(sources, configs)]
         # Check for custom outbound data flow types
         tensor_types = [c.get("data_type", "") for c in configs]
+        invalid_input_only_types = [
+            tensor_type for tensor_type in tensor_types if tensor_type in input_only_data_types
+        ]
+        if invalid_input_only_types:
+            invalid_types = ", ".join(sorted(set(invalid_input_only_types)))
+            raise ValueError(
+                f"{invalid_types} can only be used for input tensors; "
+                f"found in output binding for model {self._model_name}"
+            )
         custom_output_type = None
         for tensor_type in tensor_types:
             if tensor_type in outbound_dataflow_mapping:

@@ -123,6 +123,49 @@ class TestVideoOutputDataFlow:
         result = flow._process_custom_data([bad_frame], "TYPE_CUSTOM_VIDEO_OUTPUT")
         assert isinstance(result, EnhancedError)
 
+    def test_returns_error_for_non_tensor_frame_in_list(self):
+        """A non-tensor item in the frame list returns an EnhancedError."""
+        from lib.errors import EnhancedError
+
+        flow = self._make_flow()
+        frames = _make_frames(n=2)
+        frames.append("bad_frame")
+
+        with patch.object(flow._encoder, "encode") as mock_encode:
+            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+
+        assert isinstance(result, EnhancedError)
+        mock_encode.assert_not_called()
+
+    def test_returns_error_for_wrong_tensor_dtype(self):
+        """Frames must be uint8 tensors."""
+        from lib.errors import EnhancedError
+
+        flow = self._make_flow()
+        frames = [torch.zeros((480, 640, 3), dtype=torch.float32)]
+
+        with patch.object(flow._encoder, "encode") as mock_encode:
+            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+
+        assert isinstance(result, EnhancedError)
+        mock_encode.assert_not_called()
+
+    def test_returns_error_for_mismatched_frame_dimensions(self):
+        """All frames must have identical H/W dimensions."""
+        from lib.errors import EnhancedError
+
+        flow = self._make_flow()
+        frames = [
+            torch.zeros((480, 640, 3), dtype=torch.uint8),
+            torch.zeros((240, 640, 3), dtype=torch.uint8),
+        ]
+
+        with patch.object(flow._encoder, "encode") as mock_encode:
+            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+
+        assert isinstance(result, EnhancedError)
+        mock_encode.assert_not_called()
+
     def test_encoding_failure_returns_error(self):
         """VideoEncodingError from VideoEncoder is wrapped as EnhancedError."""
         from lib.codec import VideoEncodingError

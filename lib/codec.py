@@ -118,21 +118,24 @@ class FrameInput(BufferProvider):
 
     Each call to generate() returns the next frame from an internal queue.
     Frames are expected to be HWC uint8 RGB torch.Tensor objects (GPU or CPU).
-    The provider wraps each tensor as a Buffer in NV12 color format for H.264 encoding.
+    The provider wraps each tensor as a raw RGB Buffer for the Service Maker
+    appsrc path; the downstream encode flow converts it to I420/NVMM as needed.
 
     Attributes:
+        format (str): Raw frame format advertised to pyservicemaker.
         height (int): Frame height in pixels.
         width (int): Frame width in pixels.
         framerate (int): Frames per second for the output video.
-        device (str): Device where frames reside ('cpu' or 'cuda').
+        device (str): Device where frames reside ('cpu' or 'gpu').
     """
 
-    def __init__(self, height: int, width: int, framerate: int = 30):
+    def __init__(self, height: int, width: int, framerate: int = 30, device: str = "gpu"):
         super().__init__()
+        self.format = "RGB"
         self.height = height
         self.width = width
         self.framerate = framerate
-        self.device = "cpu"
+        self.device = device
         self._queue: Queue = Queue()
 
     def generate(self, size: int):
@@ -144,14 +147,15 @@ class FrameInput(BufferProvider):
             size: Number of buffers requested (unused; one frame per call).
 
         Returns:
-            Buffer wrapped in NV12 color format, or None when stream ends.
+            Buffer wrapped in RGB color format, or an empty Buffer when stream ends.
         """
         tensor = self._queue.get()
         if tensor is None:
-            # Sentinel — no more frames
-            return None
-        # Wrap the tensor as a pyservicemaker Buffer in NV12 color format
-        return tensor.wrap(ColorFormat.NV12)
+            # Sentinel: Service Maker providers signal EOS with an empty Buffer.
+            return Buffer()
+        # Flow.inject() sees format=RGB and inserts the converter required by
+        # Flow.encode(), so the buffer format must match the advertised caps.
+        return as_tensor(tensor, "HWC").wrap(ColorFormat.RGB)
 
     def send(self, frame: torch.Tensor) -> None:
         """Enqueue a frame tensor for encoding.
@@ -234,7 +238,13 @@ class VideoEncoder:
             output_path,
         )
 
-        frame_input = FrameInput(height=height, width=width, framerate=fps)
+        frame_device = "gpu" if torch.cuda.is_available() else "cpu"
+        frame_input = FrameInput(
+            height=height,
+            width=width,
+            framerate=fps,
+            device=frame_device,
+        )
         pipeline = Pipeline("video_encoder")
 
         try:
@@ -252,10 +262,14 @@ class VideoEncoder:
 
             # Feed all frames to the encoding pipeline
             for i, frame in enumerate(frames):
-                # Ensure frame is a CPU tensor (pyservicemaker BufferProvider
-                # wraps via DLPack; move to CPU if needed)
-                if hasattr(frame, "cpu"):
-                    frame = frame.cpu()
+                # Service Maker wraps RGB image tensors as buffers only from
+                # CUDA memory. Keep CPU tensors for mocked/no-GPU unit tests.
+                if torch.cuda.is_available():
+                    frame = frame.to(
+                        device=torch.device("cuda", self._device_id),
+                        non_blocking=True,
+                    )
+                frame = frame.contiguous()
                 frame_input.send(frame)
                 logger.debug("VideoEncoder: sent frame %d/%d", i + 1, len(frames))
 

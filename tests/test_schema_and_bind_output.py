@@ -17,6 +17,9 @@
 
 T3 acceptance criteria:
 - TYPE_CUSTOM_VIDEO_OUTPUT present in tensorSpec.data_type oneOf.
+- TYPE_CUSTOM_VIDEO_OUTPUT present in common dataTypes enum.
+- TYPE_CUSTOM_VIDEO_OUTPUT rejected from input tensor specs.
+- TYPE_CUSTOM_LONG_VIDEO_ASSETS and TYPE_CUSTOM_VIDEO_CHUNK_ASSETS rejected from output tensor specs.
 - bind_output() with TYPE_CUSTOM_VIDEO_OUTPUT config creates VideoOutputDataFlow.
 - Existing output binding behaviour unchanged for known data types (no regression).
 
@@ -29,9 +32,20 @@ To run:
 import json
 import pathlib
 
+from jsonschema import Draft7Validator
 import pytest
 
 SCHEMA_PATH = pathlib.Path(__file__).parent.parent / "schemas" / "config.schema.json"
+COMMON_DEFINITIONS_PATH = (
+    pathlib.Path(__file__).parent.parent / "schemas" / "common" / "definitions.schema.json"
+)
+BASE_MODEL_SCHEMA_PATH = (
+    pathlib.Path(__file__).parent.parent / "schemas" / "common" / "base-model.schema.json"
+)
+INPUT_ONLY_VIDEO_TYPES = (
+    "TYPE_CUSTOM_LONG_VIDEO_ASSETS",
+    "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -46,6 +60,32 @@ class TestSchemaVideoOutputType:
     def schema(self):
         with open(SCHEMA_PATH) as f:
             return json.load(f)
+
+    @pytest.fixture(scope="class")
+    def common_definitions(self):
+        with open(COMMON_DEFINITIONS_PATH) as f:
+            return json.load(f)
+
+    @pytest.fixture(scope="class")
+    def base_model_schema(self):
+        with open(BASE_MODEL_SCHEMA_PATH) as f:
+            return json.load(f)
+
+    def _minimal_config(self):
+        return {
+            "name": "test_project",
+            "model_repo": "/tmp/models",
+            "input": [{"name": "input", "data_type": "TYPE_FP32", "dims": [-1]}],
+            "output": [{"name": "output", "data_type": "TYPE_FP32", "dims": [-1]}],
+            "models": [
+                {
+                    "name": "test_model",
+                    "backend": "dummy",
+                    "input": [{"name": "input", "data_type": "TYPE_FP32", "dims": [-1]}],
+                    "output": [{"name": "output", "data_type": "TYPE_FP32", "dims": [-1]}],
+                }
+            ],
+        }
 
     def test_type_custom_video_output_in_one_of(self, schema):
         """TYPE_CUSTOM_VIDEO_OUTPUT must appear in tensorSpec.data_type oneOf."""
@@ -62,6 +102,93 @@ class TestSchemaVideoOutputType:
         assert entry is not None
         assert "description" in entry
         assert len(entry["description"]) > 10
+
+    def test_type_custom_video_output_in_common_definitions(self, common_definitions):
+        """TYPE_CUSTOM_VIDEO_OUTPUT must appear in common dataTypes."""
+        data_types = common_definitions["definitions"]["dataTypes"]["enum"]
+        assert "TYPE_CUSTOM_VIDEO_OUTPUT" in data_types
+
+    def test_type_custom_video_output_rejected_from_top_level_input(self, schema):
+        """TYPE_CUSTOM_VIDEO_OUTPUT is output-only and cannot be a top-level input."""
+        config = self._minimal_config()
+        config["input"][0]["data_type"] = "TYPE_CUSTOM_VIDEO_OUTPUT"
+
+        errors = list(Draft7Validator(schema).iter_errors(config))
+
+        assert errors, "TYPE_CUSTOM_VIDEO_OUTPUT should be rejected from top-level input"
+
+    def test_type_custom_video_output_rejected_from_model_input(self, schema):
+        """TYPE_CUSTOM_VIDEO_OUTPUT is output-only and cannot be a model input."""
+        config = self._minimal_config()
+        config["models"][0]["input"][0]["data_type"] = "TYPE_CUSTOM_VIDEO_OUTPUT"
+
+        errors = list(Draft7Validator(schema).iter_errors(config))
+
+        assert errors, "TYPE_CUSTOM_VIDEO_OUTPUT should be rejected from model input"
+
+    def test_type_custom_video_output_allowed_on_top_level_output(self, schema):
+        """TYPE_CUSTOM_VIDEO_OUTPUT remains valid on output specs."""
+        config = self._minimal_config()
+        config["output"][0] = {
+            "name": "frames_out",
+            "data_type": "TYPE_CUSTOM_VIDEO_OUTPUT",
+            "dims": [-1, -1, 3],
+        }
+
+        errors = list(Draft7Validator(schema).iter_errors(config))
+
+        assert not errors, [error.message for error in errors]
+
+    @pytest.mark.parametrize("data_type", INPUT_ONLY_VIDEO_TYPES)
+    def test_video_asset_types_rejected_from_top_level_output(self, schema, data_type):
+        """Video asset types are input-only and cannot be top-level outputs."""
+        config = self._minimal_config()
+        config["output"][0]["data_type"] = data_type
+
+        errors = list(Draft7Validator(schema).iter_errors(config))
+
+        assert errors, f"{data_type} should be rejected from top-level output"
+
+    @pytest.mark.parametrize("data_type", INPUT_ONLY_VIDEO_TYPES)
+    def test_video_asset_types_rejected_from_model_output(self, schema, data_type):
+        """Video asset types are input-only and cannot be model outputs."""
+        config = self._minimal_config()
+        config["models"][0]["output"][0]["data_type"] = data_type
+
+        errors = list(Draft7Validator(schema).iter_errors(config))
+
+        assert errors, f"{data_type} should be rejected from model output"
+
+    @pytest.mark.parametrize("data_type", INPUT_ONLY_VIDEO_TYPES)
+    def test_video_asset_types_allowed_on_top_level_input(self, schema, data_type):
+        """Video asset types remain valid on input specs."""
+        config = self._minimal_config()
+        config["input"][0]["data_type"] = data_type
+
+        errors = list(Draft7Validator(schema).iter_errors(config))
+
+        assert not errors, [error.message for error in errors]
+
+    @pytest.mark.parametrize("data_type", INPUT_ONLY_VIDEO_TYPES)
+    def test_video_asset_types_allowed_on_model_input(self, schema, data_type):
+        """Video asset types remain valid on model input specs."""
+        config = self._minimal_config()
+        config["models"][0]["input"][0]["data_type"] = data_type
+
+        errors = list(Draft7Validator(schema).iter_errors(config))
+
+        assert not errors, [error.message for error in errors]
+
+    def test_common_base_model_input_uses_input_tensor_spec(self, base_model_schema):
+        """Backend schemas inherit input/output directionality restrictions."""
+        assert (
+            base_model_schema["properties"]["input"]["items"]["$ref"]
+            == "#/definitions/inputTensorSpec"
+        )
+        assert (
+            base_model_schema["properties"]["output"]["items"]["$ref"]
+            == "#/definitions/outputTensorSpec"
+        )
 
     def test_existing_types_still_present(self, schema):
         """Existing data types must not have been removed."""
@@ -141,6 +268,29 @@ class TestBindOutputDispatch:
         ]
         flow = op.bind_output(configs)
         assert flow._outbound is True
+
+    def test_bind_input_rejects_custom_video_output(self):
+        """TYPE_CUSTOM_VIDEO_OUTPUT is output-only at runtime too."""
+        op = self._make_operator()
+        configs = [
+            {"name": "frames_in", "data_type": "TYPE_CUSTOM_VIDEO_OUTPUT", "dims": [-1, -1, 3]}
+        ]
+
+        with pytest.raises(ValueError, match="can only be used for output tensors"):
+            op.bind_input(configs)
+
+        assert op.inputs == []
+
+    @pytest.mark.parametrize("data_type", INPUT_ONLY_VIDEO_TYPES)
+    def test_bind_output_rejects_video_asset_input_types(self, data_type):
+        """Video asset input types are rejected from runtime output binding."""
+        op = self._make_operator()
+        configs = [{"name": "video_out", "data_type": data_type, "dims": [-1]}]
+
+        with pytest.raises(ValueError, match="can only be used for input tensors"):
+            op.bind_output(configs)
+
+        assert op.outputs == []
 
     def test_outbound_dataflow_mapping_contains_video_output(self):
         """outbound_dataflow_mapping must map TYPE_CUSTOM_VIDEO_OUTPUT."""

@@ -25,7 +25,7 @@
       "description": "Top level inference input specification. Required when pipeline includes multiple models or when inputs use custom types requiring preprocessing.",
       "minItems": 1,
       "items": {
-        "$ref": "#/definitions/tensorSpec"
+        "$ref": "#/definitions/inputTensorSpec"
       }
     },
     "output": {
@@ -33,7 +33,7 @@
       "description": "Top level inference output specification. Required when pipeline includes multiple models or when outputs use custom types requiring postprocessing.",
       "minItems": 1,
       "items": {
-        "$ref": "#/definitions/tensorSpec"
+        "$ref": "#/definitions/outputTensorSpec"
       }
     },
     "server": {
@@ -205,6 +205,49 @@
         }
       }
     },
+    "inputTensorSpec": {
+      "description": "Tensor specification for input positions. Output-only data types are not allowed.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/tensorSpec"
+        },
+        {
+          "not": {
+            "required": [
+              "data_type"
+            ],
+            "properties": {
+              "data_type": {
+                "const": "TYPE_CUSTOM_VIDEO_OUTPUT"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "outputTensorSpec": {
+      "description": "Tensor specification for output positions. Input-only data types are not allowed.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/tensorSpec"
+        },
+        {
+          "not": {
+            "required": [
+              "data_type"
+            ],
+            "properties": {
+              "data_type": {
+                "enum": [
+                  "TYPE_CUSTOM_LONG_VIDEO_ASSETS",
+                  "TYPE_CUSTOM_VIDEO_CHUNK_ASSETS"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
     "serverConfig": {
       "type": "object",
       "additionalProperties": true,
@@ -329,14 +372,14 @@
           "type": "array",
           "description": "Model input specification. Note on passthrough tensors: any keys present in the request after preprocessing that are NOT listed in this model's input spec are treated as passthrough (they are not sent to the backend). They are merged back into each backend result dict before this model's postprocessors run, so a model postprocessor can consume them by listing those names in its `input`. If you need passthrough values to propagate further downstream/top-level, ensure your postprocessor emits/mappings include them via configured outputs/routes.",
           "items": {
-            "$ref": "#/definitions/tensorSpec"
+            "$ref": "#/definitions/inputTensorSpec"
           }
         },
         "output": {
           "type": "array",
           "description": "Model output specification",
           "items": {
-            "$ref": "#/definitions/tensorSpec"
+            "$ref": "#/definitions/outputTensorSpec"
           }
         },
         "parameters": {

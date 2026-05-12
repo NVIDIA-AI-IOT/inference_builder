@@ -52,6 +52,7 @@ class TestFrameInput:
         from lib.codec import FrameInput
 
         fi = FrameInput(height=480, width=640, framerate=30)
+        assert fi.format == "RGB"
         assert fi.height == 480
         assert fi.width == 640
         assert fi.framerate == 30
@@ -63,20 +64,35 @@ class TestFrameInput:
         fi = FrameInput(height=480, width=640, framerate=30)
         frame = torch.zeros((480, 640, 3), dtype=torch.uint8)
 
-        # Patch ColorFormat and wrap so we can test without pyservicemaker GPU
-        with patch.object(frame, "wrap", return_value="wrapped_buffer"):
+        ds_tensor = MagicMock()
+        ds_tensor.wrap.return_value = "wrapped_buffer"
+
+        # Patch as_tensor so we can test without pyservicemaker GPU
+        with patch("lib.codec.as_tensor", return_value=ds_tensor) as mock_as_tensor:
             fi.send(frame)
             result = fi.generate(1)
+            mock_as_tensor.assert_called_once_with(frame, "HWC")
             assert result == "wrapped_buffer"
 
     def test_finish_sends_sentinel(self):
-        """finish() places None in the queue so generate() returns None."""
+        """finish() places None in the queue as the end-of-stream sentinel."""
         from lib.codec import FrameInput
 
         fi = FrameInput(height=480, width=640)
         fi.finish()
         result = fi._queue.get_nowait()
         assert result is None
+
+    def test_generate_returns_empty_buffer_after_finish(self):
+        """generate() converts the finish sentinel to an empty Service Maker Buffer."""
+        from lib.codec import FrameInput
+
+        fi = FrameInput(height=480, width=640)
+        fi.finish()
+
+        with patch("lib.codec.Buffer", return_value="empty_buffer"):
+            result = fi.generate(1)
+            assert result == "empty_buffer"
 
     def test_queue_ordering(self):
         """Multiple frames are returned in FIFO order."""
