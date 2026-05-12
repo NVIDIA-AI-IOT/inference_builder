@@ -36,4 +36,4 @@ class VideoOutputFrameGeneratorProcessor:
             self.height,
         )
 
-        return torch.tensor([float(seed)], dtype=torch.float32), frames
+        return torch.tensor([float(seed)], dtype=torch.float32), frames, frames

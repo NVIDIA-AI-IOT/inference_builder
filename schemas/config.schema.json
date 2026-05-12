@@ -185,7 +185,11 @@
               "description": "DeepStream custom type for path to a YAML source configuration file. Use this type when handling live cameras or video streams with DeepStream inference pipelines. The source config supports two deployment strategies: (1) STATIC CAMERA SETUP: For fixed scenarios with a known number of cameras (e.g., a retail store with 4 fixed cameras), set source-bin to 'nvurisrcbin' in the YAML config. All camera URIs are defined upfront in the config file and remain unchanged during runtime. This is simpler and recommended when camera topology is stable. (2) DYNAMIC CAMERA MANAGEMENT: For scenarios requiring runtime addition/removal of cameras (e.g., smart city deployments, fleet management), set source-bin to 'nvmultiurisrcbin' in the YAML config. This enables a built-in REST API server for dynamic stream management. Add streams via POST to /api/v1/stream/add with JSON payload containing camera_id, camera_url, and change='camera_add'. Remove streams via POST to /api/v1/stream/remove with change='camera_remove'. The REST API server endpoint (ip-address, port) is configured in the source config. Full API specification: https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_plugin_gst-nvmultiurisrcbin.html. Choose nvurisrcbin for static setups to reduce complexity; choose nvmultiurisrcbin when dynamic stream management is a requirement."
             },
             {
-              "const": "TYPE_CUSTOM_VIDEO_OUTPUT",
+              "const": "TYPE_CUSTOM_VIDEO_OUTPUT_FILE",
+              "description": "Custom output type for hardware-accelerated H.264 MP4 video encoding. When used as a top-level output, a VideoOutputDataFlow is created that (1) collects model-output image tensors (HWC uint8 RGB format, shape [H, W, 3]) produced by the model backend, (2) encodes them into an H.264 MP4 file at 30 fps using pyservicemaker nvenc hardware encoding, and (3) returns the encoded MP4 file path string to the API caller."
+            },
+            {
+              "const": "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET",
               "description": "Custom output type for hardware-accelerated H.264 MP4 video encoding. When used as a top-level output, a VideoOutputDataFlow is created that (1) collects model-output image tensors (HWC uint8 RGB format, shape [H, W, 3]) produced by the model backend, (2) encodes them into an H.264 MP4 file at 30 fps using pyservicemaker nvenc hardware encoding, (3) registers the MP4 with AssetManager, and (4) returns the resulting asset_id string to the API caller. The asset_id can be used with the asset management endpoints to retrieve the encoded video file."
             }
           ]
@@ -218,7 +222,10 @@
             ],
             "properties": {
               "data_type": {
-                "const": "TYPE_CUSTOM_VIDEO_OUTPUT"
+                "enum": [
+                  "TYPE_CUSTOM_VIDEO_OUTPUT_FILE",
+                  "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET"
+                ]
               }
             }
           }

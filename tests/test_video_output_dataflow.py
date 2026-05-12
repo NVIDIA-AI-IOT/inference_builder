@@ -26,12 +26,15 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import torch
 
+VIDEO_OUTPUT_FILE_TYPE = "TYPE_CUSTOM_VIDEO_OUTPUT_FILE"
+VIDEO_OUTPUT_ASSET_TYPE = "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET"
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_config(name="frames_out", data_type="TYPE_CUSTOM_VIDEO_OUTPUT"):
+def _make_config(name="frames_out", data_type=VIDEO_OUTPUT_ASSET_TYPE):
     return {"name": name, "data_type": data_type, "dims": [-1, -1, 3]}
 
 
@@ -51,13 +54,13 @@ def _make_frames(n=5, h=480, w=640):
 class TestVideoOutputDataFlow:
     """Tests for VideoOutputDataFlow._process_custom_data."""
 
-    def _make_flow(self, name="frames_out"):
+    def _make_flow(self, name="frames_out", data_type=VIDEO_OUTPUT_ASSET_TYPE):
         """Construct a VideoOutputDataFlow with mocked pyservicemaker."""
         from lib.inference import VideoOutputDataFlow
 
-        configs = [_make_config(name=name)]
+        configs = [_make_config(name=name, data_type=data_type)]
         tensor_names = _make_tensor_names(config_name=name)
-        return VideoOutputDataFlow(configs, tensor_names, "TYPE_CUSTOM_VIDEO_OUTPUT")
+        return VideoOutputDataFlow(configs, tensor_names, data_type)
 
     def test_single_tensor_is_wrapped_as_list(self):
         """A single torch.Tensor is treated as a one-frame list."""
@@ -66,17 +69,17 @@ class TestVideoOutputDataFlow:
         mock_asset = MagicMock()
         mock_asset.id = "asset-abc-123"
 
-        with patch.object(flow._encoder, "encode", return_value="/tmp/out.mp4"), patch(
-            "lib.inference.AssetManager"
-        ) as MockAM:
+        with patch.object(
+            flow._encoder, "encode", return_value="/tmp/out.mp4"
+        ) as mock_encode, patch("lib.inference.AssetManager") as MockAM:
             instance = MockAM.return_value
             instance.create_from_path.return_value = mock_asset
 
-            result = flow._process_custom_data(frame, "TYPE_CUSTOM_VIDEO_OUTPUT")
+            result = flow._process_custom_data(frame, VIDEO_OUTPUT_ASSET_TYPE)
 
         assert result == "asset-abc-123"
-        flow._encoder.encode.assert_called_once()
-        args, kwargs = flow._encoder.encode.call_args
+        mock_encode.assert_called_once()
+        args, kwargs = mock_encode.call_args
         assert len(args[0]) == 1  # one frame
 
     def test_list_of_tensors(self):
@@ -86,24 +89,39 @@ class TestVideoOutputDataFlow:
         mock_asset = MagicMock()
         mock_asset.id = "asset-xyz-456"
 
-        with patch.object(flow._encoder, "encode", return_value="/tmp/out.mp4"), patch(
-            "lib.inference.AssetManager"
-        ) as MockAM:
+        with patch.object(
+            flow._encoder, "encode", return_value="/tmp/out.mp4"
+        ) as mock_encode, patch("lib.inference.AssetManager") as MockAM:
             instance = MockAM.return_value
             instance.create_from_path.return_value = mock_asset
 
-            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+            result = flow._process_custom_data(frames, VIDEO_OUTPUT_ASSET_TYPE)
 
         assert result == "asset-xyz-456"
-        args, kwargs = flow._encoder.encode.call_args
+        args, kwargs = mock_encode.call_args
         assert len(args[0]) == 10
+
+    def test_file_output_returns_encoded_path_without_asset_manager(self):
+        """TYPE_CUSTOM_VIDEO_OUTPUT_FILE returns the encoded MP4 path directly."""
+        flow = self._make_flow(data_type=VIDEO_OUTPUT_FILE_TYPE)
+        frames = _make_frames(n=3)
+
+        with patch.object(flow._encoder, "encode") as mock_encode, patch(
+            "lib.inference.AssetManager"
+        ) as MockAM:
+            result = flow._process_custom_data(frames, VIDEO_OUTPUT_FILE_TYPE)
+
+        assert result.endswith(".mp4")
+        assert "/tmp/" in result
+        mock_encode.assert_called_once()
+        MockAM.assert_not_called()
 
     def test_returns_error_for_non_tensor_input(self):
         """Non-tensor input returns an EnhancedError."""
         from lib.errors import EnhancedError
 
         flow = self._make_flow()
-        result = flow._process_custom_data("not_a_tensor", "TYPE_CUSTOM_VIDEO_OUTPUT")
+        result = flow._process_custom_data("not_a_tensor", VIDEO_OUTPUT_ASSET_TYPE)
         assert isinstance(result, EnhancedError)
 
     def test_returns_error_for_empty_frame_list(self):
@@ -111,7 +129,7 @@ class TestVideoOutputDataFlow:
         from lib.errors import EnhancedError
 
         flow = self._make_flow()
-        result = flow._process_custom_data([], "TYPE_CUSTOM_VIDEO_OUTPUT")
+        result = flow._process_custom_data([], VIDEO_OUTPUT_ASSET_TYPE)
         assert isinstance(result, EnhancedError)
 
     def test_returns_error_for_wrong_tensor_shape(self):
@@ -120,7 +138,7 @@ class TestVideoOutputDataFlow:
 
         flow = self._make_flow()
         bad_frame = torch.zeros((3, 480, 640), dtype=torch.uint8)  # CHW
-        result = flow._process_custom_data([bad_frame], "TYPE_CUSTOM_VIDEO_OUTPUT")
+        result = flow._process_custom_data([bad_frame], VIDEO_OUTPUT_ASSET_TYPE)
         assert isinstance(result, EnhancedError)
 
     def test_returns_error_for_non_tensor_frame_in_list(self):
@@ -132,7 +150,7 @@ class TestVideoOutputDataFlow:
         frames.append("bad_frame")
 
         with patch.object(flow._encoder, "encode") as mock_encode:
-            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+            result = flow._process_custom_data(frames, VIDEO_OUTPUT_ASSET_TYPE)
 
         assert isinstance(result, EnhancedError)
         mock_encode.assert_not_called()
@@ -145,7 +163,7 @@ class TestVideoOutputDataFlow:
         frames = [torch.zeros((480, 640, 3), dtype=torch.float32)]
 
         with patch.object(flow._encoder, "encode") as mock_encode:
-            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+            result = flow._process_custom_data(frames, VIDEO_OUTPUT_ASSET_TYPE)
 
         assert isinstance(result, EnhancedError)
         mock_encode.assert_not_called()
@@ -161,7 +179,7 @@ class TestVideoOutputDataFlow:
         ]
 
         with patch.object(flow._encoder, "encode") as mock_encode:
-            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+            result = flow._process_custom_data(frames, VIDEO_OUTPUT_ASSET_TYPE)
 
         assert isinstance(result, EnhancedError)
         mock_encode.assert_not_called()
@@ -175,7 +193,7 @@ class TestVideoOutputDataFlow:
         frames = _make_frames(n=3)
 
         with patch.object(flow._encoder, "encode", side_effect=VideoEncodingError("nvenc fail")):
-            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+            result = flow._process_custom_data(frames, VIDEO_OUTPUT_ASSET_TYPE)
 
         assert isinstance(result, EnhancedError)
 
@@ -192,7 +210,7 @@ class TestVideoOutputDataFlow:
             instance = MockAM.return_value
             instance.create_from_path.return_value = None  # simulate failure
 
-            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+            result = flow._process_custom_data(frames, VIDEO_OUTPUT_ASSET_TYPE)
 
         assert isinstance(result, EnhancedError)
 
@@ -223,7 +241,7 @@ class TestVideoOutputDataFlow:
             flow._encoder, "encode", return_value="/tmp/out.mp4"
         ) as mock_encode, patch("lib.inference.AssetManager") as MockAM:
             MockAM.return_value.create_from_path.return_value = mock_asset
-            flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+            flow._process_custom_data(frames, VIDEO_OUTPUT_ASSET_TYPE)
 
         _, kwargs = mock_encode.call_args
         assert (
@@ -244,7 +262,7 @@ class TestVideoOutputDataFlow:
         ) as MockAM:
             instance = MockAM.return_value
             instance.create_from_path.return_value = mock_asset
-            flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+            flow._process_custom_data(frames, VIDEO_OUTPUT_ASSET_TYPE)
 
         call_kwargs = instance.create_from_path.call_args
         # Check mime_type argument

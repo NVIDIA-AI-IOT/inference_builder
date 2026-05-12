@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Integration tests for the end-to-end video output pipeline (T4).
+"""Integration tests for the end-to-end video output asset pipeline (T4).
 
 Tests the full path:
     Synthetic image tensors
@@ -48,7 +48,7 @@ def make_frames(n=10, height=480, width=640):
 
 
 def make_video_output_config(name="frames_out"):
-    return {"name": name, "data_type": "TYPE_CUSTOM_VIDEO_OUTPUT", "dims": [-1, -1, 3]}
+    return {"name": name, "data_type": "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET", "dims": [-1, -1, 3]}
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +74,7 @@ class TestVideoOutputPipelineMocked:
 
         configs = [make_video_output_config()]
         tensor_names = [("frames_out", "frames_out")]
-        flow = VideoOutputDataFlow(configs, tensor_names, "TYPE_CUSTOM_VIDEO_OUTPUT")
+        flow = VideoOutputDataFlow(configs, tensor_names, "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET")
 
         frames = make_frames(n=10)
 
@@ -90,7 +90,7 @@ class TestVideoOutputPipelineMocked:
             mock_asset.id = "integration-asset-001"
             MockAM.return_value.create_from_path.return_value = mock_asset
 
-            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET")
 
         assert isinstance(result, str), f"Expected str asset_id, got {type(result)}"
         assert result == "integration-asset-001"
@@ -114,13 +114,13 @@ class TestVideoOutputPipelineMocked:
 
         configs = [make_video_output_config()]
         tensor_names = [("frames_out", "frames_out")]
-        flow = VideoOutputDataFlow(configs, tensor_names, "TYPE_CUSTOM_VIDEO_OUTPUT")
+        flow = VideoOutputDataFlow(configs, tensor_names, "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET")
         frames = make_frames(n=5)
 
         with patch.object(
             flow._encoder, "encode", side_effect=VideoEncodingError("simulated nvenc failure")
         ):
-            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET")
 
         assert isinstance(
             result, EnhancedError
@@ -133,7 +133,7 @@ class TestVideoOutputPipelineMocked:
 
         configs = [make_video_output_config()]
         tensor_names = [("frames_out", "frames_out")]
-        flow = VideoOutputDataFlow(configs, tensor_names, "TYPE_CUSTOM_VIDEO_OUTPUT")
+        flow = VideoOutputDataFlow(configs, tensor_names, "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET")
         frames = make_frames(n=3)
 
         with patch.object(flow._encoder, "encode", return_value="/tmp/out.mp4"), patch(
@@ -141,7 +141,7 @@ class TestVideoOutputPipelineMocked:
         ) as MockAM:
             MockAM.return_value.create_from_path.return_value = None
 
-            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET")
 
         assert isinstance(result, EnhancedError)
 
@@ -151,7 +151,7 @@ class TestVideoOutputPipelineMocked:
 
         configs = [make_video_output_config()]
         tensor_names = [("frames_out", "frames_out")]
-        flow = VideoOutputDataFlow(configs, tensor_names, "TYPE_CUSTOM_VIDEO_OUTPUT")
+        flow = VideoOutputDataFlow(configs, tensor_names, "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET")
         frames = make_frames(n=2)
 
         with patch.object(flow._encoder, "encode", return_value="/tmp/out.mp4"), patch(
@@ -161,7 +161,7 @@ class TestVideoOutputPipelineMocked:
             mock_asset.id = "string-asset-id"
             MockAM.return_value.create_from_path.return_value = mock_asset
 
-            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+            result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET")
 
         assert isinstance(result, str)
 
@@ -197,10 +197,10 @@ class TestVideoOutputPipelineGPU:
 
         configs = [make_video_output_config()]
         tensor_names = [("frames_out", "frames_out")]
-        flow = VideoOutputDataFlow(configs, tensor_names, "TYPE_CUSTOM_VIDEO_OUTPUT")
+        flow = VideoOutputDataFlow(configs, tensor_names, "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET")
 
         frames = make_frames(n=10, height=480, width=640)
-        result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT")
+        result = flow._process_custom_data(frames, "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET")
 
         # Result must be a valid asset_id string
         assert isinstance(result, str), f"Expected asset_id str, got {type(result)}: {result}"

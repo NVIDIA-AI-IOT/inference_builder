@@ -102,7 +102,10 @@
             "required": ["data_type"],
             "properties": {
               "data_type": {
-                "const": "TYPE_CUSTOM_VIDEO_OUTPUT"
+                "enum": [
+                  "TYPE_CUSTOM_VIDEO_OUTPUT_FILE",
+                  "TYPE_CUSTOM_VIDEO_OUTPUT_ASSET"
+                ]
               }
             }
           }

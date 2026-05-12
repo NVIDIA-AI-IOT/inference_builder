@@ -245,9 +245,10 @@ class VideoEncoder:
             framerate=fps,
             device=frame_device,
         )
-        pipeline = Pipeline("video_encoder")
+        pipeline = None
 
         try:
+            pipeline = Pipeline("video_encoder")
             # Mirror of the decode API:
             # Flow(pipeline).inject([frame_input]).decode().retrieve(...)
             # Encoding API:
@@ -289,10 +290,11 @@ class VideoEncoder:
                 f"pyservicemaker encoding pipeline failed: {exc}", cause=exc
             ) from exc
         finally:
-            try:
-                pipeline.stop()
-            except Exception:
-                pass
+            if pipeline is not None:
+                try:
+                    pipeline.stop()
+                except Exception:
+                    pass
 
         logger.info("VideoEncoder: encoding complete -> %s", output_path)
         return output_path
