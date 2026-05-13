@@ -343,6 +343,9 @@ The test suite includes several test applications:
 ### frame_sampling
 Tests frame sampling functionality with video files and streams. Supports both file-based and RTSP stream inputs.
 
+### video_output
+Tests encoding synthetic HWC `uint8` RGB frames as MP4 outputs using `TYPE_CUSTOM_VIDEO_OUTPUT_FILE` and `TYPE_CUSTOM_VIDEO_OUTPUT_ASSET` without depending on video input decoding.
+
 ### output_types
 Tests compatibility of different output types with FastAPI backend using a simplified dummy backend.
 

@@ -22,6 +22,28 @@
     }
   },
   {
+    "name": "video_output_from_synthetic_frames",
+    "description": "Generate synthetic HWC uint8 frames and encode them as TYPE_CUSTOM_VIDEO_OUTPUT_FILE and TYPE_CUSTOM_VIDEO_OUTPUT_ASSET",
+    "build_args": {
+      "TEST_APP_NAME": "video_output",
+      "CACHE_BUSTER": "video_output_dual_output_test"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 30,
+      "env": {},
+      "volumes": {
+        "video_output/models": "/workspace/models"
+      },
+      "cmd": [
+        "--seed", "7"
+      ],
+      "expected_results": 1,
+      "prerequisite_script": null
+    }
+  },
+
+  {
     "name": "frame_sampling_on_streams",
     "description": "Test with default TensorRT and CUDA versions",
     "build_args": {
