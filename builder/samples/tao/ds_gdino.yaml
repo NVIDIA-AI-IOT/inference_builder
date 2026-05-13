@@ -163,12 +163,15 @@ models:
   - name: pred_logits
     data_type: TYPE_FP32
     dims: [ -1, -1 ]
+    force_cpu: true
   - name: pred_boxes
     data_type: TYPE_FP32
     dims: [ -1, 4 ]
+    force_cpu: true
   - name: pred_masks
     data_type: TYPE_FP32
     dims: [ -1, -1, -1, -1 ]
+    force_cpu: true
   parameters:
     # timeout in microseconds for batching multiple inputs
     # batch_timeout: 33333
@@ -189,5 +192,4 @@ models:
       output: ["output"]
       config:
         infer_config_path: nvdsinfer_config.yaml  # relative path to model_home
-
 
