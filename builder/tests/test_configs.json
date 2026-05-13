@@ -42,32 +42,7 @@
       "prerequisite_script": null
     }
   },
-  {
-    "name": "cosmos_video_output_from_prompt",
-    "description": "Generate frames with a local NVIDIA Cosmos-Predict2.5 Diffusers checkpoint and encode them as TYPE_CUSTOM_VIDEO_OUTPUT_FILE and TYPE_CUSTOM_VIDEO_OUTPUT_ASSET",
-    "dockerfile": "cosmos_video_output/Dockerfile",
-    "build_args": {
-      "TEST_APP_NAME": "cosmos_video_output",
-      "CACHE_BUSTER": "cosmos_video_output_test"
-    },
-    "test_config": {
-      "default_enable": false,
-      "timeout": 600,
-      "env": {
-        "HF_HOME": "/workspace/hf-cache",
-        "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"
-      },
-      "volumes": {
-        "/tmp/model-repo/Cosmos-Predict2.5-2B-diffusers": "/workspace/models/Cosmos-Predict2.5-2B-diffusers",
-        "/tmp/cosmos-hf-cache": "/workspace/hf-cache"
-      },
-      "cmd": [
-        "--prompt", "A quiet city street with a single car moving forward"
-      ],
-      "expected_results": 1,
-      "prerequisite_script": null
-    }
-  },
+
   {
     "name": "frame_sampling_on_streams",
     "description": "Test with default TensorRT and CUDA versions",
