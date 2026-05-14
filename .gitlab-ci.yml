@@ -1,5 +1,6 @@
 stages:
   - test
+  - analysis
   - report
 
 variables:
@@ -14,6 +15,33 @@ cache:
   key: "${CI_COMMIT_REF_SLUG}"
   paths:
     - .cache/pip
+
+# ------------------------------
+# SonarQube Analysis
+# ------------------------------
+sonarqube-check:
+  stage: analysis
+  image:
+    name: sonarsource/sonar-scanner-cli:latest
+    entrypoint: [""]
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .sonar/cache
+  script:
+    - test -n "$SONAR_HOST_URL" || { echo "SONAR_HOST_URL CI/CD variable is required"; exit 1; }
+    - test -n "$SONAR_TOKEN" || { echo "SONAR_TOKEN CI/CD variable is required"; exit 1; }
+    - sonar-scanner -Dsonar.host.url="$SONAR_HOST_URL" -Dsonar.token="$SONAR_TOKEN" -Dsonar.qualitygate.wait=true
+  allow_failure: false
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  tags:
+    - os/linux
+    - type/docker
 
 # ------------------------------
 # Reusable blocks (anchors)
