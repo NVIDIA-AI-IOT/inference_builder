@@ -208,9 +208,10 @@ class GDinoPostProcessor:
             print(f"Warning: Failed to load config from {self.infer_config_path}: {str(e)}")
 
     def __call__(self, *args):
-        # TODO: overflow observed
         def sigmoid(x):
-            return 1 / (1 + np.exp(-x))
+            # Overflow-free via tanh identity: sigmoid(x) = 0.5 * (1 + tanh(x/2)).
+            # np.where would still evaluate both exp branches and warn.
+            return 0.5 * (1.0 + np.tanh(0.5 * x))
 
         def box_cxcywh_to_xyxy(x):
             """Convert box from cxcywh to xyxy."""
