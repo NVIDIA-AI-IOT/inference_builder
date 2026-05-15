@@ -6,7 +6,7 @@ This sample demonstrates how to build a deepstream application with Inference Bu
 3. resnet: trafficcamnet_vpruned_onnx_v1.0.4 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet
 4. peoplenet_transformer: peoplenet_transformer_vdeployable_v1.1 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/peoplenet_transformer
 
-**Note:** For all four models, the steps are the same as described below. Users just need to replace the model name in the commands and directory names with the one they want to run.
+**Note:** For all four models, the steps are the same as described below. Users just need to replace the model name in the commands, directory names, and ds_detect.yaml with the one they want to run.
 
 ## Prerequisites
 
