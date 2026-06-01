@@ -75,7 +75,7 @@ RUN touch /workspace/start_server.sh && \
 	set -eu
 
 	# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-	# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+	# SPDX-License-Identifier: Apache-2.0
     python3 /workspace/__main__.py & tritonserver --model-repository /workspace/model_repo
 #    while true; do sleep 5; done
 EOF

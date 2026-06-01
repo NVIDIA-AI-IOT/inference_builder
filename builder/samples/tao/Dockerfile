@@ -155,7 +155,7 @@ RUN touch /workspace/start_server.sh && \
     set -eu
 
 	# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-	# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+	# SPDX-License-Identifier: Apache-2.0
     # Check if the symlink exists
     SYMLINK="/workspace/.cache/model-repo/tao"
     if [ -L "\$SYMLINK" ]; then
