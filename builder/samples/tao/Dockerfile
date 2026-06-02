@@ -20,7 +20,7 @@
 # all DeepStream deployments.
 
 # pull the latest DeepStream Triton multiarch image
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.1.0-triton-26.04.1-ma-dev45" AS cv_tao_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.1.0-triton-26.05.2-ma-dev65" AS cv_tao_base
 
 # Install system dependencies used to build DeepStream TAO post-processors
 # (yaml-cpp, cmake, etc.).
