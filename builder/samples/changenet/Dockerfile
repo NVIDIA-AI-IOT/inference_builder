@@ -17,7 +17,7 @@
 # accelerated ImageInputDataFlow and CVCUDA for pre-processing.
 
 # Pull the base image from Deepstream Triton multiarch image.
-FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.1.0-triton-26.04.1-ma-dev45" AS builder_base
+FROM "gitlab-master.nvidia.com:5005/deepstreamsdk/release_image/deepstream:9.1.0-triton-26.05.2-ma-dev65" AS builder_base
 
 # Install the Python dependencies required by THIS changenet sample
 # backend. These versions are pinned for reproducibility and may be
