@@ -39,6 +39,7 @@ RUN --mount=type=bind,from=pytorch_src,source=/usr/local/lib/python3.12/dist-pac
     sed -i '/self.capability = target.arch/a\        if self.capability == 121: self.capability = 120' /usr/local/lib/python3.12/dist-packages/triton/backends/nvidia/compiler.py
 COPY --from=pytorch_src /usr/local/lib/libnvpl* /usr/local/lib/
 
+
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
     jinja2==3.1.6 \
@@ -134,7 +135,12 @@ COPY test_data/* /workspace/test_data/
 ## Set Environment variables required for DeepStream runtime.
 # Make sure DeepStream GStreamer plugins and libraries are discoverable.
 ENV GST_PLUGIN_PATH=/opt/nvidia/deepstream/deepstream/lib/gst-plugins
-ENV LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream/lib:$LD_LIBRARY_PATH
+# DS 26.05.2 added a system UCX package whose libucs.so.0 is an older build
+# that lacks ucs_config_doc_nop — a symbol required by hpcx libucc.so.1 at
+# torch import time. DS 26.04.1 had no system UCX, so the hpcx UCX (which has
+# the symbol) was always used. Prepend hpcx UCX to LD_LIBRARY_PATH so the
+# internally-consistent hpcx UCX takes precedence over the system package.
+ENV LD_LIBRARY_PATH=/opt/hpcx/ucx/lib:/opt/hpcx/ucc/lib:/opt/nvidia/deepstream/deepstream/lib:$LD_LIBRARY_PATH
 # Enable adaptive batching in nvstreammux for better GPU utilization.
 ENV NVSTREAMMUX_ADAPTIVE_BATCHING=yes
 # Optional: enable detailed latency measurement if needed.
