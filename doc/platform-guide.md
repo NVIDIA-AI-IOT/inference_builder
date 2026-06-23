@@ -55,6 +55,8 @@ If `nvidia-smi` reports GB10 / GB300 / GH200 / Grace and no Jetson device-tree â
   NVIDIA Container Toolkit â€” container will fail without `--runtime nvidia` on
   actual Jetson hardware
 - Base image: DeepStream 9.1 multiarch `-ma` release image
+- **Note (Jetson AGX Orin):** External storage integration is required to support
+  the execution of the DeepStream microservice on the Jetson Orin platform.
 
 ### arm-sbsa server (`Dockerfile.dgxspark`)
 - PyTorch **copied** from `nvcr.io/nvidia/pytorch:25.08-py3` (same as Tegra)

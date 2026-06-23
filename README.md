@@ -70,6 +70,8 @@ sudo usermod -aG docker $USER
 sudo apt install docker-buildx
 ```
 
+**Note for Jetson Orin users:** External storage integration is required to support the execution of the DeepStream microservice on the Jetson Orin platform.
+
 Download and install the NGC CLI from the [NGC page](https://org.ngc.nvidia.com/setup/installers/cli) and follow the [NGC CLI Guide](https://docs.ngc.nvidia.com/cli/index.html) to set up the tool.
 
 ### Clone the repository
