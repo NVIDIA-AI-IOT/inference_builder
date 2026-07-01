@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-FROM nvcr.io/nvidia/tritonserver:26.01-py3
+FROM nvcr.io/nvidia/tritonserver:26.03-py3
 
 WORKDIR /workspace/
 
