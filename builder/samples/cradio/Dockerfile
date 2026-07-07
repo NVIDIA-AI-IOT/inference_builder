@@ -16,7 +16,7 @@
 # Dockerfile for ds-cradio: PeopleNet Transformer + C-RADIOv3-H pipeline
 # Uses DeepStream/nvinfer for detection and polygraphy (TensorRT) for embeddings
 
-FROM nvcr.io/nvstaging/deepstream/deepstream:9.1.0-triton-multiarch-26.06.1.1 AS inference_base
+FROM nvcr.io/nvstaging/deepstream/deepstream:9.1.0-samples-multiarch-26.06.1.2 AS inference_base
 
 # Install Python dependencies required by this pipeline.
 # Use `python3 -m pip` so packages land on the same interpreter as `python3`

@@ -17,7 +17,7 @@
 # accelerated ImageInputDataFlow and CVCUDA for pre-processing.
 
 # Pull the base image from Deepstream Triton multiarch image.
-FROM nvcr.io/nvstaging/deepstream/deepstream:9.1.0-triton-multiarch-26.06.1.1 AS builder_base
+FROM nvcr.io/nvstaging/deepstream/deepstream:9.1.0-samples-multiarch-26.06.1.2 AS builder_base
 
 # Install the Python dependencies required by THIS changenet sample
 # backend. These versions are pinned for reproducibility and may be

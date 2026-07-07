@@ -20,7 +20,7 @@
 # all DeepStream deployments.
 
 # pull the latest DeepStream Triton multiarch image
-FROM nvcr.io/nvstaging/deepstream/deepstream:9.1.0-triton-multiarch-26.06.1.1 AS cv_tao_base
+FROM nvcr.io/nvstaging/deepstream/deepstream:9.1.0-samples-multiarch-26.06.1.2 AS cv_tao_base
 
 # Install system dependencies used to build DeepStream TAO post-processors
 # (yaml-cpp, cmake, etc.).
