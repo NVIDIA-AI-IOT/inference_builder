@@ -9,8 +9,8 @@ for your target hardware **before** writing any Dockerfile or pipeline config.
 
 | Platform | Architecture | Example Hardware | Dockerfile Template | DeepStream Base Image |
 |---|---|---|---|---|
-| **x86_64 datacenter** | x86_64 | A100, H100, B200, RTX | `samples://dockerfile/ds_app/Dockerfile` | `nvcr.io/nvstaging/deepstream/deepstream:9.1.0-samples-multiarch-26.06.1.2` |
-| **Jetson / Tegra** | aarch64 | Orin, AGX Orin, Thor | `samples://dockerfile/ds_app/Dockerfile.tegra` | `nvcr.io/nvstaging/deepstream/deepstream:9.1.0-samples-multiarch-26.06.1.2` |
+| **x86_64 datacenter** | x86_64 | A100, H100, B200, RTX | `samples://dockerfile/ds_app/Dockerfile` | `nvcr.io/nvstaging/deepstream/deepstream:9.1.0-triton-multiarch-26.06.1.2` |
+| **Jetson / Tegra** | aarch64 | Orin, AGX Orin, Thor | `samples://dockerfile/ds_app/Dockerfile.tegra` | `nvcr.io/nvstaging/deepstream/deepstream:9.1.0-triton-multiarch-26.06.1.2` |
 | **arm-sbsa server** | aarch64 | GB10, GB300, DGX Spark | `samples://dockerfile/ds_app/Dockerfile.dgxspark` | `nvcr.io/nvstaging/deepstream/deepstream:9.1.0-triton-sbsa-dgx-spark-26.06.1.2` |
 
 ---

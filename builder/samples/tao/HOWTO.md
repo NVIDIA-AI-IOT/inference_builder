@@ -32,8 +32,8 @@ Apart from the models listed in the above table, the Inference Builder also supp
 If you don't have any test video in hand, you can copy it from deepstream-sample container image using following commands:
 
 ```bash
-docker pull nvcr.io/nvstaging/deepstream/deepstream:9.1.0-samples-multiarch-26.06.1.2
-docker create --name temp nvcr.io/nvstaging/deepstream/deepstream:9.1.0-samples-multiarch-26.06.1.2
+docker pull nvcr.io/nvstaging/deepstream/deepstream:9.1.0-triton-multiarch-26.06.1.2
+docker create --name temp nvcr.io/nvstaging/deepstream/deepstream:9.1.0-triton-multiarch-26.06.1.2
 docker cp temp:/opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4 ~/Videos
 docker rm temp
 ```
