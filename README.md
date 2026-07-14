@@ -77,7 +77,7 @@ Download and install the NGC CLI from the [NGC page](https://org.ngc.nvidia.com/
 ### Clone the repository
 
 ```bash
-git clone ssh://git@gitlab-master.nvidia.com:12051/DeepStreamSDK/inference-builder.git inference_builder
+git clone https://github.com/NVIDIA-AI-IOT/inference_builder
 ```
 
 ### Set up the virtual environment
