@@ -17,7 +17,7 @@
 # DeepStream for hardware-accelerated video decoding and a
 # TensorRT backend for inference. This is a reference for this specific
 # sample, not a universal template for all deployments.em
-FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS builder_base
+FROM nvcr.io/nvidia/deepstream:9.1-triton-multiarch AS builder_base
 
 # Install Python dependencies required by THIS NVCLIP sample (CLIP
 # model, TensorRT bindings, FastAPI server, etc.). Versions are pinned
@@ -32,12 +32,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     python-magic==0.4.27 \
     Pillow==11.1.0 \
     open_clip_torch==3.2.0 \
-    numpy==1.26.4 \
     omegaconf==2.3.0 \
-    transformers==4.48.1 \
+    transformers==4.54.1 \
     fastapi==0.115.12 \
     uvicorn==0.29.0 \
-    tensorrt==10.14.1.48.post1 --extra-index-url https://pypi.nvidia.com \
+    tensorrt==10.16.0.72 --extra-index-url https://pypi.nvidia.com \
     polygraphy==0.49.24
 ENV TRANSFORMERS_CACHE=/tmp
 
@@ -65,11 +64,11 @@ RUN touch /workspace/start_server.sh && \
 	set -eu
 
 	# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-	# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+	# SPDX-License-Identifier: Apache-2.0
     python3 /workspace/__main__.py
 #    while true; do sleep 5; done
 EOF
 
-ENTRYPOINT ["/workspace/start_server.sh"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec /workspace/start_server.sh \"$@\"", "--"]
 #ENTRYPOINT ["/bin/bash"]
 CMD []

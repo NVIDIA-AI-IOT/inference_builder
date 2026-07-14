@@ -343,6 +343,9 @@ The test suite includes several test applications:
 ### frame_sampling
 Tests frame sampling functionality with video files and streams. Supports both file-based and RTSP stream inputs.
 
+### video_output
+Tests encoding synthetic HWC `uint8` RGB frames as MP4 outputs using `TYPE_CUSTOM_VIDEO_OUTPUT_FILE` and `TYPE_CUSTOM_VIDEO_OUTPUT_ASSET` without depending on video input decoding.
+
 ### output_types
 Tests compatibility of different output types with FastAPI backend using a simplified dummy backend.
 
@@ -395,7 +398,7 @@ Create your own test configuration file:
     "build_args": {
       "TEST_APP_NAME": "frame_sampling",
       "TRT_VERSION_MAJOR": "10",
-      "TRT_VERSION_MINOR": "8",
+      "TRT_VERSION_MINOR": "16",
       "CACHE_BUSTER": "my_test"
     },
     "test_config": {

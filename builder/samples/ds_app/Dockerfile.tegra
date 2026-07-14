@@ -25,7 +25,7 @@
 FROM "nvcr.io/nvidia/pytorch:25.08-py3" AS pytorch_src
 
 # Pull the base image from Deepstream Triton multiarch image.
-FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS inference_base
+FROM nvcr.io/nvidia/deepstream:9.1-triton-multiarch AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -39,64 +39,64 @@ RUN --mount=type=bind,from=pytorch_src,source=/usr/local/lib/python3.12/dist-pac
     sed -i '/self.capability = target.arch/a\        if self.capability == 121: self.capability = 120' /usr/local/lib/python3.12/dist-packages/triton/backends/nvidia/compiler.py
 COPY --from=pytorch_src /usr/local/lib/libnvpl* /usr/local/lib/
 
+
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
     jinja2==3.1.6 \
-    numpy==1.26.4 \
     omegaconf==2.3.0 \
     networkx==3.5 \
     sympy==1.14.0 \
     pillow==11.3 \
     transformers==4.54.1 \
-    opencv-python
-
-# Build TensorRT OSS to provide customized plugins (e.g. for ONNX) and
-# the trtexec tool. The version and GPU architectures are controlled
-# by the ARGs below; update them if you target different CUDA/TRT
-# versions or GPU architectures.
-ARG TRT_VERSION_MAJOR=10
-ARG TRT_VERSION_MINOR=13
-ARG TRT_VERSION_PATCH=0
-ARG TRT_VERSION_BUILD=0
-
-ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
-ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
-ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
+    opencv-python==4.11.0.86
 
 ARG CUDA_VERSION_MAJOR=13
-ARG CUDA_VERSION_MINOR=0
-ARG CUDA_VERSION_PATCH=0
-ARG CUDA_VERSION_BUILD=1
+ARG CUDA_VERSION_MINOR=2
+ARG CUDA_VERSION_PATCH=75
+ARG CUDA_VERSION_BUILD=0
 ARG CUDA_VERSION_MAJOR_MINOR=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR
 ARG CUDA_VERSION_FULL=$CUDA_VERSION_MAJOR_MINOR.$CUDA_VERSION_PATCH.$CUDA_VERSION_BUILD
-ARG CUDNN_VERSION=9.12.0.46-1
-
-ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
 
 WORKDIR /tmp
-ENV TRT_TAG="release/$TRT_VERSION_MAJOR_MINOR"
-RUN mkdir trt_oss_src && \
-    cd trt_oss_src && \
-    echo "$PWD Building TRT OSS..." && \
-    git clone -b $TRT_TAG https://github.com/nvidia/TensorRT TensorRT && \
-    cd TensorRT && \
-    git submodule update --init --recursive && \
-    mkdir -p build && cd build && \
-    cmake .. \
-    -DGPU_ARCHS="110;120;121" \
-    -DTRT_LIB_DIR=/usr/lib/aarch64-linux-gnu \
-    -DTRT_OUT_DIR=/tmp/out \
-    -DCUDA_VERSION=$CUDA_VERSION_MAJOR_MINOR \
-    -DCUDNN_VERSION=$CUDNN_VERSION \
-    -DCMAKE_C_COMPILER=/usr/bin/gcc \
-    && for i in {1..50}; do make -j 12 && break; done
-RUN echo "Listing /tmp/out:" && ls -l /tmp/out/libnvinfer_plugin.so.*
-RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/aarch64-linux-gnu/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
-    cp /tmp/out/libnvinfer_plugin_static.a /usr/lib/aarch64-linux-gnu/libnvinfer_plugin_static.a && \
-    cp /tmp/out/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/aarch64-linux-gnu/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
-    cp /tmp/out/trtexec /usr/local/bin/ && \
-    cd ../../../ && \
-    rm -rf trt_oss_src
+
+# TensorRT OSS build is disabled by default. The DeepStream 9.1 base image
+# already includes TensorRT plugin/parser libraries and trtexec.
+# Enable the TensorRT OSS build if specific operators required by a model are missing.
+# To re-enable, uncomment and update the block below as needed.
+# ARG TRT_VERSION_MAJOR=10
+# ARG TRT_VERSION_MINOR=13
+# ARG TRT_VERSION_PATCH=0
+# ARG TRT_VERSION_BUILD=0
+#
+# ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
+# ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
+# ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
+# ARG CUDNN_VERSION=9.12.0.46-1
+#
+# ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
+# ENV TRT_TAG="release/$TRT_VERSION_MAJOR_MINOR"
+# RUN mkdir trt_oss_src && \
+#     cd trt_oss_src && \
+#     echo "$PWD Building TRT OSS..." && \
+#     git clone -b $TRT_TAG https://github.com/nvidia/TensorRT TensorRT && \
+#     cd TensorRT && \
+#     git submodule update --init --recursive && \
+#     mkdir -p build && cd build && \
+#     cmake .. \
+#     -DGPU_ARCHS="110;120;121" \
+#     -DTRT_LIB_DIR=/usr/lib/aarch64-linux-gnu \
+#     -DTRT_OUT_DIR=/tmp/out \
+#     -DCUDA_VERSION=$CUDA_VERSION_MAJOR_MINOR \
+#     -DCUDNN_VERSION=$CUDNN_VERSION \
+#     -DCMAKE_C_COMPILER=/usr/bin/gcc \
+#     && for i in {1..50}; do make -j 12 && break; done
+# RUN echo "Listing /tmp/out:" && ls -l /tmp/out/libnvinfer_plugin.so.*
+# RUN cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/aarch64-linux-gnu/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+#     cp /tmp/out/libnvinfer_plugin_static.a /usr/lib/aarch64-linux-gnu/libnvinfer_plugin_static.a && \
+#     cp /tmp/out/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/aarch64-linux-gnu/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+#     cp /tmp/out/trtexec /usr/local/bin/ && \
+#     cd ../../../ && \
+#     rm -rf trt_oss_src
 
 
 # Build DeepStream TAO app post-processors. This must come AFTER the
@@ -135,13 +135,18 @@ COPY test_data/* /workspace/test_data/
 ## Set Environment variables required for DeepStream runtime.
 # Make sure DeepStream GStreamer plugins and libraries are discoverable.
 ENV GST_PLUGIN_PATH=/opt/nvidia/deepstream/deepstream/lib/gst-plugins
-ENV LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream/lib:$LD_LIBRARY_PATH
+# DS 26.05.2 added a system UCX package whose libucs.so.0 is an older build
+# that lacks ucs_config_doc_nop — a symbol required by hpcx libucc.so.1 at
+# torch import time. DS 26.04.1 had no system UCX, so the hpcx UCX (which has
+# the symbol) was always used. Prepend hpcx UCX to LD_LIBRARY_PATH so the
+# internally-consistent hpcx UCX takes precedence over the system package.
+ENV LD_LIBRARY_PATH=/opt/hpcx/ucx/lib:/opt/hpcx/ucc/lib:/opt/nvidia/deepstream/deepstream/lib:$LD_LIBRARY_PATH
 # Enable adaptive batching in nvstreammux for better GPU utilization.
 ENV NVSTREAMMUX_ADAPTIVE_BATCHING=yes
 # Optional: enable detailed latency measurement if needed.
 #ENV NVDS_ENABLE_LATENCY_MEASUREMENT=1
 #ENV NVDS_ENABLE_COMPONENT_LATENCY_MEASUREMENT=1
 
-ENTRYPOINT ["python3", "/workspace/__main__.py"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec python3 /workspace/__main__.py \"$@\"", "--"]
 #ENTRYPOINT ["/bin/bash"]
 CMD []

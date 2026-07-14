@@ -94,6 +94,11 @@
         "id": "common/postprocessors.schema.json",
         "description": "Postprocessor configurations",
         "path": "./common/postprocessors.schema.json"
+      },
+      "test_config": {
+        "id": "common/test_config.schema.json",
+        "description": "Test configuration for the integration test framework",
+        "path": "./common/test_config.schema.json"
       }
     }
   },

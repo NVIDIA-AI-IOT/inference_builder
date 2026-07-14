@@ -1,5 +1,5 @@
 {#
- SPDX-FileCopyrightText: Copyright (c) <year> NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  SPDX-License-Identifier: Apache-2.0
 
  Licensed under the Apache License, Version 2.0 (the "License");
@@ -112,6 +112,8 @@ class TritonPythonModel(InferenceBase):
                         # auto reshape
                         if len(tensor.shape) == (len(dims)+1):
                             tensor = np.squeeze(tensor, 0)
+                        if is_string_data_type(config["data_type"]):
+                            tensor = ensure_unicode_array(tensor)
                     else:
                         tensor = torch.utils.dlpack.from_dlpack(tensor.to_dlpack())
                         # auto reshape
@@ -150,11 +152,13 @@ class TritonPythonModel(InferenceBase):
                             response_data[k] = v
                     response_data = self._post_process(response_data)
                     # response with partial data
-                    response_sender.send(pb_utils.InferenceResponse(
-                        output_tensors=[
-                            pb_utils.Tensor(name, tensor) for name, tensor in response_data.items()
-                        ]
-                    ))
+                    output_tensors = []
+                    for name, tensor in response_data.items():
+                        config = next((c for c in self._output_config if c["name"] == name), None)
+                        if config and is_string_data_type(config["data_type"]) and isinstance(tensor, np.ndarray):
+                            tensor = ensure_utf8_bytes_array(tensor)
+                        output_tensors.append(pb_utils.Tensor(name, tensor))
+                    response_sender.send(pb_utils.InferenceResponse(output_tensors=output_tensors))
                 except Exception as e:
                     logger.exception(e)
 
@@ -240,6 +244,8 @@ class TritonPythonModel:
                     # auto reshape
                     if len(dims) > 1 and len(tensor.shape) == (len(dims)+1):
                         tensor = np.squeeze(tensor, 0)
+                    if is_string_data_type(config["data_type"]):
+                        tensor = ensure_unicode_array(tensor)
                 else:
                     tensor = torch.utils.dlpack.from_dlpack(pb_tensor.to_dlpack())
                     # auto reshape
@@ -257,6 +263,8 @@ class TritonPythonModel:
                 if isinstance(v, torch.Tensor):
                     tensor = pb_utils.Tensor(k, v.cpu().numpy()) if force_cpu else pb_utils.Tensor.from_dlpack(k, torch.utils.dlpack.to_dlpack(v))
                 elif isinstance(v, np.ndarray):
+                    if is_string_data_type(self._out_config[k]["data_type"]):
+                        v = ensure_utf8_bytes_array(v)
                     tensor = pb_utils.Tensor(k, v)
                 elif hasattr(v, "__dlpack__") and hasattr(v, "__dlpack_device__"):
                     tensor =  pb_utils.Tensor(k, np.from_dlpack(v)) if force_cpu else pb_utils.Tensor.from_dlpack(k, v)

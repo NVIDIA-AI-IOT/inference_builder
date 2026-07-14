@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-FROM nvcr.io/nvidia/tritonserver:26.01-py3
+FROM nvcr.io/nvidia/tritonserver:26.03-py3
 
 WORKDIR /workspace/
 
@@ -25,7 +25,7 @@ ENV PYTHONUNBUFFERED=1
 
 RUN apt update
 RUN apt-get install -y git
-RUN pip install open_clip_torch==3.2.0 onnx==1.20.1 onnxscript==0.1.0 transformers==4.48.1 tokenizers>=0.21
+RUN pip install open_clip_torch==3.2.0 onnx==1.20.1 onnxscript==0.1.0 transformers==4.54.1 tokenizers>=0.21
 RUN pip install --no-cache-dir --extra-index-url https://pypi.ngc.nvidia.com polygraphy
 
 # Copy files into the container

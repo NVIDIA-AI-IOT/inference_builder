@@ -3,8 +3,10 @@
 This sample demonstrates how to build a deepstream application with Inference Builder using object detection models:
 1. rtdetr: trafficcamnet_transformer_lite_vdeployable_v1.0 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet_transformer_lite
 2. mask2former: mask2former_swint_deployable_v1.0 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/mask2former
+3. resnet: trafficcamnet_vpruned_onnx_v1.0.4 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/trafficcamnet
+4. peoplenet_transformer: peoplenet_transformer_vdeployable_v1.1 from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/peoplenet_transformer
 
-**Note:** For both citysemsegformer and mask2former models, the steps are the same as described below. Users just need to replace the model name from "citysemsegformer" to "mask2former" in the commands and directory names.
+**Note:** For all four models, the steps are the same as described below. Users just need to replace the model name in the commands, directory names, and ds_detect.yaml with the one they want to run.
 
 ## Prerequisites
 
@@ -45,7 +47,27 @@ chmod 777 $MODEL_REPO/mask2former
 cp -r builder/samples/ds_app/detection/mask2former/* $MODEL_REPO/mask2former/
 ```
 
-By default, rtdetr model is used. If you want to use mask2former, please change the name of the model in ds_detect.yaml from "rtdetr" to "mask2former" before moving to the next step.
+### For resnet model
+
+```bash
+ngc registry model download-version "nvidia/tao/trafficcamnet:pruned_onnx_v1.0.4"
+# Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
+mv trafficcamnet_vpruned_onnx_v1.0.4 $MODEL_REPO/resnet
+chmod 777 $MODEL_REPO/resnet
+cp -r builder/samples/ds_app/detection/resnet/* $MODEL_REPO/resnet/
+```
+
+### For peoplenet_transformer model
+
+```bash
+ngc registry model download-version "nvidia/tao/peoplenet_transformer:deployable_v1.1"
+# Move the folder to the model-repo directory, and the sample uses ~/.cache/model-repo by default
+mv peoplenet_transformer_vdeployable_v1.1 $MODEL_REPO/peoplenet_transformer
+chmod 777 $MODEL_REPO/peoplenet_transformer
+cp -r builder/samples/ds_app/detection/peoplenet_transformer/* $MODEL_REPO/peoplenet_transformer/
+```
+
+By default, rtdetr model is used. If you want to use a different model, please change the name of the model in ds_detect.yaml from "rtdetr" to one of "mask2former", "resnet", or "peoplenet_transformer" before moving to the next step.
 
 ## Generate the DeepStream Application Package and Build Container Image
 

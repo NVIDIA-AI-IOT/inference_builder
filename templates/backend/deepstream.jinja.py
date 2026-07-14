@@ -1,5 +1,5 @@
 {#
- SPDX-FileCopyrightText: Copyright (c) <year> NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  SPDX-License-Identifier: Apache-2.0
 
  Licensed under the Apache License, Version 2.0 (the "License");
@@ -457,7 +457,13 @@ class BulkVideoInputPool(TensorInputPool):
         else:
             pipeline.start()
         self._pipeline = pipeline
-        return list(range(len(url_list))) if url_list else list(range(self._batch_size))
+        if url_list:
+            return list(range(len(url_list)))
+        elif source_config_file:
+            return list(range(total_streams))
+        else:
+            logger.error("No input source provided: expected either media URLs or a source config file")
+            return []
 
     def stop(self, reason: str):
         if self._pipeline:
@@ -673,9 +679,18 @@ class BaseTensorOutput(BufferRetriever, BatchMetadataOperator):
 
 
 class TensorOutput(BaseTensorOutput):
-    def __init__(self, n_outputs, preprocess_config_path, image_output_name=None):
+    def __init__(self, n_outputs, preprocess_config_path, force_cpu_output=None, image_output_name=None):
         super().__init__(n_outputs, metadata_output_name=None, image_output_name=image_output_name)
         self._preprocess_config_path = preprocess_config_path
+        self._force_cpu_output = set(force_cpu_output or [])
+
+    def _copy_tensor(self, name, tensor):
+        torch_tensor = torch.utils.dlpack.from_dlpack(tensor)
+        if name in self._force_cpu_output:
+            return torch_tensor.to('cpu')
+        # DeepStream owns the dlpack-backed metadata memory, so keep a copy
+        # before the metadata callback returns.
+        return torch_tensor.clone()
 
     def _extract_metadata(self, batch_meta):
         received = [None] * self._n_outputs
@@ -690,8 +705,7 @@ class TensorOutput(BaseTensorOutput):
                         tensor_output = user_meta.as_tensor_output()
                         if tensor_output :
                             for n, tensor in tensor_output.get_layers().items():
-                                torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
-                                result[n] = torch_tensor
+                                result[n] = self._copy_tensor(n, tensor)
                     result["timestamp"] = roi.frame_meta.buffer_pts
                     received[roi.frame_meta.pad_index] = result
         else:
@@ -701,8 +715,7 @@ class TensorOutput(BaseTensorOutput):
                     tensor_output = user_meta.as_tensor_output()
                     if tensor_output :
                         for n, tensor in tensor_output.get_layers().items():
-                            torch_tensor = torch.utils.dlpack.from_dlpack(tensor).to('cpu')
-                            result[n] = torch_tensor
+                            result[n] = self._copy_tensor(n, tensor)
                 result["timestamp"] = frame_meta.buffer_pts
                 received[frame_meta.pad_index] = result
         yield received
@@ -755,6 +768,10 @@ class DeepstreamBackend(ModelBackend):
         self._pipelines = {}
 
         tensor_output = False if self._output_types[0] == "TYPE_CUSTOM_DS_METADATA" else True
+        force_cpu_output = [
+            o['name'] for o in model_config['output']
+            if o.get('force_cpu', False)
+        ]
         for o in model_config['output']:
             if o['data_type'] == 'TYPE_CUSTOM_DS_IMAGE':
                 self._image_output_name = o['name']
@@ -938,7 +955,7 @@ class DeepstreamBackend(ModelBackend):
             in_pool = ImageTensorInputPool(dims[0], dims[1], formats, self._max_batch_size, self._image_tensor_name, self._media_url_tensor_name, self._mime_tensor_name, device_id, require_extra_input)
             n_output = self._max_batch_size * len(formats)
             if tensor_output:
-                output = TensorOutput(n_output, preprocess_config_paths, image_output_name=self._image_output_name)
+                output = TensorOutput(n_output, preprocess_config_paths, force_cpu_output, image_output_name=self._image_output_name)
             elif preprocess_config_paths:
                 output = PreprocessMetadataOutput(n_output, self._output_names[0], dims, image_output_name=self._image_output_name)
             else:
@@ -992,7 +1009,7 @@ class DeepstreamBackend(ModelBackend):
             # video input support
             media = "video"
             if tensor_output:
-                output = TensorOutput(self._max_batch_size, preprocess_config_paths, image_output_name=self._image_output_name)
+                output = TensorOutput(self._max_batch_size, preprocess_config_paths, force_cpu_output, image_output_name=self._image_output_name)
             elif preprocess_config_paths:
                 output = PreprocessMetadataOutput(self._max_batch_size, self._output_names[0], dims, image_output_name=self._image_output_name)
             else:

@@ -9,9 +9,9 @@ for your target hardware **before** writing any Dockerfile or pipeline config.
 
 | Platform | Architecture | Example Hardware | Dockerfile Template | DeepStream Base Image |
 |---|---|---|---|---|
-| **x86_64 datacenter** | x86_64 | A100, H100, B200, RTX | `samples://dockerfile/ds_app/Dockerfile` | `nvcr.io/nvidia/deepstream:9.0-triton-multiarch` |
-| **Jetson / Tegra** | aarch64 | Orin, AGX Orin, Thor | `samples://dockerfile/ds_app/Dockerfile.tegra` | `nvcr.io/nvidia/deepstream:9.0-triton-multiarch` |
-| **arm-sbsa server** | aarch64 | GB10, GB300, DGX Spark | `samples://dockerfile/ds_app/Dockerfile.dgxspark` | `nvcr.io/nvidia/deepstream:9.0-triton-sbsa-dgx-spark` |
+| **x86_64 datacenter** | x86_64 | A100, H100, B200, RTX | `samples://dockerfile/ds_app/Dockerfile` | `nvcr.io/nvidia/deepstream:9.1-triton-multiarch` |
+| **Jetson / Tegra** | aarch64 | Orin, AGX Orin, Thor | `samples://dockerfile/ds_app/Dockerfile.tegra` | `nvcr.io/nvidia/deepstream:9.1-triton-multiarch` |
+| **arm-sbsa server** | aarch64 | GB10, GB300, DGX Spark | `samples://dockerfile/ds_app/Dockerfile.dgxspark` | `nvcr.io/nvidia/deepstream:9.1-triton-sbsa-dgx-spark` |
 
 ---
 
@@ -44,6 +44,7 @@ If `nvidia-smi` reports GB10 / GB300 / GH200 / Grace and no Jetson device-tree â
 
 ### x86_64 (`Dockerfile`)
 - PyTorch installed via pip from `https://download.pytorch.org/whl/cu130`
+  (PyTorch wheel ABI; the DeepStream base image CUDA toolkit is 13.2)
 - TRT OSS GPU archs: `80;86;90;100` (Ampere, Ada, Hopper, Blackwell-x86)
 - CUDA headers at `/usr/local/cuda-<ver>/include`
 
@@ -53,13 +54,15 @@ If `nvidia-smi` reports GB10 / GB300 / GH200 / Grace and no Jetson device-tree â
 - Tegra BSP libraries (`libnvbufsurface.so`, etc.) **mounted at runtime** by the
   NVIDIA Container Toolkit â€” container will fail without `--runtime nvidia` on
   actual Jetson hardware
-- Base image: Tegra multiarch variant (`-ma` suffix)
+- Base image: DeepStream 9.1 multiarch `-ma` release image
+- **Note (Jetson AGX Orin):** External storage integration is required to support
+  the execution of the DeepStream microservice on the Jetson Orin platform.
 
 ### arm-sbsa server (`Dockerfile.dgxspark`)
 - PyTorch **copied** from `nvcr.io/nvidia/pytorch:25.08-py3` (same as Tegra)
 - TRT OSS GPU archs: `110;120;121` (same as Tegra)
 - CUDA headers present in the arm-sbsa base image (no Tegra BSP dependency)
-- Base image: `arm-sbsa-spark` variant â€” **not** the `-ma` Tegra image
+- Base image: `arm-sbsa` variant â€” **not** the `-ma` Tegra image
 - Requires `apt-get install cmake libyaml-cpp-dev pkg-config` before TRT OSS build
 
 ---
@@ -68,7 +71,7 @@ If `nvidia-smi` reports GB10 / GB300 / GH200 / Grace and no Jetson device-tree â
 
 | Mistake | Symptom | Fix |
 |---|---|---|
-| Using Tegra base image on GB10/GB300 | `libnvbufsurface.so.1.0.0: cannot open shared object file` | Switch to `Dockerfile.dgxspark` and the `arm-sbsa-spark` base image |
+| Using Tegra base image on GB10/GB300 | `libnvbufsurface.so.1.0.0: cannot open shared object file` | Switch to `Dockerfile.dgxspark` and the `arm-sbsa` base image |
 | Installing PyTorch via pip on Tegra/arm-sbsa | No compatible wheel found, or wrong CUDA variant | Copy torch from `nvcr.io/nvidia/pytorch:25.08-py3` |
 | Missing `cmake` before TRT OSS build | `cmake: command not found` | Add `apt-get install cmake` (or skip TRT OSS build if not needed) |
 | Using wrong GPU arch flags | TRT plugins fail to load or slow JIT compilation | Match `-DGPU_ARCHS` to the GPU table above |
@@ -91,7 +94,7 @@ cp libnvds_infercustomparser_tao.so /opt/nvidia/deepstream/deepstream/lib/
 ```
 
 CUDA version by platform:
-- x86_64 datacenter: `CUDA_VER=13.1`
+- x86_64 datacenter: `CUDA_VER=13.2`
 - Jetson / arm-sbsa server: `CUDA_VER=13.0`
 
 On arm-sbsa (GB10/GB300), if CUDA headers are not in the container, mount them

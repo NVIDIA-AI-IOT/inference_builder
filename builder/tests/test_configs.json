@@ -22,6 +22,28 @@
     }
   },
   {
+    "name": "video_output_from_synthetic_frames",
+    "description": "Generate synthetic HWC uint8 frames and encode them as TYPE_CUSTOM_VIDEO_OUTPUT_FILE and TYPE_CUSTOM_VIDEO_OUTPUT_ASSET",
+    "build_args": {
+      "TEST_APP_NAME": "video_output",
+      "CACHE_BUSTER": "video_output_dual_output_test"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 30,
+      "env": {},
+      "volumes": {
+        "video_output/models": "/workspace/models"
+      },
+      "cmd": [
+        "--seed", "7"
+      ],
+      "expected_results": 1,
+      "prerequisite_script": null
+    }
+  },
+
+  {
     "name": "frame_sampling_on_streams",
     "description": "Test with default TensorRT and CUDA versions",
     "build_args": {
@@ -61,9 +83,6 @@
       "volumes": {
         "asset_management/models": "/workspace/models"
       },
-      "ports": {
-        "8000": "8000"
-      },
       "test_requests": [
         {
           "payload_path": "asset_management/payloads/assets.jsonl",
@@ -101,6 +120,36 @@
       "env": {
         "DEBUG": "0"
       },
+      "cmd": []
+    }
+  },
+  {
+    "name": "unicode_string_io_test",
+    "description": "Test TYPE_STRING requests and responses preserve Unicode text",
+    "build_args": {
+      "TEST_APP_NAME": "unicode_strings",
+      "CACHE_BUSTER": "unicode_string_io",
+      "SERVER_TYPE": "fastapi",
+      "OPENAPI_SPEC": "builder/samples/dummy/openapi.yaml"
+    },
+    "test_config": {
+      "default_enable": true,
+      "timeout": 10,
+      "volumes": {
+        "unicode_strings/models": "/workspace/models"
+      },
+      "env": {
+        "DEBUG": "0"
+      },
+      "test_requests": [
+        {
+          "payload_path": "unicode_strings/payloads/payloads.jsonl",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json; charset=utf-8"
+          }
+        }
+      ],
       "cmd": []
     }
   },
@@ -466,9 +515,6 @@
       },
       "volumes": {
         "asset_management/models": "/workspace/models"
-      },
-      "ports": {
-        "8000": "8000"
       },
       "assets": [
         {

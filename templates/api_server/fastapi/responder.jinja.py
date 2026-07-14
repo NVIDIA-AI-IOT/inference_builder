@@ -1,5 +1,5 @@
 {#
- SPDX-FileCopyrightText: Copyright (c) <year> NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  SPDX-License-Identifier: Apache-2.0
 
  Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +20,7 @@ import json
 from dataclasses import asdict
 from config import global_config
 from .model import GenericInference
-from lib.utils import create_jinja2_env, convert_list
+from lib.utils import create_jinja2_env, convert_list, to_unicode_string
 from lib.responder import ResponderBase
 from lib.inference import Stop
 from lib.errors import EnhancedError
@@ -64,9 +64,9 @@ class Responder(ResponderBase):
                 value = response[name]
                 if isinstance(value, np.ndarray) or isinstance(value, torch.Tensor):
                     l = value.tolist()
-                    if expected_type == "TYPE_STRING" and value.dtype != np.string_:
-                        response[name] = convert_list(l, lambda i: i.decode("utf-8", "ignore"))
-                    elif len(response[name].shape) == 1 and len(l) == 1:
+                    if expected_type == "TYPE_STRING":
+                        response[name] = convert_list(l, to_unicode_string)
+                    elif len(value.shape) == 1 and len(l) == 1:
                         response[name] = l[0]
                     else:
                         response[name] = l

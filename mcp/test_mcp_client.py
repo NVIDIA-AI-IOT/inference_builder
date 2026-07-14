@@ -1,171 +1,113 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
-Simple MCP client to test direct communication with the inference-builder MCP server
+Test client for the inference-builder MCP server (HTTP/Streamable-HTTP transport).
+
+Usage:
+    python mcp/test_mcp_client.py [--url URL] [--api-key TOKEN]
+
+The server must already be running, e.g.:
+    MCP_API_KEY=MY_SECRET ./mcp/server_manager.sh start --port 8000
+
+Arguments:
+    --url     MCP server URL  (default: http://localhost:8000/mcp)
+    --api-key Bearer token    (default: none)
 """
 
+import argparse
 import asyncio
 import json
-import subprocess
 import sys
-from pathlib import Path
+
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
 
 
-class SimpleMCPClient:
-    def __init__(self, server_command, server_args, cwd=None):
-        self.server_command = server_command
-        self.server_args = server_args
-        self.cwd = cwd or Path.cwd()
-        self.process = None
+async def run_tests(url: str, api_key: str | None) -> None:
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
-    async def start_server(self):
-        """Start the MCP server process"""
-        cmd = [self.server_command] + self.server_args
-        print(f"🚀 Starting MCP server: {' '.join(cmd)}")
-        print(f"📁 Working directory: {self.cwd}")
+    print(f"Connecting to MCP server at {url}")
+    if api_key:
+        print("Using Bearer token authentication")
 
-        self.process = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=self.cwd,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        print("✅ MCP server started")
+    async with streamablehttp_client(url, headers=headers) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            # Step 1: Initialize
+            print("\nStep 1: Initialize MCP connection")
+            await session.initialize()
+            print("Connected")
 
-    async def send_request(self, request):
-        """Send a JSON-RPC request to the server"""
-        if not self.process:
-            raise RuntimeError("Server not started")
+            # Step 2: List tools
+            print("\nStep 2: List available tools")
+            tools_result = await session.list_tools()
+            tools = tools_result.tools
+            print(f"Found {len(tools)} tools:")
+            for tool in tools:
+                print(f"  {tool.name}: {tool.description}")
 
-        request_str = json.dumps(request) + '\n'
-        print(f"📤 Sending request: {request}")
+            # Step 3: List resources
+            print("\nStep 3: List available resources")
+            resources_result = await session.list_resources()
+            resources = resources_result.resources
+            print(f"Found {len(resources)} resources:")
+            for res in resources:
+                print(f"  {res.uri}")
 
-        self.process.stdin.write(request_str.encode())
-        await self.process.stdin.drain()
+            # Step 4: Error-handling smoke test
+            print("\nStep 4: generate_inference_pipeline error-handling smoke test")
+            result = await session.call_tool(
+                "generate_inference_pipeline",
+                {"config": "invalid: yaml: ["},
+            )
+            if not result.isError:
+                for block in result.content:
+                    print(f"  {block.text}")
+                raise AssertionError(
+                    "generate_inference_pipeline succeeded with invalid config — "
+                    "error handling may have regressed"
+                )
+            print("Tool correctly returned an error for invalid config")
 
-        # Read response
-        response_line = await self.process.stdout.readline()
-        if not response_line:
-            stderr_output = await self.process.stderr.read()
-            raise RuntimeError(f"No response from server. stderr: {stderr_output.decode()}")
-
-        response = json.loads(response_line.decode().strip())
-        print(f"📥 Received response: {json.dumps(response, indent=2)}")
-        return response
-
-    async def initialize(self):
-        """Initialize the MCP connection"""
-        init_request = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {
-                    "tools": {}
-                },
-                "clientInfo": {
-                    "name": "test-client",
-                    "version": "1.0.0"
-                }
-            }
-        }
-        response = await self.send_request(init_request)
-
-        # Send initialized notification
-        initialized_notification = {
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized",
-            "params": {}
-        }
-        print(f"📤 Sending initialized notification: {initialized_notification}")
-        request_str = json.dumps(initialized_notification) + '\n'
-        self.process.stdin.write(request_str.encode())
-        await self.process.stdin.drain()
-
-        return response
-
-    async def list_tools(self):
-        """List available tools"""
-        request = {
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/list",
-            "params": {}
-        }
-        return await self.send_request(request)
-
-    async def call_tool(self, tool_name, arguments=None):
-        """Call a specific tool"""
-        request = {
-            "jsonrpc": "2.0",
-            "id": 3,
-            "method": "tools/call",
-            "params": {
-                "name": tool_name,
-                "arguments": arguments or {}
-            }
-        }
-        return await self.send_request(request)
-
-    async def cleanup(self):
-        """Clean up the server process"""
-        if self.process:
-            self.process.terminate()
-            await self.process.wait()
-            print("🛑 MCP server stopped")
+            print("\nAll tests passed")
 
 
-async def main():
-    """Test the MCP server with a direct client"""
-    print("🧪 Testing MCP Server with Direct Client")
-    print("=" * 50)
-
-    # Configuration matching the Cursor MCP setup
-    script_dir = Path(__file__).parent
-    server_command = str(Path.cwd() / ".venv" / "bin" / "python")
-    server_args = [str(script_dir / "mcp_server.py")]
-    cwd = Path.cwd()
-
-    client = SimpleMCPClient(server_command, server_args, cwd)
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Test client for the inference-builder MCP server (HTTP mode)"
+    )
+    parser.add_argument(
+        "--url",
+        default="http://localhost:8000/mcp",
+        help="MCP server URL (default: http://localhost:8000/mcp)",
+    )
+    parser.add_argument(
+        "--api-key",
+        default=None,
+        metavar="TOKEN",
+        help="Bearer token for authentication (omit if server has no API key)",
+    )
+    args = parser.parse_args()
 
     try:
-        # Start server
-        await client.start_server()
-
-        # Initialize connection
-        print("\n📋 Step 1: Initialize MCP connection")
-        init_response = await client.initialize()
-
-        # List tools
-        print("\n📋 Step 2: List available tools")
-        tools_response = await client.list_tools()
-
-        if 'result' in tools_response:
-            tools = tools_response['result']['tools']
-            print(f"✅ Found {len(tools)} tools:")
-            for tool in tools:
-                print(f"  • {tool['name']}: {tool['description']}")
-
-        # Test generate_inference_pipeline with missing config to verify error handling
-        print("\n📋 Step 3: Test generate_inference_pipeline error handling")
-        gen_response = await client.call_tool("generate_inference_pipeline", {
-            "config_file": "/nonexistent/path/config.yaml"
-        })
-
-        if 'error' in gen_response or ('result' in gen_response and gen_response['result'].get('isError')):
-            print("✅ generate_inference_pipeline correctly returned error for missing config")
-        else:
-            print(f"📋 generate_inference_pipeline response: {gen_response}")
-
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
-
-    finally:
-        await client.cleanup()
+        asyncio.run(run_tests(args.url, args.api_key))
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

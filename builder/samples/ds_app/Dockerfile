@@ -21,7 +21,7 @@
 # Intended for standard datacenter/workstation GPUs (e.g. A100, H100, B200,
 # RTX series) running Linux on x86_64. Uses pre-built PyTorch wheels from
 # PyTorch's CUDA index and links against x86_64 system libraries.
-FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS inference_base
+FROM nvcr.io/nvidia/deepstream:9.1-triton-multiarch AS inference_base
 
 # Install Python dependencies required by THIS ds_app sample. These
 # versions are pinned for reproducibility and can be adjusted for
@@ -30,56 +30,55 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
     --extra-index-url https://download.pytorch.org/whl/cu130 \
     torch==2.9.0+cu130 \
-    numpy==1.26.4 \
     omegaconf==2.3.0 \
     transformers==4.54.1 \
-    opencv-python
-
-# Build TensorRT OSS to provide customized plugins (e.g. for ONNX) and
-# the trtexec tool. The version and GPU architectures are controlled
-# by the ARGs below; update them if you target different CUDA/TRT
-# versions or GPU architectures.
-ARG TRT_VERSION_MAJOR=10
-ARG TRT_VERSION_MINOR=14
-ARG TRT_VERSION_PATCH=1
-ARG TRT_VERSION_BUILD=48
-
-ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
-ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
-ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
+    opencv-python==4.11.0.86
 
 ARG CUDA_VERSION_MAJOR=13
-ARG CUDA_VERSION_MINOR=1
-ARG CUDA_VERSION_PATCH=80
-ARG CUDA_VERSION_BUILD=36836380_0
+ARG CUDA_VERSION_MINOR=2
+ARG CUDA_VERSION_PATCH=51
+ARG CUDA_VERSION_BUILD=37434383_0
 ARG CUDA_VERSION_MAJOR_MINOR=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR
 ARG CUDA_VERSION_FULL=$CUDA_VERSION_MAJOR_MINOR.$CUDA_VERSION_PATCH.$CUDA_VERSION_BUILD
-ARG CUDNN_VERSION=9.17.0.29
-
-ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
 
 WORKDIR /tmp
-ENV TRT_TAG="release/$TRT_VERSION_MAJOR_MINOR"
-RUN mkdir trt_oss_src && \
-    cd trt_oss_src && \
-    echo "$PWD Building TRT OSS..." && \
-    git clone -b $TRT_TAG https://github.com/nvidia/TensorRT TensorRT && \
-    cd TensorRT && \
-    git submodule update --init --recursive && \
-    mkdir -p build && cd build && \
-    cmake .. \
-    -DGPU_ARCHS="80;86;90;100;120" \
-    -DTRT_LIB_DIR=/usr/lib/x86_64-linux-gnu \
-    -DTRT_OUT_DIR=/tmp/out \
-    -DCUDA_VERSION=$CUDA_VERSION_MAJOR_MINOR \
-    -DCUDNN_VERSION=$CUDNN_VERSION \
-    && for i in {1..50}; do make -j 12 && break; done
-RUN   cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
-    cp /tmp/out/libnvinfer_plugin_static.a /usr/lib/x86_64-linux-gnu/libnvinfer_plugin_static.a && \
-    cp /tmp/out/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
-    cp /tmp/out/trtexec /usr/local/bin/ && \
-    cd ../../../ && \
-    rm -rf trt_oss_src
+
+# TensorRT OSS build is disabled by default. The DeepStream 9.1 base image
+# already includes TensorRT plugin/parser libraries and trtexec.
+# Enable the TensorRT OSS build if specific operators required by a model are missing.
+# To re-enable, uncomment and update the block below as needed.
+# ARG TRT_VERSION_MAJOR=10
+# ARG TRT_VERSION_MINOR=16
+# ARG TRT_VERSION_PATCH=0
+# ARG TRT_VERSION_BUILD=72
+#
+# ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
+# ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
+# ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
+# ARG CUDNN_VERSION=9.20.0.48
+#
+# ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
+# ENV TRT_TAG="release/$TRT_VERSION_MAJOR_MINOR"
+# RUN mkdir trt_oss_src && \
+#     cd trt_oss_src && \
+#     echo "$PWD Building TRT OSS..." && \
+#     git clone -b $TRT_TAG https://github.com/nvidia/TensorRT TensorRT && \
+#     cd TensorRT && \
+#     git submodule update --init --recursive && \
+#     mkdir -p build && cd build && \
+#     cmake .. \
+#     -DGPU_ARCHS="80;86;90;100;120" \
+#     -DTRT_LIB_DIR=/usr/lib/x86_64-linux-gnu \
+#     -DTRT_OUT_DIR=/tmp/out \
+#     -DCUDA_VERSION=$CUDA_VERSION_MAJOR_MINOR \
+#     -DCUDNN_VERSION=$CUDNN_VERSION \
+#     && for i in {1..50}; do make -j 12 && break; done
+# RUN cp /tmp/out/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+#     cp /tmp/out/libnvinfer_plugin_static.a /usr/lib/x86_64-linux-gnu/libnvinfer_plugin_static.a && \
+#     cp /tmp/out/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH /usr/lib/x86_64-linux-gnu/libnvonnxparser.so.$TRT_VERSION_MAJOR_MINOR_PATCH && \
+#     cp /tmp/out/trtexec /usr/local/bin/ && \
+#     cd ../../../ && \
+#     rm -rf trt_oss_src
 
 
 # Build DeepStream TAO app post-processors. This must come AFTER the
@@ -125,6 +124,6 @@ ENV NVSTREAMMUX_ADAPTIVE_BATCHING=yes
 #ENV NVDS_ENABLE_LATENCY_MEASUREMENT=1
 #ENV NVDS_ENABLE_COMPONENT_LATENCY_MEASUREMENT=1
 
-ENTRYPOINT ["python3", "/workspace/__main__.py"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec python3 /workspace/__main__.py \"$@\"", "--"]
 #ENTRYPOINT ["/bin/bash"]
 CMD []

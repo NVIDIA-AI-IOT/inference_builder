@@ -15,7 +15,7 @@
 
 
 
-FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS inference_base
+FROM nvcr.io/nvidia/deepstream:9.1-triton-multiarch AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
@@ -25,7 +25,6 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     annotated-types==0.7.0 \
     python-magic==0.4.27 \
     torch==2.4.0 \
-    numpy==1.26.4 \
     omegaconf==2.3.0 \
     fastapi==0.115.12 \
     uvicorn==0.29.0 \
@@ -48,6 +47,6 @@ ENV TORCH_CUDA_ARCH_LIST="7.5 8.0 8.6 9.0 10.0"
 #ENV NVDS_ENABLE_LATENCY_MEASUREMENT=1
 #ENV NVDS_ENABLE_COMPONENT_LATENCY_MEASUREMENT=1
 
-ENTRYPOINT ["python3", "/workspace/__main__.py"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec python3 /workspace/__main__.py \"$@\"", "--"]
 #ENTRYPOINT ["/bin/bash"]
 CMD []

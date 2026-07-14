@@ -15,7 +15,7 @@
 
 
 
-FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS inference_base
+FROM nvcr.io/nvidia/deepstream:9.1-triton-multiarch AS inference_base
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -33,7 +33,6 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     annotated-types==0.7.0 \
     python-magic==0.4.27 \
     torch==2.4.0 \
-    numpy==1.26.4 \
     omegaconf==2.3.0 \
     fastapi==0.115.12 \
     uvicorn==0.29.0
@@ -66,10 +65,10 @@ RUN touch /workspace/start_server.sh && \
 	#!/usr/bin/env bash
     set -eu
 	# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-	# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+	# SPDX-License-Identifier: Apache-2.0
     python3 /workspace/__main__.py
 #    while true; do sleep 5; done
 EOF
 
-ENTRYPOINT ["/workspace/start_server.sh"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec /workspace/start_server.sh \"$@\"", "--"]
 CMD []

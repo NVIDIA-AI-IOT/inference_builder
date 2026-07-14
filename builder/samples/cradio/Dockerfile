@@ -1,35 +1,51 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # Dockerfile for ds-cradio: PeopleNet Transformer + C-RADIOv3-H pipeline
 # Uses DeepStream/nvinfer for detection and polygraphy (TensorRT) for embeddings
 
-FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS inference_base
+FROM nvcr.io/nvidia/deepstream:9.1-triton-multiarch AS inference_base
 
 # Install Python dependencies required by this pipeline.
+# Use `python3 -m pip` so packages land on the same interpreter as `python3`
+# (DeepStream images may otherwise report numpy missing for trust_remote_code checks).
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install \
+    python3 -m pip install \
     torch==2.7.0 \
-    numpy==1.26.4 \
     omegaconf==2.3.0 \
     transformers==4.54.1 \
-    opencv-python
+    opencv-python==4.11.0.86
 
 # Build TensorRT OSS to provide customized plugins (e.g. for PeopleNet
 # Transformer ONNX model) and the trtexec tool.
 ARG TRT_VERSION_MAJOR=10
-ARG TRT_VERSION_MINOR=14
-ARG TRT_VERSION_PATCH=1
-ARG TRT_VERSION_BUILD=48
+ARG TRT_VERSION_MINOR=16
+ARG TRT_VERSION_PATCH=0
+ARG TRT_VERSION_BUILD=72
 
 ARG TRT_VERSION_MAJOR_MINOR=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR
 ARG TRT_VERSION_MAJOR_MINOR_PATCH=$TRT_VERSION_MAJOR.$TRT_VERSION_MINOR.$TRT_VERSION_PATCH
 ARG TRT_VERSION_FULL=$TRT_VERSION_MAJOR_MINOR_PATCH.$TRT_VERSION_BUILD
 
 ARG CUDA_VERSION_MAJOR=13
-ARG CUDA_VERSION_MINOR=1
-ARG CUDA_VERSION_PATCH=80
-ARG CUDA_VERSION_BUILD=36836380_0
+ARG CUDA_VERSION_MINOR=2
+ARG CUDA_VERSION_PATCH=51
+ARG CUDA_VERSION_BUILD=37434383_0
 ARG CUDA_VERSION_MAJOR_MINOR=$CUDA_VERSION_MAJOR.$CUDA_VERSION_MINOR
 ARG CUDA_VERSION_FULL=$CUDA_VERSION_MAJOR_MINOR.$CUDA_VERSION_PATCH.$CUDA_VERSION_BUILD
-ARG CUDNN_VERSION=9.17.0.29
+ARG CUDNN_VERSION=9.20.0.48
 
 ENV TRT_VERSION=$TRT_VERSION_FULL+cuda$CUDA_VERSION_FULL
 
@@ -75,14 +91,14 @@ RUN mkdir ds_tao_apps_src && \
 
 # Install Python dependencies for the polygraphy backend
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --extra-index-url https://pypi.nvidia.com \
+    python3 -m pip install --extra-index-url https://pypi.nvidia.com \
     Pillow==11.1.0 \
     timm \
     torchvision \
     einops \
     onnx \
     onnxscript \
-    tensorrt==10.14.1.48.post1 \
+    tensorrt==10.16.0.72 \
     polygraphy==0.49.24
 
 WORKDIR /workspace
@@ -98,5 +114,5 @@ ENV GST_PLUGIN_PATH=/opt/nvidia/deepstream/deepstream/lib/gst-plugins
 ENV LD_LIBRARY_PATH=/opt/nvidia/deepstream/deepstream/lib:$LD_LIBRARY_PATH
 ENV NVSTREAMMUX_ADAPTIVE_BATCHING=yes
 
-ENTRYPOINT ["python3", "/workspace/__main__.py"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec python3 /workspace/__main__.py \"$@\"", "--"]
 CMD []

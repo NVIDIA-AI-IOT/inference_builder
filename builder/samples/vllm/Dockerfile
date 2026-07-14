@@ -1,18 +1,23 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+# SPDX-License-Identifier: Apache-2.0
 #
-# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
-# property and proprietary rights in and to this material, related
-# documentation and any modifications thereto. Any use, reproduction,
-# disclosure or distribution of this material and related documentation
-# without an express license agreement from NVIDIA CORPORATION or
-# its affiliates is strictly prohibited.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 # Sample Dockerfile for a vLLM-based vision-language pipeline using a
 # Triton-enabled DeepStream base image for accelerated video decoding.
 # This is specific to the vllm sample in this repository.
 # Stage 1: pull in DeepStream libraries, binaries, and sample assets.
-FROM "nvcr.io/nvidia/deepstream:9.0-triton-multiarch" AS ds_stage
+FROM nvcr.io/nvidia/deepstream:9.1-triton-multiarch AS ds_stage
 
 FROM nvcr.io/nvidia/vllm:26.02-py3 AS inference_base
 
@@ -23,24 +28,24 @@ ENV NVIDIA_DRIVER_CAPABILITIES $NVIDIA_DRIVER_CAPABILITIES,video
 RUN apt update && apt install -y --no-install-recommends gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
     libyaml-cpp-dev libgstrtspserver-1.0-0 libjsoncpp25 libgles2 pkg-config
 
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/lib /opt/nvidia/deepstream/deepstream-9.0/lib
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/bin /opt/nvidia/deepstream/deepstream-9.0/bin
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.sh /opt/nvidia/deepstream/deepstream-9.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.txt /opt/nvidia/deepstream/deepstream-9.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/README* /opt/nvidia/deepstream/deepstream-9.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/*.pdf /opt/nvidia/deepstream/deepstream-9.0/
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/service-maker /opt/nvidia/deepstream/deepstream-9.0/service-maker
-COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.0/samples/streams/* /opt/nvidia/deepstream/deepstream-9.0/samples/streams/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.1/lib /opt/nvidia/deepstream/deepstream-9.1/lib
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.1/bin /opt/nvidia/deepstream/deepstream-9.1/bin
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.1/*.sh /opt/nvidia/deepstream/deepstream-9.1/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.1/*.txt /opt/nvidia/deepstream/deepstream-9.1/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.1/README* /opt/nvidia/deepstream/deepstream-9.1/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.1/*.pdf /opt/nvidia/deepstream/deepstream-9.1/
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.1/service-maker /opt/nvidia/deepstream/deepstream-9.1/service-maker
+COPY --from=ds_stage /opt/nvidia/deepstream/deepstream-9.1/samples/streams/* /opt/nvidia/deepstream/deepstream-9.1/samples/streams/
 
 # Copy CUDA NPP and nvjpeg libraries required by DeepStream GStreamer
 # plugins (nvvideoconvert, nvdsgst_image, etc.) that are absent from
 # the vLLM base image.
-COPY --from=ds_stage /usr/local/cuda-13.1/targets/x86_64-linux/lib/libnpp*.so* /usr/local/lib/
-COPY --from=ds_stage /usr/local/cuda-13.1/targets/x86_64-linux/lib/libnvjpeg*.so* /usr/local/lib/
+COPY --from=ds_stage /usr/local/cuda-13.2/targets/x86_64-linux/lib/libnpp*.so* /usr/local/lib/
+COPY --from=ds_stage /usr/local/cuda-13.2/targets/x86_64-linux/lib/libnvjpeg*.so* /usr/local/lib/
 RUN ldconfig
 
-RUN /opt/nvidia/deepstream/deepstream-9.0/install.sh
-RUN ln -sf deepstream-9.0 /opt/nvidia/deepstream/deepstream || true
+RUN /opt/nvidia/deepstream/deepstream-9.1/install.sh
+RUN ln -sf deepstream-9.1 /opt/nvidia/deepstream/deepstream || true
 
 # Install Python dependencies required by THIS Qwen sample. These
 # versions are pinned for reproducibility and can be adjusted for
@@ -51,7 +56,6 @@ RUN --mount=type=cache,target=/root/.cache/pip pip install qwen-vl-utils[decord]
     aiohttp==3.11.0 \
     annotated-types==0.7.0 \
     python-magic==0.4.27 \
-    numpy==1.26.4 \
     omegaconf==2.3.0
 
 WORKDIR /workspace
@@ -79,10 +83,10 @@ RUN touch /workspace/start_server.sh && \
 	#!/usr/bin/env bash
     set -eu
 	# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-	# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+	# SPDX-License-Identifier: Apache-2.0
     python3 /workspace/__main__.py
 #    while true; do sleep 5; done
 EOF
 
-ENTRYPOINT ["/workspace/start_server.sh"]
+ENTRYPOINT ["/bin/bash", "-c", "ulimit -Sn $(ulimit -Hn); exec /workspace/start_server.sh \"$@\"", "--"]
 CMD []
